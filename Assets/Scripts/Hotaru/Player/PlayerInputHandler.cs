@@ -11,6 +11,9 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
     private Vector2 _moveInput;
     private NetworkButtons _buttons;
 
+    // Flag to disable input when UI is active (e.g., typing in text field)
+    public bool InputEnabled { get; set; } = true;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -25,6 +28,13 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
 
     private void Update()
     {
+        // Don't process input if disabled
+        if (!InputEnabled)
+        {
+            _moveInput = Vector2.zero;
+            return;
+        }
+
         _moveInput = new Vector2(
             Input.GetAxisRaw("Horizontal"),
             Input.GetAxisRaw("Vertical")
@@ -56,8 +66,8 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
 
         var playerInput = new PlayerInputData
         {
-            MoveDirection = _moveInput,
-            Buttons = _buttons
+            MoveDirection = InputEnabled ? _moveInput : Vector2.zero,
+            Buttons = InputEnabled ? _buttons : default
         };
 
         input.Set(playerInput);

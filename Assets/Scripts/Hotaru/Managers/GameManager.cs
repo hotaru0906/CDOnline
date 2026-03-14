@@ -2,67 +2,50 @@ using Fusion;
 using UnityEngine;
 using System;
 
-/// <summary>
-/// Game states for the main game flow.
-/// </summary>
 public enum GameState
 {
-    Lobby,      // Players waiting in lobby
-    Voting,     // Players voting for minigame
-    Tutorial,   // Showing tutorial/instructions
-    Playing,    // Minigame in progress
-    Scoreboard, // Showing scores after minigame
-    Result      // Final results/winner announcement
+    Lobby,
+    Voting,
+    Tutorial,
+    Playing,
+    Scoreboard,
+    Result
 }
 
-/// <summary>
-/// Central game flow manager. Host-authoritative using Photon Fusion.
-/// All game state transitions are controlled by the Host and synced to all clients.
-/// </summary>
 public class GameManager : NetworkBehaviour
 {
     #region Singleton
     public static GameManager Instance { get; private set; }
     #endregion
+    public bool IsHost => HasStateAuthority;
+
+    #region UI References
+    [Header("UI Panels")]
+    [SerializeField] private GameObject lobbyUI;
+    [SerializeField] private GameObject votingUI;
+    [SerializeField] private GameObject scoreboardUI;
+    [SerializeField] private GameObject resultUI;
+    #endregion
 
     #region Networked Properties
-    /// <summary>
-    /// Current game state - synced across all clients.
-    /// Only Host can modify this value.
-    /// </summary>
     [Networked, OnChangedRender(nameof(OnGameStateChanged))]
     public GameState CurrentState { get; private set; } = GameState.Lobby;
 
-    /// <summary>
-    /// Current round/minigame number.
-    /// </summary>
     [Networked]
     public int CurrentRound { get; private set; } = 0;
 
-    /// <summary>
-    /// Total rounds to play.
-    /// </summary>
     [Networked]
     public int TotalRounds { get; private set; } = 3;
-
-    /// <summary>
-    /// Index of current minigame being played.
-    /// </summary>
-    [Networked]
     public int CurrentMinigameIndex { get; private set; } = -1;
     #endregion
 
     #region Events
-    /// <summary>
-    /// Fired when game state changes. Subscribe to react to state transitions.
-    /// </summary>
     public event Action<GameState, GameState> OnStateChanged;
     #endregion
 
     #region Unity Lifecycle
     private void Awake()
     {
-        // Singleton setup
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -76,16 +59,28 @@ public class GameManager : NetworkBehaviour
         // Called when NetworkObject is spawned
         Debug.Log($"[GameManager] Spawned. IsHost: {HasStateAuthority}");
     }
+    public bool AreAllPlayersReady()
+    {
+        var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+
+        if (players.Length == 0)
+            return false;
+
+        foreach (var p in players)
+        {
+            if (!p.IsReady)
+                return false;
+        }
+
+        return true;
+    }
     #endregion
 
     #region State Change Callback
-    /// <summary>
-    /// Called on all clients when CurrentState changes.
-    /// </summary>
     private void OnGameStateChanged()
     {
         Debug.Log($"[GameManager] State changed to: {CurrentState}");
-        
+
         // Handle state-specific logic for all clients
         switch (CurrentState)
         {
@@ -112,10 +107,6 @@ public class GameManager : NetworkBehaviour
     #endregion
 
     #region Host-Only Game Flow Methods
-    /// <summary>
-    /// Start a new match. Called by Host only.
-    /// Resets round counter and transitions to Voting state.
-    /// </summary>
     public void StartMatch()
     {
         if (!HasStateAuthority)
@@ -129,9 +120,6 @@ public class GameManager : NetworkBehaviour
         ChangeState(GameState.Voting);
     }
 
-    /// <summary>
-    /// Start voting phase for next minigame. Called by Host only.
-    /// </summary>
     public void StartVoting()
     {
         if (!HasStateAuthority)
@@ -144,10 +132,6 @@ public class GameManager : NetworkBehaviour
         ChangeState(GameState.Voting);
     }
 
-    /// <summary>
-    /// Start the minigame. Called by Host after voting/tutorial.
-    /// </summary>
-    /// <param name="minigameIndex">Index of the minigame to play.</param>
     public void StartMinigame(int minigameIndex)
     {
         if (!HasStateAuthority)
@@ -165,10 +149,6 @@ public class GameManager : NetworkBehaviour
         // You may want to show Tutorial first
         ChangeState(GameState.Playing);
     }
-
-    /// <summary>
-    /// End the current minigame. Called by Host when minigame is complete.
-    /// </summary>
     public void EndMinigame()
     {
         if (!HasStateAuthority)
@@ -184,10 +164,6 @@ public class GameManager : NetworkBehaviour
         // Show scoreboard after minigame ends
         ChangeState(GameState.Scoreboard);
     }
-
-    /// <summary>
-    /// Show the scoreboard. Called by Host.
-    /// </summary>
     public void ShowScoreboard()
     {
         if (!HasStateAuthority)
@@ -200,10 +176,6 @@ public class GameManager : NetworkBehaviour
         ChangeState(GameState.Scoreboard);
     }
 
-    /// <summary>
-    /// Called after scoreboard to proceed to next round or final results.
-    /// Host only.
-    /// </summary>
     public void ProceedFromScoreboard()
     {
         if (!HasStateAuthority)
@@ -225,10 +197,6 @@ public class GameManager : NetworkBehaviour
             ChangeState(GameState.Voting);
         }
     }
-
-    /// <summary>
-    /// Return to lobby after match ends. Host only.
-    /// </summary>
     public void ReturnToLobby()
     {
         if (!HasStateAuthority)
@@ -245,65 +213,96 @@ public class GameManager : NetworkBehaviour
     #endregion
 
     #region State Handlers (Override in subclass or extend)
-    /// <summary>
-    /// Handle lobby state entry. Override or extend as needed.
-    /// </summary>
     protected virtual void HandleLobbyState()
     {
-        // TODO: Show lobby UI, enable ready buttons, etc.
         Debug.Log("[GameManager] Entered Lobby state");
+
+        // Show lobby UI, hide others
+        SetActiveUI(lobbyUI, true);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, false);
+
+        // Reset player ready states (host only)
+        if (HasStateAuthority)
+        {
+            ResetAllPlayersReady();
+        }
     }
 
-    /// <summary>
-    /// Handle voting state entry. Override or extend as needed.
-    /// </summary>
     protected virtual void HandleVotingState()
     {
-        // TODO: Show voting UI, start vote timer
         Debug.Log("[GameManager] Entered Voting state");
+
+        // Show voting UI, hide others
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, true);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, false);
+
+        // Start voting (host only)
+        if (HasStateAuthority && VotingManager.Instance != null)
+        {
+            VotingManager.Instance.StartVoting();
+        }
     }
 
-    /// <summary>
-    /// Handle tutorial state entry. Override or extend as needed.
-    /// </summary>
     protected virtual void HandleTutorialState()
     {
         // TODO: Show tutorial/instructions for current minigame
         Debug.Log("[GameManager] Entered Tutorial state");
     }
 
-    /// <summary>
-    /// Handle playing state entry. Override or extend as needed.
-    /// </summary>
     protected virtual void HandlePlayingState()
     {
-        // TODO: Start the actual minigame gameplay
         Debug.Log("[GameManager] Entered Playing state");
-    }
 
-    /// <summary>
-    /// Handle scoreboard state entry. Override or extend as needed.
-    /// </summary>
+        if (!HasStateAuthority) return;
+
+        Debug.Log("[GameManager] Loading Minigame Scene...");
+
+        Runner.LoadScene(SceneRef.FromIndex(1));
+    }
     protected virtual void HandleScoreboardState()
     {
-        // TODO: Display scoreboard UI with current standings
         Debug.Log("[GameManager] Entered Scoreboard state");
+
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(scoreboardUI, true);
+        SetActiveUI(resultUI, false);
     }
 
-    /// <summary>
-    /// Handle result state entry. Override or extend as needed.
-    /// </summary>
     protected virtual void HandleResultState()
     {
-        // TODO: Show final results, winner announcement
         Debug.Log("[GameManager] Entered Result state");
+
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, true);
     }
     #endregion
 
     #region Private Helpers
-    /// <summary>
-    /// Change state and fire events. Host only.
-    /// </summary>
+    private void SetActiveUI(GameObject uiObject, bool active)
+    {
+        if (uiObject != null)
+        {
+            uiObject.SetActive(active);
+        }
+    }
+
+    private void ResetAllPlayersReady()
+    {
+        var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+        foreach (var player in players)
+        {
+            // Note: This requires adding a ResetReady RPC to PlayerNetworkData
+            // Or handling via networked property changes
+        }
+    }
+
     private void ChangeState(GameState newState)
     {
         if (!HasStateAuthority) return;
@@ -316,17 +315,4 @@ public class GameManager : NetworkBehaviour
     }
     #endregion
 
-    #region Debug/Testing
-    /// <summary>
-    /// Force a state change. For testing only.
-    /// </summary>
-    [ContextMenu("Debug: Start Match")]
-    private void DebugStartMatch() => StartMatch();
-
-    [ContextMenu("Debug: Start Minigame 0")]
-    private void DebugStartMinigame() => StartMinigame(0);
-
-    [ContextMenu("Debug: End Minigame")]
-    private void DebugEndMinigame() => EndMinigame();
-    #endregion
 }

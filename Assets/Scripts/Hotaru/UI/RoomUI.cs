@@ -1,0 +1,216 @@
+using UnityEngine;
+using TMPro;
+using UnityEngine.UI;
+using Fusion;
+
+public class RoomUI : MonoBehaviour
+{
+    [Header("UI References")]
+    [SerializeField] private TMP_Text roomNameText;
+    [SerializeField] private TMP_Text playerCountText;
+
+    [SerializeField] private Button playerInfoButton;
+    [SerializeField] private Button leaveRoomButton;
+    [SerializeField] private Button readyGameButton;
+    [SerializeField] private Button startGameButton;
+
+    [Header("Player Data")]
+    [SerializeField] private PlayerListUI playerListUI;
+    [SerializeField] private PlayerListItemUI playerListItemPrefab;
+    [SerializeField] private Button closePlayerListButton;
+
+    [Header("Settings")]
+    [SerializeField] private int defaultMaxPlayers = 4;
+
+    private string _roomName;
+    private int _currentPlayers;
+    private int _maxPlayers;
+
+    private NetworkRunner _runner;
+
+    private void Awake()
+    {
+        _runner = FindAnyObjectByType<NetworkRunner>();
+    }
+
+    void Start()
+    {
+        playerInfoButton.onClick.AddListener(OnPlayerInfoClicked);
+        leaveRoomButton.onClick.AddListener(OnLeaveRoomClicked);
+        readyGameButton.onClick.AddListener(OnReadyGameClicked);
+        startGameButton.onClick.AddListener(OnStartGameClicked);
+
+        if (closePlayerListButton != null)
+        {
+            closePlayerListButton.onClick.AddListener(OnClosePlayerListClicked);
+        }
+
+        // Initialize with default or session values
+        InitializeRoomInfo();
+        UpdateButtons();
+    }
+
+    private void Update()
+    {
+        // Try to find runner if not set yet
+        if (_runner == null)
+        {
+            _runner = FindAnyObjectByType<NetworkRunner>();
+            if (_runner != null && _runner.IsRunning)
+            {
+                InitializeRoomInfo();
+            }
+        }
+
+        if (_runner != null && _runner.IsRunning)
+        {
+            UpdatePlayerCount();
+        }
+
+        // Update button visibility and interactability
+        UpdateButtons();
+
+        if (GameManager.Instance == null) return;
+
+        if (GameManager.Instance.IsHost)
+        {
+            startGameButton.interactable =
+                GameManager.Instance.AreAllPlayersReady();
+        }
+    }
+
+    private void InitializeRoomInfo()
+    {
+        if (_runner == null || !_runner.IsRunning)
+        {
+            _maxPlayers = defaultMaxPlayers;
+            _roomName = "Room";
+        }
+        else
+        {
+            // Get session info from runner
+            var sessionInfo = _runner.SessionInfo;
+            if (sessionInfo != null)
+            {
+                _roomName = sessionInfo.Name;
+                _maxPlayers = defaultMaxPlayers;
+            }
+            else
+            {
+                _roomName = "Room";
+                _maxPlayers = defaultMaxPlayers;
+            }
+        }
+
+        if (roomNameText != null)
+            roomNameText.text = _roomName;
+
+        UpdatePlayerCount();
+    }
+
+    public void SetUp(string roomName, int currentPlayers, int maxPlayers)
+    {
+        _roomName = roomName;
+        _currentPlayers = currentPlayers;
+        _maxPlayers = maxPlayers;
+
+        roomNameText.text = roomName;
+        playerCountText.text = $"{currentPlayers}/{maxPlayers}";
+    }
+
+    private void UpdatePlayerCount()
+    {
+        int count = 0;
+
+        foreach (var player in _runner.ActivePlayers)
+        {
+            count++;
+        }
+
+        _currentPlayers = count;
+        playerCountText.text = $"{_currentPlayers}/{_maxPlayers}";
+    }
+
+    private void UpdateButtons()
+    {
+        bool isHost = GameManager.Instance != null && GameManager.Instance.IsHost;
+
+        startGameButton.gameObject.SetActive(isHost);
+        readyGameButton.gameObject.SetActive(!isHost);
+    }
+
+    private void OnPlayerInfoClicked()
+    {
+        if (playerListUI == null) return;
+
+        bool isActive = playerListUI.gameObject.activeSelf;
+        playerListUI.gameObject.SetActive(!isActive);
+
+        if (!isActive)
+        {
+            playerListUI.RefreshList();
+        }
+
+        // Show/hide close button with player list
+        if (closePlayerListButton != null)
+        {
+            closePlayerListButton.gameObject.SetActive(!isActive);
+        }
+    }
+
+    private void OnClosePlayerListClicked()
+    {
+        if (playerListUI != null)
+        {
+            playerListUI.gameObject.SetActive(false);
+        }
+
+        if (closePlayerListButton != null)
+        {
+            closePlayerListButton.gameObject.SetActive(false);
+        }
+    }
+
+    private async void OnLeaveRoomClicked()
+    {
+        if (_runner == null) return;
+
+        Debug.Log("[RoomUI] Leaving room...");
+
+        // Ensure input is re-enabled
+        if (PlayerInputHandler.Instance != null)
+        {
+            PlayerInputHandler.Instance.InputEnabled = true;
+        }
+
+        await _runner.Shutdown();
+        UnityEngine.SceneManagement.SceneManager.LoadScene("TestMenu");
+    }
+
+    private void OnReadyGameClicked()
+    {
+        Debug.Log("[RoomUI] Player ready clicked");
+
+        var localPlayer = PlayerNetworkData.Local;
+
+        if (localPlayer != null)
+        {
+            localPlayer.ToggleReady();
+        }
+    }
+
+    private void OnStartGameClicked()
+    {
+        if (GameManager.Instance == null) return;
+
+        if (!GameManager.Instance.IsHost)
+        {
+            Debug.LogWarning("Only host can start game");
+            return;
+        }
+
+        Debug.Log("[RoomUI] Host starting match");
+
+        GameManager.Instance.StartMatch();
+    }
+}

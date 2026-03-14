@@ -16,131 +16,165 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     [SerializeField] private NetworkPrefabRef gameManagerPrefab;
 
     private NetworkRunner _runner;
+    [SerializeField] private LobbyUI lobbyUI;
     private PlayerInputHandler _inputHandler;
     private Dictionary<PlayerRef, NetworkObject> _spawnedPlayers = new Dictionary<PlayerRef, NetworkObject>();
     private NetworkObject _gameManagerInstance;
-    private bool _isStartingGame;
+    private static BasicSpawner _instance;
+    public static BasicSpawner Instance => _instance;
 
-    async Task StartGame(GameMode mode)
+    public void Awake()
     {
-        // Prevent duplicate calls
-        if (_isStartingGame || _runner != null)
+        if (_instance != null && _instance != this)
         {
-            Debug.LogWarning("[BasicSpawner] StartGame already in progress or completed!");
+            Destroy(gameObject);
             return;
         }
-        _isStartingGame = true;
 
-        try
+        _instance = this;
+
+        DontDestroyOnLoad(gameObject);
+    }
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += HandleUnitySceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= HandleUnitySceneLoaded;
+    }
+
+    private void OnDestroy()
+    {
+        if (_instance == this)
         {
-            // Create the Fusion runner and let it know that we will be providing user input
+            _instance = null;
+        }
+    }
+
+    public async Task StartLobbyAndRunner()
+    {
+        // If runner is null, create new one
+        if (_runner == null)
+        {
             _runner = gameObject.AddComponent<NetworkRunner>();
-            _runner.ProvideInput = true;
-
-            // Register this spawner as callback (for OnPlayerJoined, etc.)
-            _runner.AddCallbacks(this);
-
-            // Add PlayerInputHandler as callback for input collection (only once)
-            if (_inputHandler == null)
-            {
-                _inputHandler = gameObject.AddComponent<PlayerInputHandler>();
-            }
-            _runner.AddCallbacks(_inputHandler);
-
-            // Create the NetworkSceneInfo from the current scene
-            var scene = SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex);
-
-            // Start or join (depends on gamemode) a session with a specific name
-            var result = await _runner.StartGame(new StartGameArgs()
-            {
-                GameMode = mode,
-                SessionName = "TestRoom",
-                Scene = scene,
-                SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
-            });
-
-            // Check if StartGame succeeded
-            if (!result.Ok)
-            {
-                Debug.LogError($"[BasicSpawner] Failed to start game: {result.ShutdownReason}");
-                // Cleanup on failure
-                if (_runner != null)
-                {
-                    Destroy(_runner);
-                    _runner = null;
-                }
-                _isStartingGame = false;
-                return;
-            }
-
-            Debug.Log($"[BasicSpawner] Game started successfully as {mode}");
-
-            // Spawn GameManager if we're the Host/Server
-            // if (_runner.IsServer)
-            // {
-            //     SpawnGameManager();
-            // }
         }
-        catch (Exception ex)
+
+        if (_runner.IsRunning)
         {
-            Debug.LogError($"[BasicSpawner] Exception during StartGame: {ex.Message}");
-            _isStartingGame = false;
-            throw;
+            Debug.LogWarning("[BasicSpawner] NetworkRunner already running!");
+            return;
+        }
+
+        _runner.ProvideInput = true;
+        _runner.AddCallbacks(this);
+
+        // Add PlayerInputHandler for input collection
+        if (_inputHandler == null)
+        {
+            _inputHandler = gameObject.AddComponent<PlayerInputHandler>();
+        }
+        _runner.AddCallbacks(_inputHandler);
+
+        var res = await _runner.JoinSessionLobby(SessionLobby.ClientServer);
+        if (res.Ok)
+        {
+            Debug.Log("[BasicSpawner] Joined lobby successfully.");
+        }
+        else
+        {
+            Debug.LogError($"[BasicSpawner] Failed to join lobby: {res.ShutdownReason}");
         }
     }
 
-    /// <summary>
-    /// Spawn the GameManager NetworkObject. Host only, once per session.
-    /// </summary>
-    // private void SpawnGameManager()
-    // {
-    //     if (_gameManagerInstance != null)
-    //     {
-    //         Debug.LogWarning("[BasicSpawner] GameManager already spawned!");
-    //         return;
-    //     }
-
-    //     if (!gameManagerPrefab.IsValid)
-    //     {
-    //         Debug.LogError("[BasicSpawner] GameManager prefab not assigned!");
-    //         return;
-    //     }
-
-    //     Debug.Log("[BasicSpawner] Spawning GameManager...");
-    //     _gameManagerInstance = _runner.Spawn(
-    //         gameManagerPrefab,
-    //         Vector3.zero,
-    //         Quaternion.identity,
-    //         null // No input authority - server controlled
-    //     );
-    // }
-
-    // private async void Start()
-    // {
-    //     // For testing, start as Host. Change to Client to test joining.
-    //     try
-    //     {
-    //         await StartGame(GameMode.Host);
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         Debug.LogError($"[BasicSpawner] Failed to start: {ex.Message}");
-    //     }
-    // }
-
-    //Sử dụng button để bắt đầu game thành host
-    public async void StartAsHost()
+    public async Task StartHost(string sessionName, SceneRef sceneName)
     {
-        await StartGame(GameMode.Host);
+        if (_runner == null)
+        {
+            _runner = gameObject.AddComponent<NetworkRunner>();
+        }
+        var sceneManager = GetComponent<NetworkSceneManagerDefault>();
+        if (sceneManager == null)
+        {
+            sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+        }
+
+        var res = await _runner.StartGame(new StartGameArgs()
+        {
+            GameMode = GameMode.Host,
+            SessionName = sessionName,
+            Scene = sceneName,
+            SceneManager = sceneManager
+        });
+        if (res.Ok)
+        {
+            Debug.Log("[BasicSpawner] Host started successfully.");
+        }
+        else
+        {
+            Debug.LogError($"[BasicSpawner] Failed to start host: {res.ShutdownReason}");
+        }
     }
-    public async void StartAsClient()
+
+    public async Task StartClient(string sessionName)
     {
-        await StartGame(GameMode.Client);
+        // Get or create scene manager
+        var sceneManager = GetComponent<NetworkSceneManagerDefault>();
+        if (sceneManager == null)
+        {
+            sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+        }
+
+        var res = await _runner.StartGame(new StartGameArgs()
+        {
+            GameMode = GameMode.Client,
+            SessionName = sessionName,
+            SceneManager = sceneManager
+        });
+        if (res.Ok)
+        {
+            Debug.Log("[BasicSpawner] Client started successfully.");
+        }
+        else
+        {
+            Debug.LogError($"[BasicSpawner] Failed to start client: {res.ShutdownReason}");
+        }
+    }
+    private void SpawnGameManager()
+    {
+        if (_gameManagerInstance != null)
+        {
+            Debug.LogWarning("[BasicSpawner] GameManager already spawned!");
+            return;
+        }
+
+        if (!gameManagerPrefab.IsValid)
+        {
+            Debug.LogError("[BasicSpawner] GameManager prefab not assigned!");
+            return;
+        }
+
+        Debug.Log("[BasicSpawner] Spawning GameManager...");
+        _gameManagerInstance = _runner.Spawn(
+            gameManagerPrefab,
+            Vector3.zero,
+            Quaternion.identity,
+            null // No input authority - server controlled
+        );
     }
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
         // Only Host spawns players
         if (!runner.IsServer) return;
+
+        // Check if player already spawned (avoid duplicate)
+        if (_spawnedPlayers.ContainsKey(player))
+        {
+            Debug.LogWarning($"[BasicSpawner] Player {player} already spawned, skipping.");
+            return;
+        }
 
         // Validate playerPrefab
         if (!playerPrefab.IsValid)
@@ -186,16 +220,70 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnInput(NetworkRunner runner, NetworkInput input) { }
     public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
-    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
+
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
+{
+    Debug.Log($"[BasicSpawner] Shutdown: {shutdownReason}");
+
+    _spawnedPlayers.Clear();
+    _gameManagerInstance = null;
+
+    if (PlayerNetworkData.Local != null)
+    {
+        PlayerNetworkData.Local = null;
+    }
+
+    var oldSceneManager = GetComponent<NetworkSceneManagerDefault>();
+    if (oldSceneManager != null)
+    {
+        Destroy(oldSceneManager);
+    }
+
+    if (_runner != null)
+    {
+        _runner.RemoveCallbacks(this);
+
+        if (_inputHandler != null)
+        {
+            _runner.RemoveCallbacks(_inputHandler);
+        }
+
+        Destroy(_runner);
+        _runner = null;
+    }
+}
+
     public void OnConnectedToServer(NetworkRunner runner) { }
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
-    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList) { }
+    public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList)
+    {
+        var ui = ResolveLobbyUI();
+        if (ui != null)
+        {
+            ui.UpdateRoomList(sessionList);
+        }
+    }
     public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
     public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken) { }
-    public void OnSceneLoadDone(NetworkRunner runner) { }
+    public void OnSceneLoadDone(NetworkRunner runner)
+    {
+        Debug.Log($"[BasicSpawner] Scene load done");
+        ResolveLobbyUI();
+        if (runner.IsServer)
+        {
+            // Spawn GameManager if not exists
+            if (_gameManagerInstance == null)
+            {
+                SpawnGameManager();
+            }
+
+            // Respawn all connected players in new scene
+            RespawnAllPlayers();
+        }
+    }
     public void OnSceneLoadStart(NetworkRunner runner) { }
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
@@ -237,5 +325,102 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         float radius = 3f;
         return new Vector3(Mathf.Cos(angle) * radius, 1f, Mathf.Sin(angle) * radius);
     }
-    #endregion
+    #endregion}
+
+    /// <summary>
+    /// Respawn all connected players. Called when loading a new scene.
+    /// </summary>
+    private void RespawnAllPlayers()
+    {
+        Debug.Log("[BasicSpawner] Respawning all players for new scene...");
+
+        // First, despawn existing player objects
+        foreach (var kvp in _spawnedPlayers)
+        {
+            if (kvp.Value != null && kvp.Value.IsValid)
+            {
+                _runner.Despawn(kvp.Value);
+            }
+        }
+        _spawnedPlayers.Clear();
+
+        // Check if this is a race minigame scene
+        var raceSpawnManager = FindAnyObjectByType<RaceSpawnManager>();
+        if (raceSpawnManager != null)
+        {
+            Debug.Log("[BasicSpawner] Found RaceSpawnManager, delegating spawn...");
+
+            // Let RaceSpawnManager handle it
+            int playerCount = 0;
+            foreach (var _ in _runner.ActivePlayers) playerCount++;
+
+            raceSpawnManager.InitializeForRace(playerCount);
+
+            foreach (var player in _runner.ActivePlayers)
+            {
+                var spawnedObj = raceSpawnManager.SpawnPlayer(player);
+                if (spawnedObj != null)
+                {
+                    _spawnedPlayers[player] = spawnedObj;
+                }
+            }
+        }
+        else
+        {
+            // Default spawn logic
+            foreach (var player in _runner.ActivePlayers)
+            {
+                SpawnPlayerForScene(player);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Spawn a player for the current scene.
+    /// </summary>
+    private void SpawnPlayerForScene(PlayerRef player)
+    {
+        if (!playerPrefab.IsValid)
+        {
+            Debug.LogError("[BasicSpawner] Player prefab not assigned!");
+            return;
+        }
+
+        // Check if player already has an object
+        if (_spawnedPlayers.ContainsKey(player))
+        {
+            Debug.LogWarning($"[BasicSpawner] Player {player} already spawned!");
+            return;
+        }
+
+        Vector3 spawnPosition = GetSpawnPosition(player);
+
+        NetworkObject playerObject = _runner.Spawn(
+            playerPrefab,
+            spawnPosition,
+            Quaternion.identity,
+            player
+        );
+
+        if (playerObject != null)
+        {
+            _spawnedPlayers[player] = playerObject;
+            Debug.Log($"[BasicSpawner] Spawned player {player} at {spawnPosition}");
+        }
+    }
+
+    private LobbyUI ResolveLobbyUI()
+    {
+        if (lobbyUI == null)
+        {
+            lobbyUI = FindAnyObjectByType<LobbyUI>();
+        }
+
+        return lobbyUI;
+    }
+
+    private void HandleUnitySceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        lobbyUI = FindAnyObjectByType<LobbyUI>();
+    }
 }
