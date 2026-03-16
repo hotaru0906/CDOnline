@@ -18,15 +18,15 @@ public class BossController : NetworkBehaviour
     [SerializeField] private float startDistance = 10f;         // Starting distance on track (near start)
     [SerializeField] private float stopBuffer = 50f;            // Stop this distance before track end
 
-    [Header("Visual")]
-    [SerializeField] private GameObject visualModel;
-    [SerializeField] private ParticleSystem moveEffect;
-    [SerializeField] private ParticleSystem stopEffect;
+    //[Header("Visual")]
+    // [SerializeField] private GameObject visualModel;
+    // [SerializeField] private ParticleSystem moveEffect;
+    // [SerializeField] private ParticleSystem stopEffect;
 
-    [Header("Audio")]
-    [SerializeField] private AudioSource audioSource;
-    [SerializeField] private AudioClip moveLoopSound;
-    [SerializeField] private AudioClip arriveSound;
+    // [Header("Audio")]
+    // [SerializeField] private AudioSource audioSource;
+    // [SerializeField] private AudioClip moveLoopSound;
+    // [SerializeField] private AudioClip arriveSound;
 
     [Header("Debug")]
     [SerializeField] private bool debugMode = false;
@@ -123,7 +123,7 @@ public class BossController : NetworkBehaviour
     private void StartMoving()
     {
         IsMoving = true;
-        RPC_OnStartMoving();
+        //RPC_OnStartMoving();
         Debug.Log("[BossController] Boss started moving!");
     }
 
@@ -151,13 +151,13 @@ public class BossController : NetworkBehaviour
 
         // Check if reached end
         float endDistance = trackSystem.TrackLength - stopBuffer;
-        
+
         // Debug: Log movement
         if (debugMode)
         {
             Debug.Log($"[BossController] Distance: {CurrentDistance:F1}/{trackSystem.TrackLength:F1}, EndAt: {endDistance:F1}");
         }
-        
+
         if (CurrentDistance >= endDistance)
         {
             CurrentDistance = endDistance;
@@ -172,7 +172,7 @@ public class BossController : NetworkBehaviour
     {
         IsMoving = false;
         HasReachedEnd = true;
-        RPC_OnReachedEnd();
+        //RPC_OnReachedEnd();
         Debug.Log("[BossController] Boss reached track end and stopped!");
     }
 
@@ -207,7 +207,7 @@ public class BossController : NetworkBehaviour
         StartDelayTimer = TickTimer.CreateFromSeconds(Runner, startDelay);
 
         UpdatePositionFromDistance();
-        RPC_OnReset();
+        //RPC_OnReset();
 
         Debug.Log("[BossController] Boss reset to start position.");
     }
@@ -230,6 +230,7 @@ public class BossController : NetworkBehaviour
         UpdatePositionFromDistance();
     }
 
+    /*
     #region RPCs
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -294,7 +295,8 @@ public class BossController : NetworkBehaviour
         }
     }
 
-    #endregion
+    #endregion 
+    */
 
 #if UNITY_EDITOR
     private void OnDrawGizmos()

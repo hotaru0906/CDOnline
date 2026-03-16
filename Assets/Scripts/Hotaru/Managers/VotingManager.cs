@@ -51,6 +51,14 @@ public class VotingManager : NetworkBehaviour
         Instance = this;
     }
 
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+
     public override void Spawned()
     {
         Debug.Log($"[VotingManager] Spawned. IsHost: {HasStateAuthority}");
