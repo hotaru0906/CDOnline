@@ -70,30 +70,72 @@ public class RaceManager : NetworkBehaviour
     [SerializeField] private bool endRaceOnFirstFinish = true;
 
     [Header("Distance Phase Thresholds")]
-    [SerializeField] private Transform phase1End;
-    [SerializeField] private Transform phase2End;
-    [SerializeField] private Transform phase3End;
+    [SerializeField] private float phase1End = 700f;
+    [SerializeField] private float phase2End = 1500f;
+    [SerializeField] private float phase3End = 2400f;
+
+    [Header("Debug")]
+    [SerializeField] private bool debugMode = false;
     #endregion
 
     #region Networked Properties
+    /// <summary>
+    /// Current race phase - synced across all clients.
+    /// </summary>
     [Networked, OnChangedRender(nameof(OnPhaseChanged))]
     public RacePhase CurrentPhase { get; private set; } = RacePhase.Waiting;
+
+    /// <summary>
+    /// Current distance phase based on leader's progress.
+    /// </summary>
     [Networked, OnChangedRender(nameof(OnDistancePhaseChanged))]
     public DistancePhase CurrentDistancePhase { get; private set; } = DistancePhase.Phase1;
+
+    /// <summary>
+    /// Total track length - synced with callback for late joiners.
+    /// </summary>
     [Networked, OnChangedRender(nameof(OnTrackLengthChanged))]
     public float TrackLength { get; private set; }
+
+    /// <summary>
+    /// Countdown timer (counts down from countdownDuration to 0).
+    /// </summary>
     [Networked, OnChangedRender(nameof(OnCountdownChanged))]
     public float CountdownTimer { get; private set; }
+
+    /// <summary>
+    /// Race elapsed time (starts when racing begins).
+    /// </summary>
     [Networked]
     public float RaceTime { get; private set; }
+
+    /// <summary>
+    /// Number of players who have finished.
+    /// </summary>
     [Networked]
     public int FinishedPlayerCount { get; private set; }
+
+    /// <summary>
+    /// Player race data - networked array for all players.
+    /// </summary>
     [Networked, Capacity(4)]
     public NetworkArray<RacePlayerData> PlayerDataArray => default;
+
+    /// <summary>
+    /// Number of active players in the race.
+    /// </summary>
     [Networked]
     public int ActivePlayerCount { get; private set; }
+
+    /// <summary>
+    /// Leader's current distance (for phase calculation).
+    /// </summary>
     [Networked]
     public float LeaderDistance { get; private set; }
+
+    /// <summary>
+    /// Winner's PlayerRef (first to finish).
+    /// </summary>
     [Networked]
     public PlayerRef Winner { get; private set; }
     #endregion
@@ -171,6 +213,9 @@ public class RaceManager : NetworkBehaviour
     #endregion
 
     #region Phase Management (Host Only)
+    /// <summary>
+    /// Initialize the race. Call this when minigame starts.
+    /// </summary>
     public void InitializeRace()
     {
         if (!HasStateAuthority)
@@ -179,6 +224,7 @@ public class RaceManager : NetworkBehaviour
             return;
         }
 
+        // Reset all data
         RaceTime = 0f;
         FinishedPlayerCount = 0;
         CountdownTimer = countdownDuration;
@@ -188,6 +234,7 @@ public class RaceManager : NetworkBehaviour
         CurrentDistancePhase = DistancePhase.Phase1;
         _previousDistancePhase = DistancePhase.Phase1;
 
+        // Clear player data
         for (int i = 0; i < PlayerDataArray.Length; i++)
         {
             PlayerDataArray.Set(i, default);
@@ -201,6 +248,9 @@ public class RaceManager : NetworkBehaviour
         Debug.Log("[RaceManager] Race initialized.");
     }
 
+    /// <summary>
+    /// Register a player for the race.
+    /// </summary>
     public void RegisterPlayer(PlayerRef player, NetworkObject playerObject)
     {
         if (!HasStateAuthority) return;
@@ -232,6 +282,9 @@ public class RaceManager : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Unregister a player from the race.
+    /// </summary>
     public void UnregisterPlayer(PlayerRef player)
     {
         if (!HasStateAuthority) return;
@@ -255,6 +308,9 @@ public class RaceManager : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Start the countdown phase.
+    /// </summary>
     public void StartCountdown()
     {
         if (!HasStateAuthority)
@@ -275,6 +331,9 @@ public class RaceManager : NetworkBehaviour
         Debug.Log("[RaceManager] Countdown started!");
     }
 
+    /// <summary>
+    /// Start the race immediately (skip countdown).
+    /// </summary>
     public void StartRace()
     {
         if (!HasStateAuthority)
@@ -288,6 +347,9 @@ public class RaceManager : NetworkBehaviour
         Debug.Log("[RaceManager] Race started!");
     }
 
+    /// <summary>
+    /// End the race.
+    /// </summary>
     public void EndRace()
     {
         if (!HasStateAuthority) return;
@@ -466,18 +528,13 @@ public class RaceManager : NetworkBehaviour
 
     private void UpdateDistancePhase()
     {
-        // Find leader player position
-        Vector3 leaderPosition = GetLeaderPosition();
-        if (leaderPosition == Vector3.zero) return;
-
         DistancePhase newPhase;
-        float leaderZ = leaderPosition.z;  // Assuming forward direction is along Z-axis
 
-        if (phase1End != null && leaderZ < phase1End.position.z)
+        if (LeaderDistance < phase1End)
         {
             newPhase = DistancePhase.Phase1;
         }
-        else if (phase2End != null && leaderZ < phase2End.position.z)
+        else if (LeaderDistance < phase2End)
         {
             newPhase = DistancePhase.Phase2;
         }
@@ -491,36 +548,12 @@ public class RaceManager : NetworkBehaviour
             CurrentDistancePhase = newPhase;
         }
     }
-
-    /// <summary>
-    /// Get the position of the current leader player.
-    /// </summary>
-    private Vector3 GetLeaderPosition()
-    {
-        float maxDistance = 0f;
-        Vector3 leaderPos = Vector3.zero;
-
-        foreach (var kvp in _playerObjects)
-        {
-            PlayerRef player = kvp.Key;
-            NetworkObject playerObj = kvp.Value;
-
-            if (playerObj == null) continue;
-            if (!_playerIndexMap.TryGetValue(player, out int index)) continue;
-
-            var data = PlayerDataArray[index];
-            if (data.Distance > maxDistance)
-            {
-                maxDistance = data.Distance;
-                leaderPos = playerObj.transform.position;
-            }
-        }
-
-        return leaderPos;
-    }
     #endregion
 
     #region Public Getters
+    /// <summary>
+    /// Get player's current distance.
+    /// </summary>
     public float GetPlayerDistance(PlayerRef player)
     {
         if (_playerIndexMap.TryGetValue(player, out int index))
@@ -530,6 +563,9 @@ public class RaceManager : NetworkBehaviour
         return 0f;
     }
 
+    /// <summary>
+    /// Get player's progress (0-1).
+    /// </summary>
     public float GetPlayerProgress(PlayerRef player)
     {
         if (_playerIndexMap.TryGetValue(player, out int index))
@@ -539,6 +575,9 @@ public class RaceManager : NetworkBehaviour
         return 0f;
     }
 
+    /// <summary>
+    /// Get player's current rank.
+    /// </summary>
     public int GetPlayerRank(PlayerRef player)
     {
         if (_playerIndexMap.TryGetValue(player, out int index))
@@ -548,6 +587,9 @@ public class RaceManager : NetworkBehaviour
         return 0;
     }
 
+    /// <summary>
+    /// Check if player has finished.
+    /// </summary>
     public bool HasPlayerFinished(PlayerRef player)
     {
         if (_playerIndexMap.TryGetValue(player, out int index))
@@ -557,6 +599,9 @@ public class RaceManager : NetworkBehaviour
         return false;
     }
 
+    /// <summary>
+    /// Get player's finish time.
+    /// </summary>
     public float GetPlayerFinishTime(PlayerRef player)
     {
         if (_playerIndexMap.TryGetValue(player, out int index))
@@ -566,6 +611,9 @@ public class RaceManager : NetworkBehaviour
         return 0f;
     }
 
+    /// <summary>
+    /// Get all player data for UI display.
+    /// </summary>
     public RacePlayerData[] GetAllPlayerData()
     {
         RacePlayerData[] result = new RacePlayerData[ActivePlayerCount];
@@ -576,11 +624,17 @@ public class RaceManager : NetworkBehaviour
         return result;
     }
 
+    /// <summary>
+    /// Get rankings sorted by rank.
+    /// </summary>
     public RacePlayerData[] GetRankings()
     {
         return GetAllPlayerData().OrderBy(p => p.Rank).ToArray();
     }
 
+    /// <summary>
+    /// Get player data by PlayerRef.
+    /// </summary>
     public bool TryGetPlayerData(PlayerRef player, out RacePlayerData data)
     {
         if (_playerIndexMap.TryGetValue(player, out int index))
@@ -593,30 +647,24 @@ public class RaceManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Get the current distance phase threshold transforms.
+    /// Get the current distance phase thresholds.
     /// </summary>
-    public (Transform phase1End, Transform phase2End, Transform phase3End) GetPhaseThresholds()
+    public (float phase1End, float phase2End, float phase3End) GetPhaseThresholds()
     {
         return (phase1End, phase2End, phase3End);
     }
 
     /// <summary>
-    /// Get the current distance phase threshold Z positions.
+    /// Check if player is registered.
     /// </summary>
-    public (float phase1EndZ, float phase2EndZ, float phase3EndZ) GetPhaseThresholdPositions()
-    {
-        return (
-            phase1End != null ? phase1End.position.z : 0f,
-            phase2End != null ? phase2End.position.z : 0f,
-            phase3End != null ? phase3End.position.z : 0f
-        );
-    }
-
     public bool IsPlayerRegistered(PlayerRef player)
     {
         return _playerIndexMap.ContainsKey(player);
     }
 
+    /// <summary>
+    /// Check if player is off-track (outside track boundaries).
+    /// </summary>
     public bool IsPlayerOffTrack(PlayerRef player)
     {
         if (_playerTrackStates.TryGetValue(player, out var state))
@@ -626,6 +674,9 @@ public class RaceManager : NetworkBehaviour
         return false;
     }
 
+    /// <summary>
+    /// Get player's off-track distance (0 if on track).
+    /// </summary>
     public float GetPlayerOffTrackDistance(PlayerRef player)
     {
         if (_playerTrackStates.TryGetValue(player, out var state))
@@ -635,6 +686,9 @@ public class RaceManager : NetworkBehaviour
         return 0f;
     }
 
+    /// <summary>
+    /// Get player's current checkpoint index.
+    /// </summary>
     public int GetPlayerCheckpoint(PlayerRef player)
     {
         if (_playerTrackStates.TryGetValue(player, out var state))
@@ -644,6 +698,9 @@ public class RaceManager : NetworkBehaviour
         return 0;
     }
 
+    /// <summary>
+    /// Get player's lap count (for loop tracks).
+    /// </summary>
     public int GetPlayerLapCount(PlayerRef player)
     {
         if (_playerTrackStates.TryGetValue(player, out var state))
@@ -704,6 +761,49 @@ public class RaceManager : NetworkBehaviour
     private void RPC_NotifyRankingsUpdated()
     {
         OnRankingsUpdated?.Invoke();
+    }
+    #endregion
+
+    #region Debug
+    private void OnGUI()
+    {
+        if (!debugMode) return;
+
+        GUILayout.BeginArea(new Rect(10, 10, 400, 600));
+        GUILayout.Label($"=== Race Manager Debug ===");
+        GUILayout.Label($"Phase: {CurrentPhase}");
+        GUILayout.Label($"Distance Phase: {CurrentDistancePhase}");
+        GUILayout.Label($"Track Length: {TrackLength:F2}");
+        GUILayout.Label($"Leader Distance: {LeaderDistance:F2}");
+        GUILayout.Label($"Race Time: {RaceTime:F2}s");
+        GUILayout.Label($"Countdown: {CountdownTimer:F1}s");
+        GUILayout.Label($"Players: {ActivePlayerCount}");
+        GUILayout.Label($"Finished: {FinishedPlayerCount}");
+        GUILayout.Label($"Winner: {(Winner != default ? Winner.ToString() : "None")}");
+
+        GUILayout.Space(5);
+        var thresholds = GetPhaseThresholds();
+        GUILayout.Label($"Phase1: 0 - {thresholds.phase1End}");
+        GUILayout.Label($"Phase2: {thresholds.phase1End} - {thresholds.phase2End}");
+        GUILayout.Label($"Phase3: {thresholds.phase2End} - {thresholds.phase3End}");
+
+        GUILayout.Space(10);
+        GUILayout.Label("--- Player Details ---");
+        foreach (var kvp in _playerTrackStates)
+        {
+            PlayerRef player = kvp.Key;
+            var state = kvp.Value;
+            
+            if (!TryGetPlayerData(player, out var data)) continue;
+
+            string finishStatus = data.HasFinished ? $"DONE ({data.FinishTime:F2}s)" : $"{data.Progress * 100:F1}%";
+            string offTrackStatus = state.IsOffTrack ? $" [OFF-TRACK: {state.OffTrackDistance:F1}]" : "";
+            
+            GUILayout.Label($"#{data.Rank} P{player}: {data.Distance:F1}m | CP{state.LastCheckpoint} | Lap{state.LapCount}{offTrackStatus}");
+            GUILayout.Label($"    {finishStatus}");
+        }
+
+        GUILayout.EndArea();
     }
     #endregion
 }

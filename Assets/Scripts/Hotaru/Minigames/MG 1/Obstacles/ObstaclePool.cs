@@ -11,7 +11,7 @@ public class ObstaclePool : NetworkBehaviour
     [Header("Pool Configuration")]
     [SerializeField] private NetworkPrefabRef jumpableObstaclePrefab;
     [SerializeField] private NetworkPrefabRef dodgeableObstaclePrefab;
-    //[SerializeField] private NetworkPrefabRef boostPickupPrefab;
+    [SerializeField] private NetworkPrefabRef boostPickupPrefab;
 
     [Header("Pool Sizes")]
     [SerializeField] private int jumpablePoolSize = 10;
@@ -84,14 +84,14 @@ public class ObstaclePool : NetworkBehaviour
         }
 
         // Pre-spawn boosts
-        // for (int i = 0; i < boostPoolSize; i++)
-        // {
-        //     //var obj = SpawnBoostPooledObject();
-        //     if (obj != null)
-        //     {
-        //         _boostPool.Enqueue(obj);
-        //     }
-        // }
+        for (int i = 0; i < boostPoolSize; i++)
+        {
+            var obj = SpawnBoostPooledObject();
+            if (obj != null)
+            {
+                _boostPool.Enqueue(obj);
+            }
+        }
 
         _isInitialized = true;
         Debug.Log($"[ObstaclePool] Initialized: {jumpablePoolSize} jumpable, {dodgeablePoolSize} dodgeable, {boostPoolSize} boosts");
@@ -124,26 +124,26 @@ public class ObstaclePool : NetworkBehaviour
     /// <summary>
     /// Spawn a pooled boost object (disabled).
     /// </summary>
-    // private NetworkObject SpawnBoostPooledObject()
-    // {
-    //     if (!boostPickupPrefab.IsValid)
-    //     {
-    //         Debug.LogWarning("[ObstaclePool] Boost prefab not assigned!");
-    //         return null;
-    //     }
+    private NetworkObject SpawnBoostPooledObject()
+    {
+        if (!boostPickupPrefab.IsValid)
+        {
+            Debug.LogWarning("[ObstaclePool] Boost prefab not assigned!");
+            return null;
+        }
 
-    //     var obj = Runner.Spawn(boostPickupPrefab, POOL_POSITION, Quaternion.identity, Object.StateAuthority);
-    //     if (obj != null)
-    //     {
-    //         var boost = obj.GetComponent<BoostPickup>();
-    //         if (boost != null)
-    //         {
-    //             boost.SetPooled(true);
-    //             boost.Deactivate();
-    //         }
-    //     }
-    //     return obj;
-    // }
+        var obj = Runner.Spawn(boostPickupPrefab, POOL_POSITION, Quaternion.identity, Object.StateAuthority);
+        if (obj != null)
+        {
+            var boost = obj.GetComponent<BoostPickup>();
+            if (boost != null)
+            {
+                boost.SetPooled(true);
+                boost.Deactivate();
+            }
+        }
+        return obj;
+    }
 
     #region Get From Pool
 
@@ -245,8 +245,7 @@ public class ObstaclePool : NetworkBehaviour
         }
 
         Debug.Log("[ObstaclePool] Expanding boost pool...");
-        // return SpawnBoostPooledObject();
-        return null;
+        return SpawnBoostPooledObject();
     }
 
     #endregion

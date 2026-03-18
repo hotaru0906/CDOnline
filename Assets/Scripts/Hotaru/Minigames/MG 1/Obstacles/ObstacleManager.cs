@@ -40,7 +40,7 @@ public class ObstacleManager : NetworkBehaviour
     [Header("Prefabs (fallback if no pool)")]
     [SerializeField] private NetworkPrefabRef jumpableObstaclePrefab;
     [SerializeField] private NetworkPrefabRef dodgeableObstaclePrefab;
-    //[SerializeField] private NetworkPrefabRef boostPickupPrefab;
+    [SerializeField] private NetworkPrefabRef boostPickupPrefab;
 
     [Header("References")]
     [SerializeField] private BossController bossController;
@@ -328,21 +328,21 @@ public class ObstacleManager : NetworkBehaviour
         {
             boost = obstaclePool.GetBoostPickup(spawnPos, spawnRot);
         }
-        // else
-        // {
-        //     // Fallback: direct spawn if no pool
-        //     if (!boostPickupPrefab.IsValid)
-        //     {
-        //         Debug.LogWarning("[ObstacleManager] Boost pickup prefab not assigned!");
-        //         return;
-        //     }
+        else
+        {
+            // Fallback: direct spawn if no pool
+            if (!boostPickupPrefab.IsValid)
+            {
+                Debug.LogWarning("[ObstacleManager] Boost pickup prefab not assigned!");
+                return;
+            }
 
-        //     var spawnedObj = Runner.Spawn(boostPickupPrefab, spawnPos, spawnRot, Object.StateAuthority);
-        //     if (spawnedObj != null)
-        //     {
-        //         boost = spawnedObj.GetComponent<BoostPickup>();
-        //     }
-        // }
+            var spawnedObj = Runner.Spawn(boostPickupPrefab, spawnPos, spawnRot, Object.StateAuthority);
+            if (spawnedObj != null)
+            {
+                boost = spawnedObj.GetComponent<BoostPickup>();
+            }
+        }
 
         if (boost != null)
         {

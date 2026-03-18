@@ -338,9 +338,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   jumpableObstaclePrefab:
-    RawGuidValue: c714e031b78f5b6458f46aed9dbca111
+    RawGuidValue: 00000000000000000000000000000000
   dodgeableObstaclePrefab:
-    RawGuidValue: 2366ddb3c86c2e44ab364536a45d75a2
+    RawGuidValue: 00000000000000000000000000000000
+  boostPickupPrefab:
+    RawGuidValue: 00000000000000000000000000000000
   bossController: {fileID: 637487243}
   trackSystem: {fileID: 1869033293}
   raceManager: {fileID: 1727522964}
@@ -433,6 +435,12 @@ MonoBehaviour:
   trackSystem: {fileID: 1869033293}
   startDistance: 10
   stopBuffer: 50
+  visualModel: {fileID: 637487240}
+  moveEffect: {fileID: 0}
+  stopEffect: {fileID: 0}
+  audioSource: {fileID: 0}
+  moveLoopSound: {fileID: 0}
+  arriveSound: {fileID: 0}
   debugMode: 0
   _CurrentDistance: 0
   _IsMoving:
@@ -623,37 +631,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &783696381
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 783696382}
-  m_Layer: 0
-  m_Name: ===== Phases =====
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &783696382
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 783696381}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &809281102
 GameObject:
   m_ObjectHideFlags: 0
@@ -719,12 +696,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   jumpableObstaclePrefab:
-    RawGuidValue: c714e031b78f5b6458f46aed9dbca111
+    RawGuidValue: 00000000000000000000000000000000
   dodgeableObstaclePrefab:
-    RawGuidValue: 2366ddb3c86c2e44ab364536a45d75a2
+    RawGuidValue: 00000000000000000000000000000000
+  boostPickupPrefab:
+    RawGuidValue: 00000000000000000000000000000000
   jumpablePoolSize: 10
   dodgeablePoolSize: 10
-  boostPoolSize: 0
+  boostPoolSize: 5
   poolParent: {fileID: 1135841618}
 --- !u!1 &954455015
 GameObject:
@@ -967,9 +946,10 @@ MonoBehaviour:
   countdownDuration: 3
   maxPlayers: 1
   endRaceOnFirstFinish: 1
-  phase1End: {fileID: 137494390}
-  phase2End: {fileID: 365021000}
-  phase3End: {fileID: 1571356734}
+  phase1End: 700
+  phase2End: 1500
+  phase3End: 2400
+  debugMode: 0
   _CurrentPhase: 0
   _CurrentDistancePhase: 0
   _TrackLength: 0
@@ -1056,8 +1036,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d963161f62edfe04e844ca1c4ee9e9f6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gridRows: 1
-  gridColumns: 4
+  gridRows: 2
+  gridColumns: 2
   rowSpacing: 3
   columnSpacing: 2.5
   trackSystem: {fileID: 1869033293}
@@ -1329,4 +1309,3 @@ SceneRoots:
   - {fileID: 954455016}
   - {fileID: 1231115785}
   - {fileID: 1135841618}
-  - {fileID: 783696382}

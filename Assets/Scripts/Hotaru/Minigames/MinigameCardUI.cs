@@ -26,7 +26,6 @@ public class MinigameCardUI : MonoBehaviour
 
     private void OnVoteClicked()
     {
-        Debug.Log($"[MinigameCardUI] Vote clicked for minigame index: {minigameIndex}");
         votingUI.OnVote(minigameIndex);
     }
 

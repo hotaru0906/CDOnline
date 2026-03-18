@@ -8,8 +8,8 @@ using System.Collections.Generic;
 public class StartGrid : MonoBehaviour
 {
     [Header("Grid Configuration")]
-    [SerializeField] private int gridRows = 1;
-    [SerializeField] private int gridColumns = 4;
+    [SerializeField] private int gridRows = 2;
+    [SerializeField] private int gridColumns = 2;
     [SerializeField] private float rowSpacing = 3f;      // Distance between rows (front to back)
     [SerializeField] private float columnSpacing = 2.5f; // Distance between columns (side to side)
 
@@ -137,22 +137,38 @@ public class StartGrid : MonoBehaviour
             _trackDirection = transform.forward;
         }
 
-        // Right direction across track
+        // Calculate grid (Cross product: trackDirection x Up = Right)
         Vector3 right = Vector3.Cross(_trackDirection, Vector3.up).normalized;
         if (right.sqrMagnitude < 0.001f)
-            right = Vector3.right;
-
-        // Center the row
-        float totalWidth = (gridColumns - 1) * columnSpacing;
-        Vector3 start = _gridCenter - (right * totalWidth * 0.5f);
-
-        // Create single row spawn points
-        for (int col = 0; col < gridColumns; col++)
         {
-            Vector3 position = start + (right * col * columnSpacing);
-            Quaternion rotation = Quaternion.LookRotation(_trackDirection, Vector3.up);
+            right = Vector3.right;
+        }
 
-            _spawnPoints.Add(new SpawnPointData(position, rotation, 0, col));
+        // Calculate starting corner (offset to center the grid)
+        float totalWidth = (gridColumns - 1) * columnSpacing;
+        float totalDepth = (gridRows - 1) * rowSpacing;
+        Vector3 startCorner = _gridCenter - (right * totalWidth * 0.5f) + (_trackDirection * totalDepth * 0.5f);
+
+        // Create spawn points in grid pattern
+        // Row 0 = front (closest to track start), Row N = back
+        // Column layout: alternating pattern for racing (staggered start)
+        int spawnIndex = 0;
+        for (int row = 0; row < gridRows; row++)
+        {
+            for (int col = 0; col < gridColumns; col++)
+            {
+                // Stagger columns for odd rows (racing grid pattern)
+                float colOffset = (row % 2 == 1) ? columnSpacing * 0.5f : 0f;
+
+                Vector3 position = startCorner
+                    + (right * (col * columnSpacing + colOffset))
+                    - (_trackDirection * row * rowSpacing);
+
+                Quaternion rotation = Quaternion.LookRotation(_trackDirection, Vector3.up);
+
+                _spawnPoints.Add(new SpawnPointData(position, rotation, row, col));
+                spawnIndex++;
+            }
         }
     }
 
@@ -191,7 +207,7 @@ public class StartGrid : MonoBehaviour
 
         // Wrap around if index exceeds count (allows more players than spawn points)
         int wrappedIndex = playerIndex % _spawnPoints.Count;
-
+        
         return _spawnPoints[wrappedIndex];
     }
 
@@ -288,7 +304,7 @@ public class StartGrid : MonoBehaviour
             foreach (var p in points) center += p.Position;
             center /= points.Count;
 
-            Gizmos.DrawWireCube(center + Vector3.up * 0.1f,
+            Gizmos.DrawWireCube(center + Vector3.up * 0.1f, 
                 new Vector3((gridColumns - 1) * columnSpacing + 2f, 0.2f, (gridRows - 1) * rowSpacing + 2f));
         }
     }

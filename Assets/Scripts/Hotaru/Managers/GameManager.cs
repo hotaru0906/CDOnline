@@ -36,8 +36,6 @@ public class GameManager : NetworkBehaviour
 
     [Networked]
     public int TotalRounds { get; private set; } = 3;
-
-    [Networked]
     public int CurrentMinigameIndex { get; private set; } = -1;
     #endregion
 
@@ -54,54 +52,12 @@ public class GameManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
     }
 
     public override void Spawned()
     {
         // Called when NetworkObject is spawned
         Debug.Log($"[GameManager] Spawned. IsHost: {HasStateAuthority}");
-        
-        // Find UI references in current scene
-        FindUIReferences();
-        
-        // Apply initial state UI (since OnChangedRender won't trigger on spawn)
-        OnGameStateChanged();
-    }
-
-    /// <summary>
-    /// Find UI references dynamically. Call this after scene load.
-    /// </summary>
-    public void FindUIReferences()
-    {
-        // Find by tag or name - adjust these to match your UI naming convention
-        if (lobbyUI == null)
-            lobbyUI = GameObject.FindWithTag("LobbyUI") ?? GameObject.Find("LobbyUI");
-        if (votingUI == null)
-            votingUI = GameObject.FindWithTag("VotingUI") ?? GameObject.Find("VotingUI");
-        if (scoreboardUI == null)
-            scoreboardUI = GameObject.FindWithTag("ScoreboardUI") ?? GameObject.Find("ScoreboardUI");
-        if (resultUI == null)
-            resultUI = GameObject.FindWithTag("ResultUI") ?? GameObject.Find("ResultUI");
-    }
-
-    private void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
-    {
-        Debug.Log($"[GameManager] Scene loaded: {scene.name}");
-        FindUIReferences();
-        
-        // Re-apply current state UI
-        OnGameStateChanged();
-    }
-
-    private void OnEnable()
-    {
-        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
-    }
-
-    private void OnDisable()
-    {
-        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
     }
     public bool AreAllPlayersReady()
     {
@@ -110,23 +66,8 @@ public class GameManager : NetworkBehaviour
         if (players.Length == 0)
             return false;
 
-        // Need at least 2 players (host + 1 client)
-        if (players.Length < 2)
-            return false;
-
-        // Get host's local player ref
-        var hostPlayerRef = Runner != null ? Runner.LocalPlayer : default;
-
         foreach (var p in players)
         {
-            if (p.Object == null) continue;
-
-            // Skip host's own player - host doesn't need to ready up
-            // Check InputAuthority to identify which player belongs to the host
-            if (p.Object.InputAuthority == hostPlayerRef)
-                continue;
-
-            // All non-host players must be ready
             if (!p.IsReady)
                 return false;
         }
@@ -354,18 +295,12 @@ public class GameManager : NetworkBehaviour
 
     private void ResetAllPlayersReady()
     {
-        if (!HasStateAuthority) return;
-
         var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
         foreach (var player in players)
         {
-            // Host has StateAuthority over all NetworkObjects, so can directly modify
-            if (player != null)
-            {
-                player.IsReady = false;
-            }
+            // Note: This requires adding a ResetReady RPC to PlayerNetworkData
+            // Or handling via networked property changes
         }
-        Debug.Log($"[GameManager] Reset {players.Length} players ready state");
     }
 
     private void ChangeState(GameState newState)

@@ -1,6 +1,11 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+/// <summary>
+/// Defines the track using waypoints and calculates player distances.
+/// Attach to a GameObject containing the track waypoints as children.
+/// Supports: curved tracks, multi-lane, checkpoint validation, off-track detection.
+/// </summary>
 [DefaultExecutionOrder(-100)] // Run before other scripts
 public class TrackSystem : MonoBehaviour
 {
@@ -23,9 +28,17 @@ public class TrackSystem : MonoBehaviour
     [SerializeField] private Color checkpointColor = Color.cyan;
     [SerializeField] private Color trackBoundsColor = new Color(1f, 0.5f, 0f, 0.3f);
 
+    /// <summary>
+    /// Total length of the track in units.
+    /// </summary>
     public float TrackLength { get; private set; }
+
+    /// <summary>
+    /// Track width for lane calculations.
+    /// </summary>
     public float Width => trackWidth;
 
+    // Cached segment data
     private float[] _segmentLengths;
     private float[] _cumulativeDistances;
     private List<int> _checkpointIndices = new List<int>();
@@ -40,6 +53,9 @@ public class TrackSystem : MonoBehaviour
         GenerateCheckpoints();
     }
 
+    /// <summary>
+    /// Auto-populate waypoints from child transforms.
+    /// </summary>
     public void PopulateWaypointsFromChildren()
     {
         waypoints.Clear();
@@ -50,6 +66,9 @@ public class TrackSystem : MonoBehaviour
         Debug.Log($"[TrackSystem] Populated {waypoints.Count} waypoints from children.");
     }
 
+    /// <summary>
+    /// Calculate total track length and cache segment data.
+    /// </summary>
     public void CalculateTrackLength()
     {
         if (waypoints == null || waypoints.Count < 2)
@@ -78,6 +97,9 @@ public class TrackSystem : MonoBehaviour
         Debug.Log($"[TrackSystem] Track length calculated: {TrackLength:F2} units");
     }
 
+    /// <summary>
+    /// Generate checkpoint indices based on interval.
+    /// </summary>
     private void GenerateCheckpoints()
     {
         _checkpointIndices.Clear();
@@ -102,6 +124,10 @@ public class TrackSystem : MonoBehaviour
 
     #region Player Progress Tracking (Per-Player State)
 
+    /// <summary>
+    /// Tracks player's progress state for optimized calculations and anti-cheat.
+    /// Create one per player and pass to GetPlayerDistanceOptimized.
+    /// </summary>
     public class PlayerTrackState
     {
         public int LastSegment { get; set; } = 0;
@@ -122,6 +148,13 @@ public class TrackSystem : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Optimized distance calculation - only checks nearby segments.
+    /// Also validates checkpoints and off-track status.
+    /// </summary>
+    /// <param name="playerPosition">World position of player.</param>
+    /// <param name="state">Player's tracking state (persistent per player).</param>
+    /// <returns>Validated distance along track.</returns>
     public float GetPlayerDistanceOptimized(Vector3 playerPosition, PlayerTrackState state)
     {
         if (waypoints == null || waypoints.Count < 2)
@@ -199,6 +232,9 @@ public class TrackSystem : MonoBehaviour
         return validatedDistance;
     }
 
+    /// <summary>
+    /// Validates distance using checkpoint system to prevent shortcuts.
+    /// </summary>
     private float ValidateDistanceWithCheckpoints(float rawDistance, int currentSegment, PlayerTrackState state)
     {
         if (!useCheckpoints || _checkpointIndices.Count == 0)
@@ -247,12 +283,18 @@ public class TrackSystem : MonoBehaviour
         return Mathf.Clamp(rawDistance, 0f, TrackLength);
     }
 
+    /// <summary>
+    /// Get progress as percentage (0-1) with optimization.
+    /// </summary>
     public float GetPlayerProgressOptimized(Vector3 playerPosition, PlayerTrackState state)
     {
         if (TrackLength <= 0f) return 0f;
         return GetPlayerDistanceOptimized(playerPosition, state) / TrackLength;
     }
 
+    /// <summary>
+    /// Check if player is off-track (outside track boundaries).
+    /// </summary>
     public bool IsPlayerOffTrack(Vector3 playerPosition, PlayerTrackState state)
     {
         // Just update state and return
@@ -260,6 +302,9 @@ public class TrackSystem : MonoBehaviour
         return state.IsOffTrack;
     }
 
+    /// <summary>
+    /// Get how far off-track the player is.
+    /// </summary>
     public float GetOffTrackDistance(PlayerTrackState state)
     {
         return Mathf.Max(0f, state.OffTrackDistance - trackWidth);
@@ -269,6 +314,11 @@ public class TrackSystem : MonoBehaviour
 
     #region Original Methods (Backwards Compatible)
 
+    /// <summary>
+    /// Get the distance a player has traveled along the track.
+    /// Returns 0 to TrackLength.
+    /// NOTE: For better performance, use GetPlayerDistanceOptimized with PlayerTrackState.
+    /// </summary>
     public float GetPlayerDistance(Vector3 playerPosition)
     {
         if (waypoints == null || waypoints.Count < 2)
@@ -303,6 +353,9 @@ public class TrackSystem : MonoBehaviour
         return Mathf.Clamp(totalDistance, 0f, TrackLength);
     }
 
+    /// <summary>
+    /// Get progress as a percentage (0-1).
+    /// </summary>
     public float GetPlayerProgress(Vector3 playerPosition)
     {
         if (TrackLength <= 0f) return 0f;
@@ -313,6 +366,9 @@ public class TrackSystem : MonoBehaviour
 
     #region Utility Methods
 
+    /// <summary>
+    /// Get the closest point on a line segment.
+    /// </summary>
     private Vector3 GetClosestPointOnSegment(Vector3 point, Vector3 segmentStart, Vector3 segmentEnd, out float t)
     {
         Vector3 segment = segmentEnd - segmentStart;
@@ -327,6 +383,10 @@ public class TrackSystem : MonoBehaviour
         t = Mathf.Clamp01(Vector3.Dot(point - segmentStart, segment) / sqrLength);
         return segmentStart + t * segment;
     }
+
+    /// <summary>
+    /// Get position on track at given distance.
+    /// </summary>
     public Vector3 GetPositionAtDistance(float distance)
     {
         if (waypoints == null || waypoints.Count < 2 || TrackLength <= 0f)
@@ -348,6 +408,9 @@ public class TrackSystem : MonoBehaviour
         return waypoints[waypoints.Count - 1].position;
     }
 
+    /// <summary>
+    /// Get track direction at given distance.
+    /// </summary>
     public Vector3 GetDirectionAtDistance(float distance)
     {
         if (waypoints == null || waypoints.Count < 2 || TrackLength <= 0f)
@@ -368,6 +431,9 @@ public class TrackSystem : MonoBehaviour
         return (waypoints[lastIndex].position - waypoints[lastIndex - 1].position).normalized;
     }
 
+    /// <summary>
+    /// Get waypoint at index.
+    /// </summary>
     public Transform GetWaypoint(int index)
     {
         if (waypoints == null || index < 0 || index >= waypoints.Count)
@@ -375,9 +441,24 @@ public class TrackSystem : MonoBehaviour
         return waypoints[index];
     }
 
+    /// <summary>
+    /// Get checkpoint waypoint indices.
+    /// </summary>
     public IReadOnlyList<int> GetCheckpointIndices() => _checkpointIndices;
+
+    /// <summary>
+    /// Get total waypoint count.
+    /// </summary>
     public int WaypointCount => waypoints?.Count ?? 0;
+
+    /// <summary>
+    /// Get start position of track.
+    /// </summary>
     public Vector3 StartPosition => waypoints != null && waypoints.Count > 0 ? waypoints[0].position : Vector3.zero;
+
+    /// <summary>
+    /// Get end position of track.
+    /// </summary>
     public Vector3 EndPosition => waypoints != null && waypoints.Count > 0 ? waypoints[waypoints.Count - 1].position : Vector3.zero;
 
     #endregion
