@@ -1,28 +1,71 @@
-using System;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using System.Collections.Generic;
 
-public class MenuManager : MonoBehaviour
+public class UIManager : MonoBehaviour
 {
-    public void PlayOnline()
+    [Header("Các Canvas")]
+    public GameObject canvasMainMenu;
+    public GameObject canvasPlayOnline;
+    public GameObject canvasFindLobby;
+    public GameObject canvasCreateRoom;
+    public GameObject canvasItemUI;
+
+    [Header("Character Preview")]
+    public GameObject characterModelHolder;   // Kéo Capsule (hoặc Empty chứa Capsule) vào đây
+
+    private GameObject currentScreen;
+    private Stack<GameObject> screenHistory = new Stack<GameObject>();
+
+    void Start()
     {
-        SceneManager.LoadScene("PlayOnlineMenu");
+        // Ẩn hết
+        canvasPlayOnline.SetActive(false);
+        canvasFindLobby.SetActive(false);
+        canvasCreateRoom.SetActive(false);
+        canvasItemUI.SetActive(false);
+        characterModelHolder.SetActive(false);           // ← Capsule ẩn khi bắt đầu
+
+        currentScreen = canvasMainMenu;
+        canvasMainMenu.SetActive(true);
     }
 
-    public void BackToMenu()
+    public void ShowPlayOnline()   { PushAndHideCurrent(); currentScreen = canvasPlayOnline; currentScreen.SetActive(true); }
+    public void ShowFindLobby()    { PushAndHideCurrent(); currentScreen = canvasFindLobby;  currentScreen.SetActive(true); }
+    public void ShowCreateRoom()   { PushAndHideCurrent(); currentScreen = canvasCreateRoom; currentScreen.SetActive(true); }
+
+    public void ShowItemUI()
     {
-        SceneManager.LoadScene("UI menu");
+        PushAndHideCurrent();
+        currentScreen = canvasItemUI;
+        currentScreen.SetActive(true);
+        characterModelHolder.SetActive(true);           // ← Hiện Capsule khi mở ItemUI
     }
-    public void FindLobby()
+
+    public void GoBack()
     {
-        SceneManager.LoadScene("FindLobbyUI");
+        if (screenHistory.Count > 0)
+        {
+            currentScreen.SetActive(false);
+
+            // Nếu đang ở ItemUI thì ẩn Capsule luôn
+            if (currentScreen == canvasItemUI)
+                characterModelHolder.SetActive(false);
+
+            currentScreen = screenHistory.Pop();
+            currentScreen.SetActive(true);
+        }
     }
-    public void CreateLobby()
+
+    private void PushAndHideCurrent()
     {
-        SceneManager.LoadScene("CreateRoomUI");
-    }
-    public void ItemCustomization()
-    {
-        SceneManager.LoadScene("ItemUI");
+        if (currentScreen != null)
+        {
+            // Nếu đang ở ItemUI thì ẩn Capsule trước khi chuyển sang màn khác
+            if (currentScreen == canvasItemUI)
+                characterModelHolder.SetActive(false);
+
+            screenHistory.Push(currentScreen);
+            currentScreen.SetActive(false);
+        }
     }
 }
