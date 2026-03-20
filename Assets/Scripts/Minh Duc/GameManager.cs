@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class GameManager : MonoBehaviour
+public class GameManagerx : MonoBehaviour
 {
-    public static GameManager Instance;
+    public static GameManagerx Instance;
 
     public List<GameObject> allPlayers = new List<GameObject>();
     private List<GameObject> finishedPlayers = new List<GameObject>();

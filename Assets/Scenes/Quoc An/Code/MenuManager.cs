@@ -1,71 +1,161 @@
 using UnityEngine;
+using UnityEngine.UI;
 using System.Collections.Generic;
+using Fusion;
+using TMPro;
 
-public class UIManager : MonoBehaviour
+public class MenuManager : MonoBehaviour
 {
     [Header("Các Canvas")]
-    public GameObject canvasMainMenu;
-    public GameObject canvasPlayOnline;
-    public GameObject canvasFindLobby;
-    public GameObject canvasCreateRoom;
-    public GameObject canvasItemUI;
+    [SerializeField] private GameObject canvasMainMenu;
+    [SerializeField] private GameObject canvasPlayOnline;
+    [SerializeField] private GameObject canvasFindLobby;
+    [SerializeField] private GameObject canvasCreateRoom;
+    [SerializeField] private GameObject canvasItemUI;
 
-    [Header("Character Preview")]
-    public GameObject characterModelHolder;   // Kéo Capsule (hoặc Empty chứa Capsule) vào đây
+    [Header("Lobby References")]
+    [SerializeField] private LobbyRunner lobbyRunner;
+    [SerializeField] private TMP_InputField roomNameInput;
+    [SerializeField] private Transform roomListParent;
+    [SerializeField] private RoomItems roomListItemPrefab;
+    [SerializeField] private Button createRoomButton;
 
-    private GameObject currentScreen;
-    private Stack<GameObject> screenHistory = new Stack<GameObject>();
+    [Header("Customization")]
+    [SerializeField] private CustomizationManager customizationManager;
 
-    void Start()
+    private GameObject _currentScreen;
+    private readonly Stack<GameObject> _screenHistory = new();
+    private readonly List<RoomItems> _roomItems = new();
+
+    private void Start()
     {
-        // Ẩn hết
+        InitializeScreens();
+        SetupButtons();
+        SetupCustomization();
+    }
+
+    private void InitializeScreens()
+    {
         canvasPlayOnline.SetActive(false);
         canvasFindLobby.SetActive(false);
         canvasCreateRoom.SetActive(false);
         canvasItemUI.SetActive(false);
-        characterModelHolder.SetActive(false);           // ← Capsule ẩn khi bắt đầu
 
-        currentScreen = canvasMainMenu;
+        _currentScreen = canvasMainMenu;
         canvasMainMenu.SetActive(true);
     }
 
-    public void ShowPlayOnline()   { PushAndHideCurrent(); currentScreen = canvasPlayOnline; currentScreen.SetActive(true); }
-    public void ShowFindLobby()    { PushAndHideCurrent(); currentScreen = canvasFindLobby;  currentScreen.SetActive(true); }
-    public void ShowCreateRoom()   { PushAndHideCurrent(); currentScreen = canvasCreateRoom; currentScreen.SetActive(true); }
+    private void SetupButtons()
+    {
+        if (createRoomButton != null)
+            createRoomButton.onClick.AddListener(CreateRoom);
+    }
+
+    private void SetupCustomization()
+    {
+        if (customizationManager != null)
+        {
+            customizationManager.OnBackToMenu += OnBackFromCustomization;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (customizationManager != null)
+        {
+            customizationManager.OnBackToMenu -= OnBackFromCustomization;
+        }
+    }
+
+    #region Screen Navigation
+    public void ShowPlayOnline() => SwitchScreen(canvasPlayOnline);
+    public void ShowFindLobby() => SwitchScreen(canvasFindLobby);
+    public void ShowCreateRoom() => SwitchScreen(canvasCreateRoom);
 
     public void ShowItemUI()
     {
-        PushAndHideCurrent();
-        currentScreen = canvasItemUI;
-        currentScreen.SetActive(true);
-        characterModelHolder.SetActive(true);           // ← Hiện Capsule khi mở ItemUI
+        SwitchScreen(canvasItemUI);
+        
+        // Kích hoạt CustomizationManager để chuyển camera
+        if (customizationManager != null)
+        {
+            customizationManager.Activate();
+        }
+    }
+
+    private void OnBackFromCustomization()
+    {
+        // Tắt canvas ItemUI và quay lại màn hình trước
+        GoBack();
     }
 
     public void GoBack()
     {
-        if (screenHistory.Count > 0)
+        if (_screenHistory.Count == 0) return;
+
+        // Nếu đang ở ItemUI, deactivate CustomizationManager
+        if (_currentScreen == canvasItemUI && customizationManager != null)
         {
-            currentScreen.SetActive(false);
-
-            // Nếu đang ở ItemUI thì ẩn Capsule luôn
-            if (currentScreen == canvasItemUI)
-                characterModelHolder.SetActive(false);
-
-            currentScreen = screenHistory.Pop();
-            currentScreen.SetActive(true);
+            customizationManager.Deactivate();
         }
+
+        _currentScreen.SetActive(false);
+        _currentScreen = _screenHistory.Pop();
+        _currentScreen.SetActive(true);
     }
 
-    private void PushAndHideCurrent()
+    private void SwitchScreen(GameObject targetScreen)
     {
-        if (currentScreen != null)
+        if (_currentScreen != null)
         {
-            // Nếu đang ở ItemUI thì ẩn Capsule trước khi chuyển sang màn khác
-            if (currentScreen == canvasItemUI)
-                characterModelHolder.SetActive(false);
+            _screenHistory.Push(_currentScreen);
+            _currentScreen.SetActive(false);
+        }
+        _currentScreen = targetScreen;
+        _currentScreen.SetActive(true);
+    }
+    #endregion
 
-            screenHistory.Push(currentScreen);
-            currentScreen.SetActive(false);
+    #region Lobby Functions
+    public void UpdateRoomList(List<SessionInfo> sessions)
+    {
+        ClearRoomItems();
+
+        foreach (var session in sessions)
+        {
+            var newItem = Instantiate(roomListItemPrefab, roomListParent);
+            newItem.SetUp(session, lobbyRunner);
+            newItem.gameObject.SetActive(true);
+            _roomItems.Add(newItem);
         }
     }
+
+    private void ClearRoomItems()
+    {
+        foreach (var item in _roomItems)
+        {
+            if (item != null)
+                Destroy(item.gameObject);
+        }
+        _roomItems.Clear();
+    }
+
+    private void CreateRoom()
+    {
+        if (lobbyRunner == null)
+        {
+            Debug.LogError("[MenuManager] LobbyRunner chưa được gán.");
+            return;
+        }
+
+        var roomName = roomNameInput?.text;
+        if (string.IsNullOrWhiteSpace(roomName))
+        {
+            Debug.LogWarning("[MenuManager] Tên phòng không được để trống.");
+            return;
+        }
+
+        lobbyRunner.CreateSession(roomName);
+    }
+    #endregion
 }

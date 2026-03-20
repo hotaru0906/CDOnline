@@ -27,6 +27,11 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private GameObject resultUI;
     #endregion
 
+    #region Minigame Data
+    [Header("Minigames")]
+    [SerializeField] private MinigameData[] availableMinigames;
+    #endregion
+
     #region Networked Properties
     [Networked, OnChangedRender(nameof(OnGameStateChanged))]
     public GameState CurrentState { get; private set; } = GameState.Lobby;
@@ -140,13 +145,16 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        Debug.Log($"[GameManager] Starting minigame #{minigameIndex}...");
+        if (availableMinigames == null || minigameIndex < 0 || minigameIndex >= availableMinigames.Length)
+        {
+            Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}");
+            return;
+        }
+
+        Debug.Log($"[GameManager] Starting minigame #{minigameIndex}: {availableMinigames[minigameIndex].minigameName}");
         CurrentMinigameIndex = minigameIndex;
         CurrentRound++;
 
-        // TODO: Load minigame scene or activate minigame
-        // For now, go directly to Playing state
-        // You may want to show Tutorial first
         ChangeState(GameState.Playing);
     }
     public void EndMinigame()
@@ -257,11 +265,70 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[GameManager] Entered Playing state");
 
+        // Ẩn tất cả UI
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, false);
+
         if (!HasStateAuthority) return;
 
-        Debug.Log("[GameManager] Loading Minigame Scene...");
+        // Lấy MinigameData
+        if (availableMinigames == null || CurrentMinigameIndex < 0 || CurrentMinigameIndex >= availableMinigames.Length)
+        {
+            Debug.LogError("[GameManager] No valid minigame data!");
+            return;
+        }
 
-        Runner.LoadScene(SceneRef.FromIndex(1));
+        var minigameData = availableMinigames[CurrentMinigameIndex];
+        Debug.Log($"[GameManager] Loading minigame scene: {minigameData.sceneName}");
+
+        // Notify về camera mode trước khi load scene
+        RPC_SetupMinigameCamera(minigameData.useSharedCamera);
+
+        // Load scene - Fusion sẽ tự động sync tất cả clients
+        var sceneRef = SceneRef.FromIndex(GetSceneIndex(minigameData.sceneName));
+        if (sceneRef.IsValid)
+        {
+            Runner.LoadScene(sceneRef);
+        }
+        else
+        {
+            Debug.LogError($"[GameManager] Invalid scene: {minigameData.sceneName}");
+        }
+    }
+
+    /// <summary>
+    /// Lấy scene index từ tên scene (cần setup trong Build Settings)
+    /// </summary>
+    private int GetSceneIndex(string sceneName)
+    {
+        for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCountInBuildSettings; i++)
+        {
+            string path = UnityEngine.SceneManagement.SceneUtility.GetScenePathByBuildIndex(i);
+            string name = System.IO.Path.GetFileNameWithoutExtension(path);
+            if (name == sceneName)
+            {
+                return i;
+            }
+        }
+        Debug.LogWarning($"[GameManager] Scene '{sceneName}' not found in Build Settings!");
+        return 1; // Fallback to index 1
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SetupMinigameCamera(bool useSharedCamera)
+    {
+        // Minigame scene sẽ tự setup shared camera nếu cần
+        // Thông báo cho CameraManager về mode
+        Debug.Log($"[GameManager] Minigame camera mode: {(useSharedCamera ? "Shared" : "Player")}");
+        
+        if (!useSharedCamera && CameraManager.Instance != null)
+        {
+            // Nếu không dùng shared camera, đảm bảo player camera active
+            CameraManager.Instance.SwitchToPlayerCamera();
+        }
+        // Nếu dùng shared camera, MinigameCamera component trong scene sẽ xử lý
     }
     protected virtual void HandleScoreboardState()
     {

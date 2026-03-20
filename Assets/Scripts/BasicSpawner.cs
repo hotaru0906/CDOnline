@@ -16,7 +16,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     [SerializeField] private NetworkPrefabRef gameManagerPrefab;
 
     private NetworkRunner _runner;
-    [SerializeField] private LobbyUI lobbyUI;
+    [SerializeField] private MenuManager menuManager;
     private PlayerInputHandler _inputHandler;
     private Dictionary<PlayerRef, NetworkObject> _spawnedPlayers = new Dictionary<PlayerRef, NetworkObject>();
     private NetworkObject _gameManagerInstance;
@@ -260,7 +260,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
     public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList)
     {
-        var ui = ResolveLobbyUI();
+        var ui = ResolveMenuManager();
         if (ui != null)
         {
             ui.UpdateRoomList(sessionList);
@@ -271,7 +271,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     public void OnSceneLoadDone(NetworkRunner runner)
     {
         Debug.Log($"[BasicSpawner] Scene load done");
-        ResolveLobbyUI();
+        ResolveMenuManager();
         if (runner.IsServer)
         {
             // Spawn GameManager if not exists
@@ -409,18 +409,18 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
-    private LobbyUI ResolveLobbyUI()
+    private MenuManager ResolveMenuManager()
     {
-        if (lobbyUI == null)
+        if (menuManager == null)
         {
-            lobbyUI = FindAnyObjectByType<LobbyUI>();
+            menuManager = FindAnyObjectByType<MenuManager>();
         }
 
-        return lobbyUI;
+        return menuManager;
     }
 
     private void HandleUnitySceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        lobbyUI = FindAnyObjectByType<LobbyUI>();
+        menuManager = FindAnyObjectByType<MenuManager>();
     }
 }

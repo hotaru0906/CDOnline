@@ -27,6 +27,8 @@ public class VotingManager : NetworkBehaviour
 
     #region Settings
     [SerializeField] private float votingDuration = 10f;
+    [SerializeField] private float quickEndTime = 3f; // Thời gian còn lại khi tất cả đã vote
+    [SerializeField] private bool instantEndWhenAllVoted = false; // End ngay khi tất cả vote
     #endregion
 
     #region Events
@@ -34,11 +36,20 @@ public class VotingManager : NetworkBehaviour
     public event Action OnVotingEnded;
     public event Action<float> OnTimerUpdated;
     public event Action<int, int> OnVoteCountChanged; // (minigameIndex, newCount)
+    public event Action OnAllPlayersVoted; // Khi tất cả đã vote
     #endregion
 
     #region Local State
     private bool hasVoted = false;
     private int localVoteIndex = -1;
+    #endregion
+
+    #region Networked Vote Tracking
+    [Networked]
+    private int TotalVotes { get; set; }
+    
+    [Networked]
+    private int TotalPlayers { get; set; }
     #endregion
 
     private void Awake()
@@ -87,9 +98,16 @@ public class VotingManager : NetworkBehaviour
             VoteCounts.Set(i, 0);
         }
 
+        // Đếm số player hiện tại
+        var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+        TotalPlayers = players.Length;
+        TotalVotes = 0;
+
         WinnerIndex = -1;
         RemainingTime = votingDuration;
         IsVotingActive = true;
+
+        Debug.Log($"[VotingManager] Total players: {TotalPlayers}");
 
         // Notify all clients via RPC
         RPC_OnVotingStarted();
@@ -158,11 +176,41 @@ public class VotingManager : NetworkBehaviour
 
         int currentCount = VoteCounts.Get(minigameIndex);
         VoteCounts.Set(minigameIndex, currentCount + 1);
+        TotalVotes++;
 
-        Debug.Log($"[VotingManager] Vote received for #{minigameIndex}. New count: {currentCount + 1}");
+        Debug.Log($"[VotingManager] Vote received for #{minigameIndex}. New count: {currentCount + 1}. Total votes: {TotalVotes}/{TotalPlayers}");
 
         // Notify all clients about the vote update
         RPC_BroadcastVoteUpdate(minigameIndex, currentCount + 1);
+
+        // Check if all players voted
+        if (TotalVotes >= TotalPlayers)
+        {
+            Debug.Log("[VotingManager] All players have voted!");
+            RPC_NotifyAllVoted();
+            
+            if (instantEndWhenAllVoted)
+            {
+                // End voting ngay lập tức
+                EndVoting();
+            }
+            else
+            {
+                // Giảm thời gian còn lại xuống quickEndTime
+                if (RemainingTime > quickEndTime)
+                {
+                    RemainingTime = quickEndTime;
+                    Debug.Log($"[VotingManager] Reducing remaining time to {quickEndTime}s");
+                }
+            }
+        }
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_NotifyAllVoted()
+    {
+        OnAllPlayersVoted?.Invoke();
+        Debug.Log("[VotingManager] All players have voted - notified");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]

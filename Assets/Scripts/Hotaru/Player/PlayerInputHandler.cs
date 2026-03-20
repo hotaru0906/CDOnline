@@ -35,9 +35,10 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
+        // Dùng GetAxis để có smooth movement giống PlayerMovement1
         _moveInput = new Vector2(
-            Input.GetAxisRaw("Horizontal"),
-            Input.GetAxisRaw("Vertical")
+            Input.GetAxis("Horizontal"),
+            Input.GetAxis("Vertical")
         );
 
         if (_moveInput.sqrMagnitude > 1f)
@@ -46,14 +47,15 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         // Accumulate button presses until OnInput consumes them
-        // Using GetButtonDown ensures edge detection - only set on the frame pressed
+        // Jump và Attack dùng GetButtonDown (edge detection - chỉ frame nhấn)
         if (Input.GetButtonDown("Jump"))
             _buttons.Set(PlayerInputData.BUTTON_JUMP, true);
 
         if (Input.GetButtonDown("Fire1"))
             _buttons.Set(PlayerInputData.BUTTON_PUNCH, true);
 
-        if (Input.GetButtonDown("Fire2"))
+        // Run dùng GetKey (giữ Left Shift để chạy)
+        if (Input.GetKey(KeyCode.LeftShift))
             _buttons.Set(PlayerInputData.BUTTON_SLIDE, true);
     }
 

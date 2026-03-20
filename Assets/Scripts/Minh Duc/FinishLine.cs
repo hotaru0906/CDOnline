@@ -6,7 +6,7 @@ public class FinishLine : MonoBehaviour
     {
         if (other.CompareTag("Player"))
         {
-            GameManager.Instance.PlayerFinished(other.gameObject);
+            GameManagerx.Instance.PlayerFinished(other.gameObject);
         }
     }
 }
