@@ -20,7 +20,7 @@ public class GameManager : NetworkBehaviour
     public bool IsHost => HasStateAuthority;
 
     #region UI References
-    [Header("UI Panels")]
+    [Header("UI Panels (Auto-found via UIPanel component)")]
     [SerializeField] private GameObject lobbyUI;
     [SerializeField] private GameObject votingUI;
     [SerializeField] private GameObject scoreboardUI;
@@ -41,6 +41,8 @@ public class GameManager : NetworkBehaviour
 
     [Networked]
     public int TotalRounds { get; private set; } = 3;
+    
+    [Networked]
     public int CurrentMinigameIndex { get; private set; } = -1;
     #endregion
 
@@ -57,27 +59,107 @@ public class GameManager : NetworkBehaviour
             return;
         }
         Instance = this;
+        DontDestroyOnLoad(gameObject);
     }
 
     public override void Spawned()
     {
         // Called when NetworkObject is spawned
         Debug.Log($"[GameManager] Spawned. IsHost: {HasStateAuthority}");
+
+        // Tìm UI references bằng tag
+        FindUIReferences();
+        InitializeUIState();
+    }
+
+    /// <summary>
+    /// Tìm UI references - dùng FindObjectsByType với Include Inactive để tìm cả inactive objects
+    /// </summary>
+    public void FindUIReferences()
+    {
+        // Tìm tất cả UIPanel kể cả inactive
+        var panels = FindObjectsByType<UIPanel>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        
+        foreach (var panel in panels)
+        {
+            RegisterUIPanel(panel);
+        }
+
+        Debug.Log($"[GameManager] FindUIReferences - Lobby:{lobbyUI != null}, Voting:{votingUI != null}, Scoreboard:{scoreboardUI != null}, Result:{resultUI != null}");
+    }
+    
+    /// <summary>
+    /// Đăng ký UI Panel - được gọi bởi UIPanel component
+    /// </summary>
+    public void RegisterUIPanel(UIPanel panel)
+    {
+        if (panel == null) return;
+        
+        switch (panel.PanelType)
+        {
+            case UIPanelType.Lobby:
+                lobbyUI = panel.gameObject;
+                break;
+            case UIPanelType.Voting:
+                votingUI = panel.gameObject;
+                break;
+            case UIPanelType.Scoreboard:
+                scoreboardUI = panel.gameObject;
+                break;
+            case UIPanelType.Result:
+                resultUI = panel.gameObject;
+                break;
+        }
+    }
+    private void InitializeUIState()
+    {
+        // Đảm bảo luôn tìm lại UI trước khi set
+        FindUIReferences();
+
+        // Ẩn tất cả trước
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, false);
+
+        // Chỉ bật Lobby
+        SetActiveUI(lobbyUI, true);
+
+        Debug.Log("[GameManager] Initialize UI: Only LobbyUI is active");
     }
     public bool AreAllPlayersReady()
     {
         var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
 
+        // Không có player nào
         if (players.Length == 0)
             return false;
 
+        // Cần tối thiểu 2 players để start (không cho phép solo)
+        if (players.Length < 2)
+            return false;
+
+        int readyCount = 0;
+        int clientCount = 0;
+
+        // Check tất cả players NGOẠI TRỪ HOST
+        // Dùng InputAuthority thay vì HasStateAuthority (vì Host là StateAuthority của mọi thứ trong Hosted mode)
         foreach (var p in players)
         {
-            if (!p.IsReady)
-                return false;
+            // Bỏ qua host (host không cần ready vì host là người start game)
+            // Host's InputAuthority = Runner.LocalPlayer (trên máy host)
+            if (p.Object.InputAuthority == Runner.LocalPlayer)
+                continue;
+
+            clientCount++;
+
+            // Client đã ready
+            if (p.IsReady)
+                readyCount++;
         }
 
-        return true;
+        bool allReady = clientCount > 0 && readyCount == clientCount;
+        return allReady;
     }
     #endregion
 
@@ -85,6 +167,9 @@ public class GameManager : NetworkBehaviour
     private void OnGameStateChanged()
     {
         Debug.Log($"[GameManager] State changed to: {CurrentState}");
+
+        // Tìm lại UI references (vì có thể scene đã thay đổi)
+        FindUIReferences();
 
         // Handle state-specific logic for all clients
         switch (CurrentState)
@@ -139,15 +224,23 @@ public class GameManager : NetworkBehaviour
 
     public void StartMinigame(int minigameIndex)
     {
+        Debug.Log($"[GameManager] StartMinigame called with index: {minigameIndex}, HasStateAuthority: {HasStateAuthority}");
+        
         if (!HasStateAuthority)
         {
             Debug.LogWarning("[GameManager] Only Host can call StartMinigame()");
             return;
         }
 
-        if (availableMinigames == null || minigameIndex < 0 || minigameIndex >= availableMinigames.Length)
+        if (availableMinigames == null)
         {
-            Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}");
+            Debug.LogError("[GameManager] availableMinigames is NULL!");
+            return;
+        }
+        
+        if (minigameIndex < 0 || minigameIndex >= availableMinigames.Length)
+        {
+            Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}, availableMinigames.Length: {availableMinigames.Length}");
             return;
         }
 
@@ -155,6 +248,7 @@ public class GameManager : NetworkBehaviour
         CurrentMinigameIndex = minigameIndex;
         CurrentRound++;
 
+        Debug.Log("[GameManager] Calling ChangeState(Playing)");
         ChangeState(GameState.Playing);
     }
     public void EndMinigame()
@@ -247,11 +341,28 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(votingUI, true);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        
+        // Ẩn player input trong voting phase
+        if (PlayerInputHandler.Instance != null)
+        {
+            PlayerInputHandler.Instance.InputEnabled = false;
+        }
+        
+        // Hiện cursor để vote
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.ShowCursor();
+        }
 
         // Start voting (host only)
         if (HasStateAuthority && VotingManager.Instance != null)
         {
+            Debug.Log("[GameManager] Host starting VotingManager.StartVoting()");
             VotingManager.Instance.StartVoting();
+        }
+        else if (VotingManager.Instance == null)
+        {
+            Debug.LogError("[GameManager] VotingManager.Instance is NULL!");
         }
     }
 
@@ -270,10 +381,28 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(votingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        
+        // Bật lại player input
+        if (PlayerInputHandler.Instance != null)
+        {
+            PlayerInputHandler.Instance.InputEnabled = true;
+        }
+        
+        // Ẩn cursor khi chơi
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.HideCursor();
+        }
 
-        if (!HasStateAuthority) return;
+        if (!HasStateAuthority)
+        {
+            Debug.Log("[GameManager] Not host, skipping scene load");
+            return;
+        }
 
         // Lấy MinigameData
+        Debug.Log($"[GameManager] availableMinigames: {(availableMinigames != null ? availableMinigames.Length.ToString() : "NULL")}, CurrentMinigameIndex: {CurrentMinigameIndex}");
+        
         if (availableMinigames == null || CurrentMinigameIndex < 0 || CurrentMinigameIndex >= availableMinigames.Length)
         {
             Debug.LogError("[GameManager] No valid minigame data!");
@@ -287,9 +416,13 @@ public class GameManager : NetworkBehaviour
         RPC_SetupMinigameCamera(minigameData.useSharedCamera);
 
         // Load scene - Fusion sẽ tự động sync tất cả clients
-        var sceneRef = SceneRef.FromIndex(GetSceneIndex(minigameData.sceneName));
+        int sceneIndex = GetSceneIndex(minigameData.sceneName);
+        Debug.Log($"[GameManager] Scene index for '{minigameData.sceneName}': {sceneIndex}");
+        
+        var sceneRef = SceneRef.FromIndex(sceneIndex);
         if (sceneRef.IsValid)
         {
+            Debug.Log($"[GameManager] Loading scene via Runner.LoadScene...");
             Runner.LoadScene(sceneRef);
         }
         else
@@ -322,7 +455,7 @@ public class GameManager : NetworkBehaviour
         // Minigame scene sẽ tự setup shared camera nếu cần
         // Thông báo cho CameraManager về mode
         Debug.Log($"[GameManager] Minigame camera mode: {(useSharedCamera ? "Shared" : "Player")}");
-        
+
         if (!useSharedCamera && CameraManager.Instance != null)
         {
             // Nếu không dùng shared camera, đảm bảo player camera active
@@ -357,6 +490,11 @@ public class GameManager : NetworkBehaviour
         if (uiObject != null)
         {
             uiObject.SetActive(active);
+            Debug.Log($"[GameManager] SetActiveUI: {uiObject.name} = {active}");
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] SetActiveUI: uiObject is NULL!");
         }
     }
 
@@ -372,7 +510,13 @@ public class GameManager : NetworkBehaviour
 
     private void ChangeState(GameState newState)
     {
-        if (!HasStateAuthority) return;
+        Debug.Log($"[GameManager] ChangeState called: {newState}, HasStateAuthority: {HasStateAuthority}");
+        
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[GameManager] ChangeState rejected - not host");
+            return;
+        }
 
         var oldState = CurrentState;
         CurrentState = newState;

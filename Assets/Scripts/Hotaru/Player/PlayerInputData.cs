@@ -4,6 +4,7 @@ using UnityEngine;
 public struct PlayerInputData : INetworkInput
 {
     public Vector2 MoveDirection;
+    public Vector3 CameraForward; // Hướng camera để tính movement trên server
 
     public NetworkButtons Buttons;
 

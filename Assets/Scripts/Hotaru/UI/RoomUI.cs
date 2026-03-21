@@ -74,8 +74,8 @@ public class RoomUI : MonoBehaviour
 
         if (GameManager.Instance.IsHost)
         {
-            startGameButton.interactable =
-                GameManager.Instance.AreAllPlayersReady();
+            bool canStart = GameManager.Instance.AreAllPlayersReady();
+            startGameButton.interactable = canStart;
         }
     }
 

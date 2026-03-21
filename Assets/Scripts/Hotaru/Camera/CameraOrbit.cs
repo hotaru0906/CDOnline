@@ -27,8 +27,8 @@ public class CameraOrbit : MonoBehaviour
     public float rotationSmoothTime = 0.05f;
 
     [Header("Cursor Settings")]
-    [Tooltip("false = luôn xoay camera, true = giữ chuột phải để xoay")]
-    public bool holdRightClickToRotate = false;
+    public bool lockCursorOnStart = true;
+    public bool holdRightClickToRotate = false; // false = luôn xoay camera khi di chuột
 
     private float _yaw;
     private float _pitch;
@@ -42,7 +42,11 @@ public class CameraOrbit : MonoBehaviour
     {
         _targetDistance = distance;
         
-        // Không tự lock cursor - để CursorManager quản lý
+        if (lockCursorOnStart && !holdRightClickToRotate)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
 
         // Initialize rotation from current camera position
         if (target != null)
@@ -55,13 +59,10 @@ public class CameraOrbit : MonoBehaviour
 
     private void Update()
     {
-        // Toggle cursor lock with Escape - dùng CursorManager
+        // Toggle cursor lock with Escape
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            if (CursorManager.Instance != null)
-            {
-                CursorManager.Instance.ToggleCursor();
-            }
+            ToggleCursor();
         }
 
         // Scroll to zoom
@@ -114,6 +115,26 @@ public class CameraOrbit : MonoBehaviour
     public void SetTarget(Transform newTarget)
     {
         target = newTarget;
+    }
+
+    public void ToggleCursor()
+    {
+        if (Cursor.lockState == CursorLockMode.Locked)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+        else
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+    }
+
+    public void LockCursor(bool locked)
+    {
+        Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !locked;
     }
 
     /// <summary>

@@ -25,6 +25,7 @@ public class PlayerController : NetworkBehaviour
     [Networked] public PlayerState CurrentState { get; private set; }
     [Networked] private float AttackTimer { get; set; }
     [Networked] private NetworkBool IsRunning { get; set; }
+    [Networked] private NetworkBool IsMoving { get; set; } // Có input di chuyển không
 
     public Vector3 Velocity => _networkCC != null ? _networkCC.Velocity : Vector3.zero;
 
@@ -115,19 +116,28 @@ public class PlayerController : NetworkBehaviour
 
     private void Move(PlayerInputData input)
     {
-        Vector3 moveDirection = CalculateMoveDirection(input.MoveDirection);
+        // Không di chuyển khi bị frozen
+        if (_isFrozen)
+        {
+            _networkCC.Move(Vector3.zero);
+            IsMoving = false;
+            return;
+        }
+
+        // Dùng camera direction từ input (đã được client gửi lên)
+        Vector3 moveDirection = CalculateMoveDirection(input.MoveDirection, input.CameraForward);
+        
+        // Check có input di chuyển không
+        IsMoving = moveDirection.magnitude > 0.01f;
         
         // Check running (giữ Shift)
         IsRunning = input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
         
-        // Instant speed - không có acceleration/deceleration
-        float speed = moveDirection.magnitude > 0.01f 
-            ? (IsRunning ? runSpeed : walkSpeed) 
-            : 0f;
+        // Tốc độ: chạy nếu đang giữ Shift VÀ đang di chuyển
+        float speed = IsMoving ? (IsRunning ? runSpeed : walkSpeed) : 0f;
 
-        // Apply movement - dừng ngay khi không có input
-        Vector3 finalMove = moveDirection.normalized * speed;
-        _networkCC.Move(finalMove);
+        // Apply movement
+        _networkCC.Move(moveDirection.normalized * speed);
 
         _targetMoveDirection = moveDirection;
     }
@@ -161,35 +171,21 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    private Vector3 CalculateMoveDirection(Vector2 input)
+    private Vector3 CalculateMoveDirection(Vector2 input, Vector3 cameraForward)
     {
         if (input.sqrMagnitude < 0.01f)
             return Vector3.zero;
 
-        Vector3 forward;
-        Vector3 right;
-
-        // Ưu tiên dùng CameraOrbit để lấy hướng chính xác (style Genshin)
-        if (_cameraOrbit != null)
-        {
-            forward = _cameraOrbit.GetForwardDirection();
-            right = _cameraOrbit.GetRightDirection();
-        }
-        else if (_cameraTransform != null)
-        {
-            forward = _cameraTransform.forward;
-            right = _cameraTransform.right;
-
-            forward.y = 0f;
-            right.y = 0f;
-            forward.Normalize();
-            right.Normalize();
-        }
-        else
-        {
+        // Dùng camera forward từ input data (được client gửi lên)
+        Vector3 forward = cameraForward;
+        if (forward.sqrMagnitude < 0.01f)
             forward = Vector3.forward;
-            right = Vector3.right;
-        }
+        
+        forward.y = 0f;
+        forward.Normalize();
+        
+        // Tính right từ forward
+        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
 
         Vector3 moveDir = (forward * input.y + right * input.x);
         return moveDir.normalized;
@@ -203,13 +199,12 @@ public class PlayerController : NetworkBehaviour
 
         bool isGrounded = _networkCC.Grounded;
         Vector3 velocity = _networkCC.Velocity;
-        float horizontalSpeed = new Vector3(velocity.x, 0, velocity.z).magnitude;
 
         if (!isGrounded)
         {
-            CurrentState = velocity.y > 0 ? PlayerState.Jumping : PlayerState.Falling;
+            CurrentState = velocity.y > 0.2 ? PlayerState.Jumping : PlayerState.Falling;
         }
-        else if (horizontalSpeed > 0.1f)
+        else if (IsMoving) // Dựa vào input, không dựa vào velocity
         {
             CurrentState = IsRunning ? PlayerState.Running : PlayerState.Walking;
         }
@@ -262,6 +257,35 @@ public class PlayerController : NetworkBehaviour
         if (_networkCC != null)
         {
             _networkCC.enabled = enabled;
+        }
+    }
+
+    /// <summary>
+    /// Freeze/Unfreeze player - dùng cho minigame countdown/win
+    /// </summary>
+    private bool _isFrozen;
+    public bool IsFrozen => _isFrozen;
+
+    public void SetFrozen(bool frozen)
+    {
+        _isFrozen = frozen;
+        Debug.Log($"[PlayerController] Player {Object.InputAuthority} frozen: {frozen}");
+        
+        if (frozen)
+        {
+            // Reset velocity khi freeze
+            ResetVelocity();
+        }
+    }
+
+    /// <summary>
+    /// Reset velocity - dùng khi respawn
+    /// </summary>
+    public void ResetVelocity()
+    {
+        if (_networkCC != null)
+        {
+            _networkCC.Move(Vector3.zero);
         }
     }
 

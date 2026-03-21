@@ -111,6 +111,7 @@ public class PlayerNetworkData : NetworkBehaviour
     private void RPC_SetReady(bool value)
     {
         IsReady = value;
+        Debug.Log($"[PlayerNetworkData] Player {Object.InputAuthority.PlayerId} IsReady = {value}");
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]

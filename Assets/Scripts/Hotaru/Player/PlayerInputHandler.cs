@@ -10,6 +10,7 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
 
     private Vector2 _moveInput;
     private NetworkButtons _buttons;
+    private bool _isRunning; // Trạng thái giữ Shift
 
     // Flag to disable input when UI is active (e.g., typing in text field)
     public bool InputEnabled { get; set; } = true;
@@ -35,7 +36,7 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        // Dùng GetAxis để có smooth movement giống PlayerMovement1
+                // Dùng GetAxis để có smooth movement
         _moveInput = new Vector2(
             Input.GetAxis("Horizontal"),
             Input.GetAxis("Vertical")
@@ -46,17 +47,15 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
             _moveInput.Normalize();
         }
 
-        // Accumulate button presses until OnInput consumes them
-        // Jump và Attack dùng GetButtonDown (edge detection - chỉ frame nhấn)
+        // Jump và Attack dùng GetButtonDown (chỉ trigger 1 lần)
         if (Input.GetButtonDown("Jump"))
             _buttons.Set(PlayerInputData.BUTTON_JUMP, true);
 
         if (Input.GetButtonDown("Fire1"))
             _buttons.Set(PlayerInputData.BUTTON_PUNCH, true);
 
-        // Run dùng GetKey (giữ Left Shift để chạy)
-        if (Input.GetKey(KeyCode.LeftShift))
-            _buttons.Set(PlayerInputData.BUTTON_SLIDE, true);
+        // Run dùng GetKey (giữ Left Shift) - lưu riêng
+        _isRunning = Input.GetKey(KeyCode.LeftShift);
     }
 
     public void OnInput(NetworkRunner runner, NetworkInput input)
@@ -66,10 +65,25 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
         // - Using PlayerRef parameter to identify which player needs input
         // - Or having separate input handlers per local player
 
+                // Set running button từ trạng thái hiện tại (không bị ảnh hưởng bởi reset)
+        NetworkButtons finalButtons = _buttons;
+        if (_isRunning)
+            finalButtons.Set(PlayerInputData.BUTTON_SLIDE, true);
+
+        // Lấy camera forward direction để gửi lên server
+        Vector3 cameraForward = Vector3.forward;
+        if (Camera.main != null)
+        {
+            cameraForward = Camera.main.transform.forward;
+            cameraForward.y = 0f;
+            cameraForward.Normalize();
+        }
+
         var playerInput = new PlayerInputData
         {
             MoveDirection = InputEnabled ? _moveInput : Vector2.zero,
-            Buttons = InputEnabled ? _buttons : default
+            CameraForward = cameraForward,
+            Buttons = InputEnabled ? finalButtons : default
         };
 
         input.Set(playerInput);

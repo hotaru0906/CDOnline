@@ -131,7 +131,12 @@ public class VotingManager : NetworkBehaviour
         // Start the winning minigame
         if (GameManager.Instance != null)
         {
+            Debug.Log($"[VotingManager] Calling GameManager.StartMinigame({WinnerIndex})");
             GameManager.Instance.StartMinigame(WinnerIndex);
+        }
+        else
+        {
+            Debug.LogError("[VotingManager] GameManager.Instance is NULL!");
         }
     }
     #endregion

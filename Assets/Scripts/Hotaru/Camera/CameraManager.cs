@@ -111,12 +111,7 @@ public class CameraManager : MonoBehaviour
         if (cameraOrbit != null)
         {
             cameraOrbit.enabled = false;
-        }
-
-        // Show cursor - dùng CursorManager
-        if (CursorManager.Instance != null)
-        {
-            CursorManager.Instance.SetUIMode();
+            cameraOrbit.LockCursor(false); // Unlock cursor trong lobby
         }
 
         // Di chuyển camera đến vị trí cố định
@@ -142,12 +137,7 @@ public class CameraManager : MonoBehaviour
         {
             cameraOrbit.enabled = true;
             cameraOrbit.SetTarget(_localPlayerTransform);
-        }
-
-        // Lock cursor - dùng CursorManager
-        if (CursorManager.Instance != null)
-        {
-            CursorManager.Instance.SetGameplayMode();
+            cameraOrbit.LockCursor(true); // Lock cursor khi chơi
         }
 
         Debug.Log("[CameraManager] Switched to Player Camera (CameraOrbit)");

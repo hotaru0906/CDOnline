@@ -10433,6 +10433,7 @@ GameObject:
   - component: {fileID: 4353618528106842259}
   - component: {fileID: -4535117371777528117}
   - component: {fileID: 3453486247042909374}
+  - component: {fileID: 5650056082442984469}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -10482,6 +10483,7 @@ MonoBehaviour:
   - {fileID: 4353618528106842259}
   - {fileID: -4535117371777528117}
   - {fileID: 3453486247042909374}
+  - {fileID: 5650056082442984469}
   ForceRemoteRenderTimeframe: 0
 --- !u!143 &5773763795247233088
 CharacterController:
@@ -10622,6 +10624,26 @@ MonoBehaviour:
     m_Bits: 0
   _IsActive: 0
   _CurrentSpeed: 0
+--- !u!114 &5650056082442984469
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9043744698373994564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d80edaca572861a4ea76f3eefaa6f45d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  respawnDelay: 0.5
+  invincibilityTime: 2
+  _CurrentCheckpointIndex: 0
+  _CurrentRespawnPosition: {x: 0, y: 0, z: 0}
+  _IsInvincible:
+    _value: 0
+  _IsDead:
+    _value: 0
 --- !u!1 &9067434496905555950
 GameObject:
   m_ObjectHideFlags: 0

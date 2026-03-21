@@ -1,6 +1,7 @@
 using Fusion;
 using Fusion.Sockets;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -222,36 +223,36 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
 
     public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
-{
-    Debug.Log($"[BasicSpawner] Shutdown: {shutdownReason}");
-
-    _spawnedPlayers.Clear();
-    _gameManagerInstance = null;
-
-    if (PlayerNetworkData.Local != null)
     {
-        PlayerNetworkData.Local = null;
-    }
+        Debug.Log($"[BasicSpawner] Shutdown: {shutdownReason}");
 
-    var oldSceneManager = GetComponent<NetworkSceneManagerDefault>();
-    if (oldSceneManager != null)
-    {
-        Destroy(oldSceneManager);
-    }
+        _spawnedPlayers.Clear();
+        _gameManagerInstance = null;
 
-    if (_runner != null)
-    {
-        _runner.RemoveCallbacks(this);
-
-        if (_inputHandler != null)
+        if (PlayerNetworkData.Local != null)
         {
-            _runner.RemoveCallbacks(_inputHandler);
+            PlayerNetworkData.Local = null;
         }
 
-        Destroy(_runner);
-        _runner = null;
+        var oldSceneManager = GetComponent<NetworkSceneManagerDefault>();
+        if (oldSceneManager != null)
+        {
+            Destroy(oldSceneManager);
+        }
+
+        if (_runner != null)
+        {
+            _runner.RemoveCallbacks(this);
+
+            if (_inputHandler != null)
+            {
+                _runner.RemoveCallbacks(_inputHandler);
+            }
+
+            Destroy(_runner);
+            _runner = null;
+        }
     }
-}
 
     public void OnConnectedToServer(NetworkRunner runner) { }
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
@@ -292,10 +293,32 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
 
     #region Helpers
     /// <summary>
-    /// Get spawn position for a player. Uses spawn points if available, otherwise random position.
+    /// Get spawn position for a player. 
+    /// Priority: MinigameController spawn points > Scene spawn points > BasicSpawner spawn points > Fallback
     /// </summary>
     private Vector3 GetSpawnPosition(PlayerRef player)
     {
+        // 1. Try MinigameController spawn points first (for minigame scenes)
+        if (MinigameController.Instance != null)
+        {
+            var mgSpawnPoint = MinigameController.Instance.GetSpawnPoint(player.PlayerId);
+            if (mgSpawnPoint != Vector3.zero)
+            {
+                Debug.Log($"[BasicSpawner] Using MinigameController spawn point for player {player}");
+                return mgSpawnPoint;
+            }
+        }
+
+        // 2. Try to find spawn points tagged "SpawnPoint" in current scene
+        var sceneSpawnPoints = GameObject.FindGameObjectsWithTag("SpawnPoint");
+        if (sceneSpawnPoints != null && sceneSpawnPoints.Length > 0)
+        {
+            int index = player.PlayerId % sceneSpawnPoints.Length;
+            Debug.Log($"[BasicSpawner] Using scene SpawnPoint tag for player {player}");
+            return sceneSpawnPoints[index].transform.position;
+        }
+
+        // 3. Use BasicSpawner's configured spawn points
         if (spawnPoints != null && spawnPoints.Length > 0)
         {
             // Use spawn point based on player index
@@ -320,7 +343,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogWarning("[BasicSpawner] All spawn points are null, using fallback position.");
         }
 
-        // Fallback: random position in a circle
+        // 4. Fallback: random position in a circle
         float angle = player.PlayerId * 45f * Mathf.Deg2Rad;
         float radius = 3f;
         return new Vector3(Mathf.Cos(angle) * radius, 1f, Mathf.Sin(angle) * radius);
@@ -343,35 +366,20 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
             }
         }
         _spawnedPlayers.Clear();
+        
+        // Delay spawn để đợi scene objects (MinigameController, etc.) được khởi tạo
+        StartCoroutine(DelayedSpawnPlayers());
+    }
 
-        // Check if this is a race minigame scene
-        var raceSpawnManager = FindAnyObjectByType<RaceSpawnManager>();
-        if (raceSpawnManager != null)
+    private System.Collections.IEnumerator DelayedSpawnPlayers()
+    {
+        // Đợi 1 frame để scene objects Awake() chạy xong
+        yield return null;
+        
+        // Spawn all connected players
+        foreach (var player in _runner.ActivePlayers)
         {
-            Debug.Log("[BasicSpawner] Found RaceSpawnManager, delegating spawn...");
-
-            // Let RaceSpawnManager handle it
-            int playerCount = 0;
-            foreach (var _ in _runner.ActivePlayers) playerCount++;
-
-            raceSpawnManager.InitializeForRace(playerCount);
-
-            foreach (var player in _runner.ActivePlayers)
-            {
-                var spawnedObj = raceSpawnManager.SpawnPlayer(player);
-                if (spawnedObj != null)
-                {
-                    _spawnedPlayers[player] = spawnedObj;
-                }
-            }
-        }
-        else
-        {
-            // Default spawn logic
-            foreach (var player in _runner.ActivePlayers)
-            {
-                SpawnPlayerForScene(player);
-            }
+            SpawnPlayerForScene(player);
         }
     }
 
@@ -379,48 +387,48 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     /// Spawn a player for the current scene.
     /// </summary>
     private void SpawnPlayerForScene(PlayerRef player)
+{
+    if (!playerPrefab.IsValid)
     {
-        if (!playerPrefab.IsValid)
-        {
-            Debug.LogError("[BasicSpawner] Player prefab not assigned!");
-            return;
-        }
-
-        // Check if player already has an object
-        if (_spawnedPlayers.ContainsKey(player))
-        {
-            Debug.LogWarning($"[BasicSpawner] Player {player} already spawned!");
-            return;
-        }
-
-        Vector3 spawnPosition = GetSpawnPosition(player);
-
-        NetworkObject playerObject = _runner.Spawn(
-            playerPrefab,
-            spawnPosition,
-            Quaternion.identity,
-            player
-        );
-
-        if (playerObject != null)
-        {
-            _spawnedPlayers[player] = playerObject;
-            Debug.Log($"[BasicSpawner] Spawned player {player} at {spawnPosition}");
-        }
+        Debug.LogError("[BasicSpawner] Player prefab not assigned!");
+        return;
     }
 
-    private MenuManager ResolveMenuManager()
+    // Check if player already has an object
+    if (_spawnedPlayers.ContainsKey(player))
     {
-        if (menuManager == null)
-        {
-            menuManager = FindAnyObjectByType<MenuManager>();
-        }
-
-        return menuManager;
+        Debug.LogWarning($"[BasicSpawner] Player {player} already spawned!");
+        return;
     }
 
-    private void HandleUnitySceneLoaded(Scene scene, LoadSceneMode mode)
+    Vector3 spawnPosition = GetSpawnPosition(player);
+
+    NetworkObject playerObject = _runner.Spawn(
+        playerPrefab,
+        spawnPosition,
+        Quaternion.identity,
+        player
+    );
+
+    if (playerObject != null)
+    {
+        _spawnedPlayers[player] = playerObject;
+        Debug.Log($"[BasicSpawner] Spawned player {player} at {spawnPosition}");
+    }
+}
+
+private MenuManager ResolveMenuManager()
+{
+    if (menuManager == null)
     {
         menuManager = FindAnyObjectByType<MenuManager>();
     }
+
+    return menuManager;
+}
+
+private void HandleUnitySceneLoaded(Scene scene, LoadSceneMode mode)
+{
+    menuManager = FindAnyObjectByType<MenuManager>();
+}
 }
