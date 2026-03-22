@@ -49,7 +49,10 @@ public class PlayerMinigameData : NetworkBehaviour
         // Init state tracking
         _lastInvincibleState = IsInvincible;
 
-        // KHÔNG reset checkpoint ở đây - để MinigameController gọi sau khi teleport xong
+        if (HasStateAuthority && CurrentRespawnPosition == Vector3.zero)
+        {
+            CurrentRespawnPosition = transform.position;
+        }
     }
 
     private void CacheOriginalColors()
@@ -106,26 +109,14 @@ public class PlayerMinigameData : NetworkBehaviour
     /// </summary>
     public void SetCheckpoint(int index, Vector3 respawnPosition)
     {
-        if (Object.HasInputAuthority)
-        {
-            // Gửi RPC lên host để update
-            RPC_SetCheckpoint(index, respawnPosition);
-        }
-    }
+        if (!HasStateAuthority) return;
 
-    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    public void RPC_SetCheckpoint(int index, Vector3 respawnPosition)
-    {
-        // Chỉ update nếu index mới > index hiện tại (tránh client gửi checkpoint cũ override mới)
         if (index > CurrentCheckpointIndex)
         {
             CurrentCheckpointIndex = index;
             CurrentRespawnPosition = respawnPosition;
-            Debug.Log($"[PlayerMinigameData] Checkpoint set to {index} at {respawnPosition}");
-        }
-        else
-        {
-            Debug.Log($"[PlayerMinigameData] Ignored checkpoint {index} (current: {CurrentCheckpointIndex})");
+
+            Debug.Log($"[PlayerMinigameData] Checkpoint set to {index}");
         }
     }
 
@@ -158,20 +149,15 @@ public class PlayerMinigameData : NetworkBehaviour
 
     private void DoRespawn()
     {
-        // HOST teleport trực tiếp
-        var cc = GetComponent<CharacterController>();
-        if (cc != null)
+        if (playerController != null)
         {
-            cc.enabled = false;
-            transform.position = CurrentRespawnPosition;
-            cc.enabled = true;
+            playerController.Teleport(CurrentRespawnPosition);
         }
         else
         {
             transform.position = CurrentRespawnPosition;
         }
 
-        // Reset velocity
         if (playerController != null)
         {
             playerController.ResetVelocity();
@@ -205,7 +191,7 @@ public class PlayerMinigameData : NetworkBehaviour
         {
             if (playerRenderers[i] != null && playerRenderers[i].material != null)
             {
-                playerRenderers[i].material.color = IsInvincible ? invincibleColor : originalColors[i];
+                playerRenderers[i].sharedMaterial.color = IsInvincible ? invincibleColor : originalColors[i];
             }
         }
     }

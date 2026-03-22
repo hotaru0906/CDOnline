@@ -36,10 +36,10 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-                // Dùng GetAxis để có smooth movement
+        // Dùng GetAxisRaw để có instant/crispy movement (không smoothing)
         _moveInput = new Vector2(
-            Input.GetAxis("Horizontal"),
-            Input.GetAxis("Vertical")
+            Input.GetAxisRaw("Horizontal"),
+            Input.GetAxisRaw("Vertical")
         );
 
         if (_moveInput.sqrMagnitude > 1f)

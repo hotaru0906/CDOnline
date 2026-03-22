@@ -12,61 +12,18 @@ public class Checkpoint : MonoBehaviour
     [SerializeField] private int checkpointIndex = 0;
     [SerializeField] private Transform respawnPoint;
 
-    [Header("Visual Feedback")]
-    [SerializeField] private GameObject activatedVisual;
-    [SerializeField] private GameObject deactivatedVisual;
-
     public int CheckpointIndex => checkpointIndex;
     public Vector3 RespawnPosition => respawnPoint != null ? respawnPoint.position : transform.position;
 
-    private void Start()
-    {
-        // Ensure trigger is set
-        var collider = GetComponent<Collider>();
-        if (collider != null)
-        {
-            collider.isTrigger = true;
-        }
-
-        // Set initial visual
-        UpdateVisual(false);
-    }
-
     private void OnTriggerEnter(Collider other)
     {
-        // Chỉ xử lý local player
-        var player = other.GetComponent<PlayerController>();
-        if (player == null) return;
+        if (!other.TryGetComponent(out PlayerController player)) return;
+        if (!player.Object.HasStateAuthority) return;
 
-        // Check if this is the local player
-        if (!player.Object.HasInputAuthority) return;
-
-        // Get minigame data
-        var minigameData = player.GetComponent<PlayerMinigameData>();
-        if (minigameData == null)
+        if (player.TryGetComponent(out PlayerMinigameData data))
         {
-            Debug.LogWarning("[Checkpoint] Player không có PlayerMinigameData component!");
-            return;
+            data.SetCheckpoint(checkpointIndex, RespawnPosition);
         }
-
-        // Chỉ lưu checkpoint nếu index cao hơn checkpoint hiện tại
-        if (checkpointIndex > minigameData.CurrentCheckpointIndex)
-        {
-            minigameData.RPC_SetCheckpoint(checkpointIndex, RespawnPosition);
-            Debug.Log($"[Checkpoint] Player reached checkpoint {checkpointIndex}");
-
-            // Visual feedback
-            UpdateVisual(true);
-        }
-    }
-
-    private void UpdateVisual(bool activated)
-    {
-        if (activatedVisual != null)
-            activatedVisual.SetActive(activated);
-
-        if (deactivatedVisual != null)
-            deactivatedVisual.SetActive(!activated);
     }
 
     private void OnDrawGizmos()

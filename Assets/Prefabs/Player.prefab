@@ -10522,8 +10522,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8a03b31fef26f7f4d80266187f737b88, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  walkSpeed: 5
-  runSpeed: 9
+  walkSpeed: 3
+  runSpeed: 6
   rotationSpeed: 15
   attackDuration: 0.7
   _CurrentState: 0
@@ -10542,8 +10542,8 @@ MonoBehaviour:
   _stateAuthorityChangeErrorCorrectionDelta: 0
   gravity: -20
   jumpImpulse: 8
-  acceleration: 10
-  braking: 10
+  acceleration: 100
+  braking: 100
   maxSpeed: 6
   rotationSpeed: 15
 --- !u!114 &2588788478092307535
@@ -10638,6 +10638,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   respawnDelay: 0.5
   invincibilityTime: 2
+  playerRenderers: []
+  invincibleColor: {r: 1, g: 1, b: 1, a: 0.5}
   _CurrentCheckpointIndex: 0
   _CurrentRespawnPosition: {x: 0, y: 0, z: 0}
   _IsInvincible:

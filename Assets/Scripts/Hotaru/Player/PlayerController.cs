@@ -19,6 +19,9 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float runSpeed = 9f;
     [SerializeField] private float rotationSpeed = 15f;
 
+    [Header("Ground Check")]
+    [SerializeField] private float groundBufferTime = 0.15f; // Thời gian buffer sau khi rời mặt đất
+
     [Header("Attack Settings")]
     [SerializeField] private float attackDuration = 0.7f;
 
@@ -26,6 +29,7 @@ public class PlayerController : NetworkBehaviour
     [Networked] private float AttackTimer { get; set; }
     [Networked] private NetworkBool IsRunning { get; set; }
     [Networked] private NetworkBool IsMoving { get; set; } // Có input di chuyển không
+    [Networked] private float GroundedTimer { get; set; } // Timer để buffer ground check
 
     public Vector3 Velocity => _networkCC != null ? _networkCC.Velocity : Vector3.zero;
 
@@ -134,19 +138,26 @@ public class PlayerController : NetworkBehaviour
         IsRunning = input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
         
         // Tốc độ: chạy nếu đang giữ Shift VÀ đang di chuyển
-        float speed = IsMoving ? (IsRunning ? runSpeed : walkSpeed) : 0f;
+        float targetSpeed = IsMoving ? (IsRunning ? runSpeed : walkSpeed) : 0f;
 
-        // Apply movement
-        _networkCC.Move(moveDirection.normalized * speed);
+        // Update MaxSpeed của NetworkCharacterController để không bị clamp
+        _networkCC.maxSpeed = targetSpeed;
+
+        // Apply movement - truyền direction, NCC sẽ dùng MaxSpeed đã set
+        _networkCC.Move(moveDirection.normalized * targetSpeed);
 
         _targetMoveDirection = moveDirection;
     }
 
     private void HandleJump(PlayerInputData input)
     {
-        if (input.IsButtonPressed(PlayerInputData.BUTTON_JUMP) && _networkCC.Grounded)
+        // Coyote time - cho phép nhảy trong buffer time sau khi rời mặt đất
+        bool canJump = _networkCC.Grounded || GroundedTimer > 0;
+        
+        if (input.IsButtonPressed(PlayerInputData.BUTTON_JUMP) && canJump)
         {
             _networkCC.Jump();
+            GroundedTimer = 0; // Reset buffer khi đã nhảy
             
             // Trigger jump animation
             if (_playerAnimator != null)
@@ -158,7 +169,10 @@ public class PlayerController : NetworkBehaviour
 
     private void HandleAttack(PlayerInputData input)
     {
-        if (input.IsButtonPressed(PlayerInputData.BUTTON_PUNCH) && _networkCC.Grounded)
+        // Cho phép attack trong buffer time
+        bool canAttack = _networkCC.Grounded || GroundedTimer > 0;
+        
+        if (input.IsButtonPressed(PlayerInputData.BUTTON_PUNCH) && canAttack)
         {
             CurrentState = PlayerState.Attacking;
             AttackTimer = attackDuration;
@@ -200,9 +214,22 @@ public class PlayerController : NetworkBehaviour
         bool isGrounded = _networkCC.Grounded;
         Vector3 velocity = _networkCC.Velocity;
 
-        if (!isGrounded)
+        // Update ground buffer timer
+        if (isGrounded)
         {
-            CurrentState = velocity.y > 0.2 ? PlayerState.Jumping : PlayerState.Falling;
+            GroundedTimer = groundBufferTime;
+        }
+        else
+        {
+            GroundedTimer -= Runner.DeltaTime;
+        }
+
+        // Buffered ground check - vẫn coi như grounded nếu còn trong buffer time
+        bool isBufferedGrounded = isGrounded || GroundedTimer > 0;
+
+        if (!isBufferedGrounded)
+        {
+            CurrentState = velocity.y > 0.2f ? PlayerState.Jumping : PlayerState.Falling;
         }
         else if (IsMoving) // Dựa vào input, không dựa vào velocity
         {
