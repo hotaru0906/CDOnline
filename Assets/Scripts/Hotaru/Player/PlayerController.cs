@@ -25,7 +25,12 @@ public class PlayerController : NetworkBehaviour
     [Header("Attack Settings")]
     [SerializeField] private float attackDuration = 0.7f;
 
+    [Header("External Force Settings")]
+    [SerializeField] private float externalForceDrag = 5f; // Tốc độ giảm dần external force
+    [SerializeField] private float externalForceThreshold = 0.1f; // Ngưỡng để reset về 0
+
     [Networked] public PlayerState CurrentState { get; private set; }
+    [Networked] private Vector3 ExternalVelocity { get; set; } // Lực từ bên ngoài (obstacle, knockback)
     [Networked] private float AttackTimer { get; set; }
     [Networked] private NetworkBool IsRunning { get; set; }
     [Networked] private NetworkBool IsMoving { get; set; } // Có input di chuyển không
@@ -99,6 +104,9 @@ public class PlayerController : NetworkBehaviour
             }
         }
 
+        // Update external velocity (decay over time)
+        UpdateExternalVelocity();
+
         if (GetInput(out PlayerInputData input))
         {
             // Không di chuyển khi đang attack
@@ -140,13 +148,55 @@ public class PlayerController : NetworkBehaviour
         // Tốc độ: chạy nếu đang giữ Shift VÀ đang di chuyển
         float targetSpeed = IsMoving ? (IsRunning ? runSpeed : walkSpeed) : 0f;
 
-        // Update MaxSpeed của NetworkCharacterController để không bị clamp
-        _networkCC.maxSpeed = targetSpeed;
+        // Tính final movement bao gồm external velocity
+        Vector3 finalMovement = moveDirection.normalized * targetSpeed;
+        
+        // Thêm external velocity (lực đẩy từ obstacle)
+        finalMovement += ExternalVelocity;
 
-        // Apply movement - truyền direction, NCC sẽ dùng MaxSpeed đã set
-        _networkCC.Move(moveDirection.normalized * targetSpeed);
+        // Update MaxSpeed để không bị clamp (cần cao hơn khi có external force)
+        float totalSpeed = finalMovement.magnitude;
+        _networkCC.maxSpeed = Mathf.Max(targetSpeed, totalSpeed);
+
+        // Apply movement
+        _networkCC.Move(finalMovement);
 
         _targetMoveDirection = moveDirection;
+    }
+
+    /// <summary>
+    /// Giảm dần external velocity theo thời gian
+    /// </summary>
+    private void UpdateExternalVelocity()
+    {
+        if (ExternalVelocity.sqrMagnitude < externalForceThreshold * externalForceThreshold)
+        {
+            ExternalVelocity = Vector3.zero;
+            return;
+        }
+
+        // Decay external velocity
+        Vector3 decay = ExternalVelocity.normalized * externalForceDrag * Runner.DeltaTime;
+        
+        if (decay.sqrMagnitude >= ExternalVelocity.sqrMagnitude)
+        {
+            ExternalVelocity = Vector3.zero;
+        }
+        else
+        {
+            ExternalVelocity -= decay;
+        }
+    }
+
+    /// <summary>
+    /// Áp dụng lực từ bên ngoài (obstacle, knockback)
+    /// </summary>
+    public void ApplyExternalForce(Vector3 force)
+    {
+        if (!HasStateAuthority) return;
+        
+        ExternalVelocity += force;
+        Debug.Log($"[PlayerController] Applied external force: {force}, total: {ExternalVelocity}");
     }
 
     private void HandleJump(PlayerInputData input)
@@ -314,6 +364,7 @@ public class PlayerController : NetworkBehaviour
         {
             _networkCC.Move(Vector3.zero);
         }
+        ExternalVelocity = Vector3.zero;
     }
 
     private void OnDrawGizmosSelected()
