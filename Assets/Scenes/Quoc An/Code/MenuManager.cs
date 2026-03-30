@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 using Fusion;
 using TMPro;
+using System.Collections;
 
 public class MenuManager : MonoBehaviour
 {
@@ -12,6 +13,9 @@ public class MenuManager : MonoBehaviour
     [SerializeField] private GameObject canvasFindLobby;
     [SerializeField] private GameObject canvasCreateRoom;
     [SerializeField] private GameObject canvasItemUI;
+
+    [Header("Loading Screen")]
+    [SerializeField] private GameObject loadingScreen;        // ← KÉO "Loading canva" vào đây
 
     [Header("Lobby References")]
     [SerializeField] private LobbyRunner lobbyRunner;
@@ -27,11 +31,19 @@ public class MenuManager : MonoBehaviour
     private readonly Stack<GameObject> _screenHistory = new();
     private readonly List<RoomItems> _roomItems = new();
 
+    private LoadingScreenManager _loadingManager; // Cache để gọi StartFakeLoading
+
     private void Start()
     {
         InitializeScreens();
         SetupButtons();
         SetupCustomization();
+
+        if (loadingScreen != null)
+        {
+            _loadingManager = loadingScreen.GetComponent<LoadingScreenManager>();
+            loadingScreen.SetActive(false);
+        }
     }
 
     private void InitializeScreens()
@@ -75,17 +87,12 @@ public class MenuManager : MonoBehaviour
     public void ShowItemUI()
     {
         SwitchScreen(canvasItemUI);
-        
-        // Kích hoạt CustomizationManager để chuyển camera
         if (customizationManager != null)
-        {
             customizationManager.Activate();
-        }
     }
 
     private void OnBackFromCustomization()
     {
-        // Tắt canvas ItemUI và quay lại màn hình trước
         GoBack();
     }
 
@@ -93,11 +100,8 @@ public class MenuManager : MonoBehaviour
     {
         if (_screenHistory.Count == 0) return;
 
-        // Nếu đang ở ItemUI, deactivate CustomizationManager
         if (_currentScreen == canvasItemUI && customizationManager != null)
-        {
             customizationManager.Deactivate();
-        }
 
         _currentScreen.SetActive(false);
         _currentScreen = _screenHistory.Pop();
@@ -111,12 +115,66 @@ public class MenuManager : MonoBehaviour
             _screenHistory.Push(_currentScreen);
             _currentScreen.SetActive(false);
         }
+
+        StartCoroutine(ShowLoadingThenSwitch(targetScreen));
+    }
+
+    private IEnumerator ShowLoadingThenSwitch(GameObject targetScreen)
+    {
+        if (loadingScreen != null)
+            loadingScreen.SetActive(true);
+
+        // Dùng thời gian mặc định từ LoadingScreenManager
+        yield return new WaitForSeconds(10f);
+
         _currentScreen = targetScreen;
         _currentScreen.SetActive(true);
+
+        if (loadingScreen != null)
+            loadingScreen.SetActive(false);
     }
     #endregion
 
     #region Lobby Functions
+    private void CreateRoom()
+    {
+        if (lobbyRunner == null)
+        {
+            Debug.LogError("[MenuManager] LobbyRunner chưa được gán.");
+            return;
+        }
+
+        var roomName = roomNameInput?.text;
+        if (string.IsNullOrWhiteSpace(roomName))
+        {
+            Debug.LogWarning("[MenuManager] Tên phòng không được để trống.");
+            return;
+        }
+
+        // === LOADING CHO CREATE ROOM ===
+        if (loadingScreen != null && _loadingManager != null)
+        {
+            loadingScreen.SetActive(true);
+            // Dùng thời gian dài hơn một chút cho network
+            _loadingManager.StartFakeLoading(2.5f);   // ← Bạn có thể chỉnh số này
+        }
+
+        lobbyRunner.CreateSession(roomName);
+
+        // Nếu bạn có callback từ LobbyRunner (ví dụ OnSessionCreated), 
+        // hãy gọi loadingScreen.SetActive(false) ở đó.
+        // Hiện tại dùng thời gian cố định 2.5 giây
+        StartCoroutine(HideLoadingAfterCreateRoom());
+    }
+
+    private IEnumerator HideLoadingAfterCreateRoom()
+    {
+        yield return new WaitForSeconds(2.5f);   // ← Khớp với thời gian ở trên
+        if (loadingScreen != null)
+            loadingScreen.SetActive(false);
+    }
+    #endregion
+
     public void UpdateRoomList(List<SessionInfo> sessions)
     {
         ClearRoomItems();
@@ -139,23 +197,4 @@ public class MenuManager : MonoBehaviour
         }
         _roomItems.Clear();
     }
-
-    private void CreateRoom()
-    {
-        if (lobbyRunner == null)
-        {
-            Debug.LogError("[MenuManager] LobbyRunner chưa được gán.");
-            return;
-        }
-
-        var roomName = roomNameInput?.text;
-        if (string.IsNullOrWhiteSpace(roomName))
-        {
-            Debug.LogWarning("[MenuManager] Tên phòng không được để trống.");
-            return;
-        }
-
-        lobbyRunner.CreateSession(roomName);
-    }
-    #endregion
 }
