@@ -5,11 +5,21 @@ using System;
 public enum GameState
 {
     Lobby,
-    Voting,
+    Voting,          // Vote chọn minigame hoặc Roulette
     Tutorial,
-    Playing,
+    Playing,         // Đang chơi minigame
     Scoreboard,
-    Result
+    Roulette,        // Đang chơi Cò Quay Nga
+    Result           // Kết quả cuối cùng (còn 1 người)
+}
+
+/// <summary>
+/// Loại voting hiện tại
+/// </summary>
+public enum VotingType
+{
+    MinigameOnly,    // Chỉ vote minigame (lần đầu)
+    RouletteOrMinigame // Vote giữa Roulette và Minigame
 }
 
 public class GameManager : NetworkBehaviour
@@ -25,6 +35,7 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private GameObject votingUI;
     [SerializeField] private GameObject scoreboardUI;
     [SerializeField] private GameObject resultUI;
+    // Roulette không dùng UI Panel, xử lý bằng gameplay 3D
     #endregion
 
     #region Minigame Data
@@ -44,6 +55,18 @@ public class GameManager : NetworkBehaviour
     
     [Networked]
     public int CurrentMinigameIndex { get; private set; } = -1;
+
+    /// <summary>
+    /// Loại voting hiện tại
+    /// </summary>
+    [Networked]
+    public VotingType CurrentVotingType { get; private set; } = VotingType.MinigameOnly;
+
+    /// <summary>
+    /// PlayerId của người cuối cùng còn sống (winner)
+    /// </summary>
+    [Networked]
+    public int FinalWinnerId { get; private set; } = -1;
     #endregion
 
     #region Events
@@ -189,6 +212,9 @@ public class GameManager : NetworkBehaviour
             case GameState.Scoreboard:
                 HandleScoreboardState();
                 break;
+            case GameState.Roulette:
+                HandleRouletteState();
+                break;
             case GameState.Result:
                 HandleResultState();
                 break;
@@ -197,6 +223,9 @@ public class GameManager : NetworkBehaviour
     #endregion
 
     #region Host-Only Game Flow Methods
+    /// <summary>
+    /// Bắt đầu match - Flow mới: Random minigame đầu tiên (không vote)
+    /// </summary>
     public void StartMatch()
     {
         if (!HasStateAuthority)
@@ -207,10 +236,42 @@ public class GameManager : NetworkBehaviour
 
         Debug.Log("[GameManager] Starting match...");
         CurrentRound = 0;
-        ChangeState(GameState.Voting);
+        FinalWinnerId = -1;
+
+        // Reset RouletteManager
+        if (RouletteManager.Instance != null)
+        {
+            RouletteManager.Instance.ResetForNewGame();
+        }
+
+        // Bắt đầu với random minigame (không vote)
+        StartRandomMinigame();
     }
 
-    public void StartVoting()
+    /// <summary>
+    /// Bắt đầu một minigame ngẫu nhiên
+    /// </summary>
+    public void StartRandomMinigame()
+    {
+        if (!HasStateAuthority) return;
+
+        if (availableMinigames == null || availableMinigames.Length == 0)
+        {
+            Debug.LogError("[GameManager] No minigames available!");
+            return;
+        }
+
+        int randomIndex = UnityEngine.Random.Range(0, availableMinigames.Length);
+        Debug.Log($"[GameManager] Starting random minigame #{randomIndex}: {availableMinigames[randomIndex].minigameName}");
+        
+        StartMinigame(randomIndex);
+    }
+
+    /// <summary>
+    /// Bắt đầu voting phase
+    /// </summary>
+    /// <param name="votingType">Loại voting</param>
+    public void StartVoting(VotingType votingType = VotingType.MinigameOnly)
     {
         if (!HasStateAuthority)
         {
@@ -218,7 +279,8 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        Debug.Log("[GameManager] Starting voting phase...");
+        CurrentVotingType = votingType;
+        Debug.Log($"[GameManager] Starting voting phase... Type: {votingType}");
         ChangeState(GameState.Voting);
     }
 
@@ -251,7 +313,12 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[GameManager] Calling ChangeState(Playing)");
         ChangeState(GameState.Playing);
     }
-    public void EndMinigame()
+
+    /// <summary>
+    /// Kết thúc minigame - gọi bởi MinigameController khi game kết thúc
+    /// </summary>
+    /// <param name="winnerId">PlayerId của người thắng (-1 nếu không có)</param>
+    public void EndMinigame(int winnerId = -1)
     {
         if (!HasStateAuthority)
         {
@@ -259,9 +326,23 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        Debug.Log("[GameManager] Ending minigame...");
+        Debug.Log($"[GameManager] Ending minigame... Winner: {winnerId}");
 
-        // TODO: Calculate scores, update player stats
+        // Notify RouletteManager về người thắng và minigame completed
+        if (RouletteManager.Instance != null)
+        {
+            RouletteManager.Instance.OnMinigameCompleted();
+            
+            if (winnerId >= 0)
+            {
+                // Convert PlayerId to PlayerRef
+                PlayerRef winnerRef = PlayerRefFromPlayerId(winnerId);
+                if (winnerRef != PlayerRef.None)
+                {
+                    RouletteManager.Instance.OnMinigameWinner(winnerRef);
+                }
+            }
+        }
 
         // Show scoreboard after minigame ends
         ChangeState(GameState.Scoreboard);
@@ -278,6 +359,12 @@ public class GameManager : NetworkBehaviour
         ChangeState(GameState.Scoreboard);
     }
 
+    /// <summary>
+    /// Xử lý flow sau khi hiển thị scoreboard
+    /// Flow mới:
+    /// - Nếu đã chơi đủ 2 MG -> Roulette
+    /// - Nếu đã chơi 1 MG -> Vote (Roulette vs Minigame)
+    /// </summary>
     public void ProceedFromScoreboard()
     {
         if (!HasStateAuthority)
@@ -286,19 +373,123 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        if (CurrentRound >= TotalRounds)
+        // Check số player còn sống
+        if (RouletteManager.Instance != null)
         {
-            // All rounds completed, show final results
-            Debug.Log("[GameManager] All rounds complete. Showing final results...");
+            int aliveCount = RouletteManager.Instance.GetAlivePlayerCount();
+            if (aliveCount <= 1)
+            {
+                // Chỉ còn 1 người - kết thúc game
+                var aliveSlots = RouletteManager.Instance.GetAliveSlots();
+                if (aliveSlots.Count > 0)
+                {
+                    // Convert slot to PlayerId
+                    PlayerRef winnerRef = RouletteManager.Instance.GetPlayerRefFromSlot(aliveSlots[0]);
+                    FinalWinnerId = winnerRef != PlayerRef.None ? winnerRef.PlayerId : -1;
+                }
+                else
+                {
+                    FinalWinnerId = -1;
+                }
+                Debug.Log($"[GameManager] Only {aliveCount} player(s) left. Showing final results...");
+                ChangeState(GameState.Result);
+                return;
+            }
+        }
+
+        // Kiểm tra flow Roulette
+        if (RouletteManager.Instance != null)
+        {
+            if (RouletteManager.Instance.ShouldTriggerRoulette())
+            {
+                // Đã chơi đủ 2 MG -> Bắt buộc vào Roulette
+                Debug.Log("[GameManager] 2 minigames completed. Starting Roulette...");
+                StartRoulette();
+            }
+            else if (RouletteManager.Instance.ShouldTriggerVoting())
+            {
+                // Đã chơi 1 MG -> Vote giữa Roulette và Minigame
+                Debug.Log("[GameManager] 1 minigame completed. Starting voting (Roulette vs Minigame)...");
+                StartVoting(VotingType.RouletteOrMinigame);
+            }
+            else
+            {
+                // Chưa chơi MG nào -> Minigame tiếp theo
+                Debug.Log("[GameManager] Starting voting for next minigame...");
+                StartVoting(VotingType.MinigameOnly);
+            }
+        }
+        else
+        {
+            // Fallback: voting minigame
+            Debug.LogWarning("[GameManager] RouletteManager not found. Falling back to minigame voting...");
+            StartVoting(VotingType.MinigameOnly);
+        }
+    }
+
+    /// <summary>
+    /// Bắt đầu Roulette (Cò Quay Nga)
+    /// </summary>
+    public void StartRoulette()
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[GameManager] Only Host can call StartRoulette()");
+            return;
+        }
+
+        Debug.Log("[GameManager] Starting Roulette...");
+        ChangeState(GameState.Roulette);
+    }
+
+    /// <summary>
+    /// Gọi bởi RouletteManager khi Roulette kết thúc
+    /// </summary>
+    /// <param name="winnerId">PlayerId của người thắng cuối cùng, -1 nếu không xác định</param>
+    public void OnRouletteComplete(int winnerId)
+    {
+        if (!HasStateAuthority) return;
+
+        Debug.Log($"[GameManager] Roulette complete. Winner: {winnerId}");
+
+        // Check số player còn sống
+        int aliveCount = RouletteManager.Instance?.GetAlivePlayerCount() ?? 0;
+
+        if (aliveCount <= 1)
+        {
+            // Chỉ còn 1 người - kết thúc game
+            FinalWinnerId = winnerId;
+            Debug.Log("[GameManager] Only 1 player left. Showing final results...");
             ChangeState(GameState.Result);
         }
         else
         {
-            // More rounds to play, start voting for next minigame
-            Debug.Log("[GameManager] Proceeding to next round voting...");
-            ChangeState(GameState.Voting);
+            // Còn nhiều người - tiếp tục với minigame mới
+            Debug.Log("[GameManager] Multiple players left. Starting voting for next minigame...");
+            StartVoting(VotingType.MinigameOnly);
         }
     }
+
+    /// <summary>
+    /// Gọi bởi VotingManager khi vote kết thúc (cho RouletteOrMinigame voting)
+    /// </summary>
+    /// <param name="chooseRoulette">True nếu vote Roulette thắng</param>
+    public void OnVotingComplete(bool chooseRoulette)
+    {
+        if (!HasStateAuthority) return;
+
+        if (chooseRoulette)
+        {
+            Debug.Log("[GameManager] Vote result: Roulette");
+            StartRoulette();
+        }
+        else
+        {
+            Debug.Log("[GameManager] Vote result: Minigame");
+            // VotingManager sẽ gọi StartMinigame với index được chọn
+        }
+    }
+
     public void ReturnToLobby()
     {
         if (!HasStateAuthority)
@@ -310,6 +501,14 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[GameManager] Returning to lobby...");
         CurrentRound = 0;
         CurrentMinigameIndex = -1;
+        FinalWinnerId = -1;
+
+        // Reset Roulette state
+        if (RouletteManager.Instance != null)
+        {
+            RouletteManager.Instance.ResetForNewGame();
+        }
+
         ChangeState(GameState.Lobby);
     }
     #endregion
@@ -334,7 +533,7 @@ public class GameManager : NetworkBehaviour
 
     protected virtual void HandleVotingState()
     {
-        Debug.Log("[GameManager] Entered Voting state");
+        Debug.Log($"[GameManager] Entered Voting state. VotingType: {CurrentVotingType}");
 
         // Show voting UI, hide others
         SetActiveUI(lobbyUI, false);
@@ -473,6 +672,40 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
     }
 
+    protected virtual void HandleRouletteState()
+    {
+        Debug.Log("[GameManager] Entered Roulette state");
+
+        // Ẩn tất cả UI - Roulette xử lí bằng gameplay 3D
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, false);
+
+        // Bật player input cho gameplay 3D
+        if (PlayerInputHandler.Instance != null)
+        {
+            PlayerInputHandler.Instance.InputEnabled = true;
+        }
+
+        // Ẩn cursor cho gameplay 3D
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.HideCursor();
+        }
+
+        // Start Roulette (host only)
+        if (HasStateAuthority && RouletteManager.Instance != null)
+        {
+            Debug.Log("[GameManager] Host starting RouletteManager.StartRoulette()");
+            RouletteManager.Instance.StartRoulette();
+        }
+        else if (RouletteManager.Instance == null)
+        {
+            Debug.LogError("[GameManager] RouletteManager.Instance is NULL!");
+        }
+    }
+
     protected virtual void HandleResultState()
     {
         Debug.Log("[GameManager] Entered Result state");
@@ -481,6 +714,12 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(votingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, true);
+
+        // Hiện cursor
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.ShowCursor();
+        }
     }
     #endregion
 
@@ -523,6 +762,19 @@ public class GameManager : NetworkBehaviour
 
         Debug.Log($"[GameManager] State: {oldState} -> {newState}");
         OnStateChanged?.Invoke(oldState, newState);
+    }
+
+    /// <summary>
+    /// Convert PlayerId to PlayerRef
+    /// </summary>
+    private PlayerRef PlayerRefFromPlayerId(int playerId)
+    {
+        foreach (var playerRef in Runner.ActivePlayers)
+        {
+            if (playerRef.PlayerId == playerId)
+                return playerRef;
+        }
+        return PlayerRef.None;
     }
     #endregion
 
