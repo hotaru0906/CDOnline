@@ -117,6 +117,23 @@ public class CameraOrbit : MonoBehaviour
         target = newTarget;
     }
 
+    /// <summary>
+    /// Set yaw angle (dùng khi chuyển từ First Person sang Third Person)
+    /// </summary>
+    public void SetYaw(float yaw)
+    {
+        _yaw = yaw;
+    }
+
+    /// <summary>
+    /// Set cả yaw và pitch
+    /// </summary>
+    public void SetRotation(float yaw, float pitch)
+    {
+        _yaw = yaw;
+        _pitch = Mathf.Clamp(pitch, minY, maxY);
+    }
+
     public void ToggleCursor()
     {
         if (Cursor.lockState == CursorLockMode.Locked)

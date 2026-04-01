@@ -69,9 +69,9 @@ public class MinigameCamera : MonoBehaviour
     {
         sharedCameraPosition = newPosition;
         
-        if (CameraManager.Instance != null && CameraManager.Instance.CurrentMode == CameraMode.Shared)
+        if (CameraManager.Instance != null && CameraManager.Instance.CurrentMode == CameraMode.Minigame)
         {
-            CameraManager.Instance.SwitchToSharedCamera(sharedCameraPosition);
+            CameraManager.Instance.SwitchToMinigameCamera(sharedCameraPosition);
         }
     }
 }

@@ -523,6 +523,18 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(votingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        
+        // Chuyển camera sang First Person trong Lobby
+        if (CameraManager.Instance != null)
+        {
+            CameraManager.Instance.SwitchToFirstPersonCamera();
+        }
+        
+        // Hiện cursor trong lobby
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.ShowCursor();
+        }
 
         // Reset player ready states (host only)
         if (HasStateAuthority)
@@ -567,8 +579,21 @@ public class GameManager : NetworkBehaviour
 
     protected virtual void HandleTutorialState()
     {
-        // TODO: Show tutorial/instructions for current minigame
         Debug.Log("[GameManager] Entered Tutorial state");
+        
+        // TODO: Hiện UI Tutorial cho minigame hiện tại
+        // - Tạo TutorialUI panel với hướng dẫn của minigame
+        // - Hiện canvas với thông tin từ MinigameData.tutorialInfo
+        // - Auto-hide sau vài giây hoặc khi player nhấn nút
+        
+        // Tạm thời: Ẩn tất cả UI và cursor (sẽ sửa khi có TutorialUI)
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, false);
+        
+        // Camera tùy theo minigame setup
+        // Giữ nguyên camera mode hiện tại cho đến khi Playing
     }
 
     protected virtual void HandlePlayingState()
@@ -653,14 +678,17 @@ public class GameManager : NetworkBehaviour
     {
         // Minigame scene sẽ tự setup shared camera nếu cần
         // Thông báo cho CameraManager về mode
-        Debug.Log($"[GameManager] Minigame camera mode: {(useSharedCamera ? "Shared" : "Player")}");
+        Debug.Log($"[GameManager] Minigame camera mode: {(useSharedCamera ? "Shared/Minigame" : "ThirdPerson")}");
 
-        if (!useSharedCamera && CameraManager.Instance != null)
+        if (CameraManager.Instance != null)
         {
-            // Nếu không dùng shared camera, đảm bảo player camera active
-            CameraManager.Instance.SwitchToPlayerCamera();
+            if (!useSharedCamera)
+            {
+                // Minigame dùng Third Person camera (như gameplay bình thường)
+                CameraManager.Instance.SwitchToThirdPersonCamera();
+            }
+            // Nếu useSharedCamera = true, MinigameCamera component trong scene sẽ xử lý
         }
-        // Nếu dùng shared camera, MinigameCamera component trong scene sẽ xử lý
     }
     protected virtual void HandleScoreboardState()
     {
@@ -681,6 +709,13 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(votingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        
+        // === IMPORTANT: Roulette Camera Setup ===
+        // Chuyển sang First Person camera trong Roulette
+        // Roulette sẽ load scene riêng (RouletteScene)
+        // Sau khi scene load, CameraManager sẽ tự động re-initialize
+        // TODO: Call SwitchToFirstPersonCamera() sau khi Roulette scene load xong
+        // =========================================
 
         // Bật player input cho gameplay 3D
         if (PlayerInputHandler.Instance != null)

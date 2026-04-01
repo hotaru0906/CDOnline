@@ -19,12 +19,19 @@ public class LobbyRunner : MonoBehaviour
             return;
         }
 
+        // Show loading when game starts - waiting for lobby connection
+        LoadingScreen.Show("Connecting to server...");
+
         await _BasicSpawner.StartLobbyAndRunner();
     }
 
     public async void CreateSession(string sessionName)
     {
         Debug.Log($"[LobbyRunner] Creating session: {sessionName}");
+        
+        // Show loading when creating room
+        LoadingScreen.Show("Creating room...");
+        
         if (_BasicSpawner == null)
         {
             _BasicSpawner = BasicSpawner.Instance ?? FindAnyObjectByType<BasicSpawner>();
@@ -33,6 +40,7 @@ public class LobbyRunner : MonoBehaviour
         if (_BasicSpawner == null)
         {
             Debug.LogError("[LobbyRunner] Cannot create session without BasicSpawner.");
+            LoadingScreen.Hide();
             return;
         }
         var sceneToLoad = SceneRef.FromIndex(1);
@@ -42,6 +50,10 @@ public class LobbyRunner : MonoBehaviour
     public async void JoinSession(string sessionName)
     {
         Debug.Log($"[LobbyRunner] Joining session: {sessionName}");
+        
+        // Show loading when joining room
+        LoadingScreen.Show("Joining room...");
+        
         if (_BasicSpawner == null)
         {
             _BasicSpawner = BasicSpawner.Instance ?? FindAnyObjectByType<BasicSpawner>();
@@ -50,6 +62,7 @@ public class LobbyRunner : MonoBehaviour
         if (_BasicSpawner == null)
         {
             Debug.LogError("[LobbyRunner] Cannot join session without BasicSpawner.");
+            LoadingScreen.Hide();
             return;
         }
         await _BasicSpawner.StartClient(sessionName);

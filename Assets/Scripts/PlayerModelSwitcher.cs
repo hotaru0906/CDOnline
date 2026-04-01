@@ -48,6 +48,15 @@ public class PlayerModelSwitcher : NetworkBehaviour
         
         // Notify PlayerAnimator về model mới
         NotifyAnimator();
+        
+        // Nếu là local player và đang ở First Person, ẩn model
+        if (Object != null && Object.HasInputAuthority && CameraManager.Instance != null)
+        {
+            if (CameraManager.Instance.CurrentMode == CameraMode.FirstPerson)
+            {
+                SetModelVisible(false);
+            }
+        }
     }
 
     private void UpdateModelVisibility()
@@ -96,6 +105,47 @@ public class PlayerModelSwitcher : NetworkBehaviour
         {
             if (model != null)
                 model.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// Ẩn/hiện model cho First Person mode
+    /// Chỉ ẩn model của local player
+    /// </summary>
+    public void SetModelVisible(bool visible)
+    {
+        var activeModel = GetActiveModel();
+        if (activeModel != null)
+        {
+            // Ẩn tất cả renderers trong model
+            var renderers = activeModel.GetComponentsInChildren<Renderer>(true);
+            foreach (var renderer in renderers)
+            {
+                renderer.enabled = visible;
+            }
+            
+            Debug.Log($"[PlayerModelSwitcher] Model visibility set to: {visible}");
+        }
+    }
+
+    /// <summary>
+    /// Set layer cho model (để camera culling)
+    /// </summary>
+    public void SetModelLayer(int layer)
+    {
+        var activeModel = GetActiveModel();
+        if (activeModel != null)
+        {
+            SetLayerRecursively(activeModel, layer);
+        }
+    }
+    
+    private void SetLayerRecursively(GameObject obj, int layer)
+    {
+        obj.layer = layer;
+        foreach (Transform child in obj.transform)
+        {
+            SetLayerRecursively(child.gameObject, layer);
         }
     }
 

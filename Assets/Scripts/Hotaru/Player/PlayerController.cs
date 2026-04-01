@@ -57,11 +57,36 @@ public class PlayerController : NetworkBehaviour
 
         if (HasInputAuthority)
         {
-            // Đăng ký với CameraManager và chuyển sang Player camera mode
+            // Đăng ký với CameraManager
             if (CameraManager.Instance != null)
             {
                 CameraManager.Instance.RegisterLocalPlayer(transform);
-                CameraManager.Instance.SwitchToPlayerCamera(); // Bật CameraOrbit
+                
+                // Chọn camera mode dựa trên GameState hiện tại
+                if (GameManager.Instance != null)
+                {
+                    var state = GameManager.Instance.CurrentState;
+                    if (state == GameState.Lobby || state == GameState.Voting || state == GameState.Roulette)
+                    {
+                        // First Person cho Lobby, Voting, Roulette
+                        CameraManager.Instance.SwitchToFirstPersonCamera();
+                    }
+                    else if (state == GameState.Playing)
+                    {
+                        // Third Person cho Minigame (trừ khi dùng shared camera)
+                        CameraManager.Instance.SwitchToThirdPersonCamera();
+                    }
+                    else
+                    {
+                        // Default: First Person
+                        CameraManager.Instance.SwitchToFirstPersonCamera();
+                    }
+                }
+                else
+                {
+                    // Fallback: First Person nếu không có GameManager
+                    CameraManager.Instance.SwitchToFirstPersonCamera();
+                }
                 
                 // Lấy reference từ CameraManager
                 _cameraOrbit = CameraManager.Instance.CameraOrbit;
@@ -293,10 +318,43 @@ public class PlayerController : NetworkBehaviour
 
     public override void Render()
     {
-        if (_targetMoveDirection.sqrMagnitude > 0.01f && CurrentState != PlayerState.Attacking)
+        // CHỈ xử lý rotation cho LOCAL player (HasInputAuthority)
+        // Remote players sẽ được sync rotation qua NetworkTransform hoặc không cần xoay local
+        if (!HasInputAuthority) return;
+        
+        if (CameraManager.Instance == null) return;
+        
+        // First Person: Player body luôn xoay theo hướng camera nhìn
+        if (CameraManager.Instance.CurrentMode == CameraMode.FirstPerson)
         {
-            RotateTowards(_targetMoveDirection);
+            RotateToYaw(CameraManager.Instance.FPYaw);
+            return;
         }
+        
+        // Third Person: CHỈ xoay khi đang di chuyển (không xoay khi đứng yên)
+        // Điều này cho phép xoay camera quanh player để ngắm model
+        if (CameraManager.Instance.CurrentMode == CameraMode.ThirdPerson)
+        {
+            // Chỉ xoay nếu đang thực sự di chuyển (có input)
+            if (IsMoving && _targetMoveDirection.sqrMagnitude > 0.01f && CurrentState != PlayerState.Attacking)
+            {
+                RotateTowards(_targetMoveDirection);
+            }
+            // Khi đứng yên: KHÔNG xoay model → có thể xoay camera xung quanh để ngắm
+        }
+    }
+
+    /// <summary>
+    /// Xoay player theo yaw angle (dùng cho First Person)
+    /// </summary>
+    private void RotateToYaw(float yaw)
+    {
+        Quaternion targetRotation = Quaternion.Euler(0, yaw, 0);
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            targetRotation,
+            rotationSpeed * 2f * Time.deltaTime // Nhanh hơn để sync với camera
+        );
     }
 
     private void RotateTowards(Vector3 direction)

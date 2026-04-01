@@ -83,10 +83,13 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         if (res.Ok)
         {
             Debug.Log("[BasicSpawner] Joined lobby successfully.");
+            // Hide loading khi vào lobby thành công
+            LoadingScreen.Hide();
         }
         else
         {
             Debug.LogError($"[BasicSpawner] Failed to join lobby: {res.ShutdownReason}");
+            LoadingScreen.Hide();
         }
     }
 
@@ -141,6 +144,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         else
         {
             Debug.LogError($"[BasicSpawner] Failed to start client: {res.ShutdownReason}");
+            LoadingScreen.Hide();
         }
     }
     private void SpawnGameManager()
@@ -201,6 +205,9 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             // Track spawned players
             _spawnedPlayers[player] = playerObject;
+            
+            // Note: LoadingScreen.Hide() is called in PlayerNetworkData.Spawned()
+            // to ensure it only hides when local player is fully ready
         }
         else
         {
@@ -254,7 +261,11 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
-    public void OnConnectedToServer(NetworkRunner runner) { }
+    public void OnConnectedToServer(NetworkRunner runner)
+    {
+        // Client connected - update loading text
+        LoadingScreen.SetText("Loading game data...");
+    }
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
@@ -285,7 +296,11 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
             RespawnAllPlayers();
         }
     }
-    public void OnSceneLoadStart(NetworkRunner runner) { }
+    public void OnSceneLoadStart(NetworkRunner runner)
+    {
+        // Show loading when scene starts loading (minigame transition)
+        LoadingScreen.Show("Loading...");
+    }
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
@@ -381,6 +396,10 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             SpawnPlayerForScene(player);
         }
+
+        // Hide loading after all players spawned
+        yield return null; // Wait one more frame to ensure spawn completes
+        LoadingScreen.Hide();
     }
 
     /// <summary>
