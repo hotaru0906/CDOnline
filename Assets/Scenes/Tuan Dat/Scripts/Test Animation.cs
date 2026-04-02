@@ -8,7 +8,9 @@ public class TestAnimation : MonoBehaviour
 
     private Rigidbody rb;
     private bool isGrounded = true;
-    private bool isCrouching = false;
+
+    private bool isMoveCrouch = false; // crouch di chuyển
+    private bool isCrouching = false;  // crouch đứng yên
 
     void Start()
     {
@@ -24,54 +26,86 @@ public class TestAnimation : MonoBehaviour
         Vector3 move = new Vector3(h, 0, v);
         bool isMoving = move.magnitude > 0.1f;
         bool isRunning = Input.GetKey(KeyCode.LeftShift);
-       
+
+        // ===== CROUCH DI CHUYỂN (X) =====
+        if (Input.GetKeyDown(KeyCode.X))
+        {
+            isMoveCrouch = !isMoveCrouch;
+            isCrouching = false; // không cho trùng trạng thái
+        }
+
+        // ===== CROUCH NGỒI (CTRL) =====
+        if (Input.GetKeyDown(KeyCode.LeftControl))
+        {
+            isCrouching = !isCrouching;
+            isMoveCrouch = false; // không cho trùng trạng thái
+        }
+
+        // ===== ANIMATOR =====
+        animator.SetBool("isMoveCrouch", isMoveCrouch);
+        animator.SetBool("isCrouching", isCrouching);
+
+        animator.SetFloat("moveX", h);
+        animator.SetFloat("moveZ", v);
+
+        // chỉ tính moving khi KHÔNG crouch
+        animator.SetBool("isMoving", isMoving && !isMoveCrouch && !isCrouching);
 
         // ===== DI CHUYỂN =====
-        if (isMoving && !isCrouching)
+        if (isMoving)
         {
-            float currentSpeed = isRunning ? speed * 2 : speed;
+            float currentSpeed;
+
+            if (isMoveCrouch)
+                currentSpeed = speed * 0.5f; // đi cúi
+            else if (isRunning && !isCrouching)
+                currentSpeed = speed * 2; // chạy
+            else if (!isCrouching)
+                currentSpeed = speed; // đi thường
+            else
+                currentSpeed = 0; // ngồi thì không di chuyển
+
             transform.Translate(move * currentSpeed * Time.deltaTime, Space.World);
-            transform.forward = move;
+
+            if (move != Vector3.zero)
+                transform.forward = move;
         }
 
         // ===== JUMP =====
-      if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
-{
-    rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-    animator.SetTrigger("jump");
-}
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded && !isMoveCrouch && !isCrouching)
+        {
+            isGrounded = false;
+            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            animator.SetTrigger("jump");
+            animator.SetBool("isJumping", true);
+        }
 
-        // ===== CROUCH =====
-        animator.SetBool("isCrouching", isCrouching);
+        // ===== ANIMATION NORMAL =====
+        animator.SetBool("isRunning", isMoving && isRunning && !isMoveCrouch && !isCrouching);
+        animator.SetBool("isWalking", isMoving && !isRunning && !isMoveCrouch && !isCrouching);
 
-        // ===== ANIMATION =====
-        animator.SetBool("isRunning", isMoving && isRunning && !isCrouching);
-        animator.SetBool("isWalking", isMoving && !isRunning && !isCrouching);
-         if (Input.GetKeyDown(KeyCode.LeftControl))
-    {
-        isCrouching = !isCrouching; // toggle
-        animator.SetBool("isCrouching", isCrouching);
-    }
-    
-    
-// ===== AIM =====
-bool isAiming = Input.GetMouseButton(1); // giữ chuột phải
-animator.SetBool("isAiming", isAiming);
+        // ===== AIM =====
+        bool isAiming = Input.GetMouseButton(1);
+        animator.SetBool("isAiming", isAiming);
 
-// ===== SHOOT =====
-if (Input.GetMouseButtonDown(0) && isAiming)
-{
-    animator.SetTrigger("shoot");
-}
+        // ===== SHOOT =====
+        if (Input.GetMouseButtonDown(0) && isAiming)
+        {
+            animator.SetTrigger("shoot");
+        }
 
-// ===== ATTACK (chỉ khi KHÔNG aim) =====
-if (Input.GetMouseButtonDown(0) && !isAiming && !isCrouching)
-{
-    animator.SetTrigger("attack");
-}
+        // ===== ATTACK =====
+        if (Input.GetMouseButtonDown(0) && !isAiming && !isMoveCrouch && !isCrouching)
+        {
+            animator.SetTrigger("attack");
+        }
+
+        if (Input.GetKeyDown(KeyCode.K) && !isAiming && !isMoveCrouch && !isCrouching)
+        {
+            animator.SetTrigger("kick");
+        }
     }
 
-    // ===== KIỂM TRA CHẠM ĐẤT =====
     private void OnCollisionEnter(Collision collision)
     {
         if (collision.gameObject.CompareTag("Ground"))
