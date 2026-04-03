@@ -48,8 +48,12 @@ public class CameraManager : MonoBehaviour
     private Transform _localPlayerTransform;
     private Transform _currentSharedCameraPosition;
     private CameraMode _currentMode = CameraMode.Fixed;
+    
+    // Flag để biết đang chờ MinigameCamera setup shared camera
+    private bool _pendingSharedCameraMode = false;
 
     public CameraMode CurrentMode => _currentMode;
+    public bool IsPendingSharedCamera => _pendingSharedCameraMode;
     public Camera MainCamera => mainCamera;
     public CameraOrbit CameraOrbit => cameraOrbit;
     
@@ -122,6 +126,17 @@ public class CameraManager : MonoBehaviour
         // Tìm CameraOrbit trên camera mới
         cameraOrbit = mainCamera.GetComponent<CameraOrbit>();
         
+        // Nếu đang chờ shared camera mode, disable CameraOrbit và đợi MinigameCamera setup
+        if (_pendingSharedCameraMode)
+        {
+            if (cameraOrbit != null)
+            {
+                cameraOrbit.enabled = false;
+            }
+            Debug.Log($"[CameraManager] Re-initialized. Waiting for MinigameCamera to setup shared camera...");
+            return;
+        }
+        
         // Nếu đang ở First Person mode, đảm bảo CameraOrbit disabled
         if (_currentMode == CameraMode.FirstPerson && cameraOrbit != null)
         {
@@ -164,6 +179,9 @@ public class CameraManager : MonoBehaviour
 
     private void LateUpdate()
     {
+        // Không xử lý camera nếu đang chờ MinigameCamera setup
+        if (_pendingSharedCameraMode) return;
+        
         // Chỉ xử lý First Person trong LateUpdate
         if (_currentMode == CameraMode.FirstPerson && _localPlayerTransform != null)
         {
@@ -286,6 +304,12 @@ public class CameraManager : MonoBehaviour
             cameraOrbit.enabled = false;
         }
         
+        // Đảm bảo camera render tất cả layers
+        if (mainCamera != null)
+        {
+            mainCamera.cullingMask = -1; // Everything
+        }
+        
         // Lock cursor
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -320,6 +344,12 @@ public class CameraManager : MonoBehaviour
             cameraOrbit.SetYaw(_fpYaw);
         }
         
+        // Đảm bảo camera render tất cả layers
+        if (mainCamera != null)
+        {
+            mainCamera.cullingMask = -1; // Everything
+        }
+        
         // Lock cursor
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -352,6 +382,9 @@ public class CameraManager : MonoBehaviour
     /// <param name="lockCursor">Có lock cursor không (tùy gameplay của minigame)</param>
     public void SwitchToMinigameCamera(Transform cameraPosition = null, bool lockCursor = false)
     {
+        // Clear pending flag vì đã setup xong
+        _pendingSharedCameraMode = false;
+        
         _currentMode = CameraMode.Minigame;
         _currentSharedCameraPosition = cameraPosition;
 
@@ -368,11 +401,39 @@ public class CameraManager : MonoBehaviour
             mainCamera.transform.rotation = cameraPosition.rotation;
         }
         
+        // Đảm bảo camera render tất cả layers (tránh lỗi không thấy player)
+        if (mainCamera != null)
+        {
+            mainCamera.cullingMask = -1; // -1 = Everything (tất cả layers)
+        }
+        
+        // Hiện lại model của local player (quan trọng khi chuyển từ FirstPerson)
+        SetLocalPlayerModelVisible(true);
+        
         // Cursor setting tùy minigame
         Cursor.lockState = lockCursor ? CursorLockMode.Locked : CursorLockMode.None;
         Cursor.visible = !lockCursor;
 
         Debug.Log($"[CameraManager] Switched to Minigame Camera{(cameraPosition != null ? ": " + cameraPosition.name : "")}");
+    }
+
+    /// <summary>
+    /// Đặt flag chờ MinigameCamera setup shared camera
+    /// Gọi trước khi load scene minigame có useSharedCamera = true
+    /// </summary>
+    public void SetPendingSharedCameraMode(bool pending)
+    {
+        _pendingSharedCameraMode = pending;
+        
+        if (pending)
+        {
+            // Disable CameraOrbit ngay lập tức để tránh nó cập nhật camera
+            if (cameraOrbit != null)
+            {
+                cameraOrbit.enabled = false;
+            }
+            Debug.Log("[CameraManager] Set pending shared camera mode - waiting for MinigameCamera...");
+        }
     }
 
     /// <summary>

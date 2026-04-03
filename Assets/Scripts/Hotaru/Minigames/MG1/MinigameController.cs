@@ -438,5 +438,17 @@ public class MinigameController : NetworkBehaviour
         int index = playerIndex % spawnPoints.Length;
         return spawnPoints[index].position;
     }
+
+    /// <summary>
+    /// Lấy spawn rotation cho player
+    /// </summary>
+    public Quaternion GetSpawnRotation(int playerIndex)
+    {
+        if (spawnPoints == null || spawnPoints.Length == 0)
+            return Quaternion.identity;
+
+        int index = playerIndex % spawnPoints.Length;
+        return spawnPoints[index].rotation;
+    }
     #endregion
 }

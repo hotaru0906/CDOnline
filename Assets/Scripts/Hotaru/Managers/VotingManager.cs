@@ -65,6 +65,12 @@ public class VotingManager : NetworkBehaviour
     private bool hasVoted = false;
     private int localVoteIndex = -1;
     #endregion
+    
+    /// <summary>
+    /// Kiểm tra xem manager đã spawn và sẵn sàng chưa
+    /// Phải kiểm tra trước khi truy cập Networked properties
+    /// </summary>
+    public bool IsReady { get; private set; } = false;
 
     #region Networked Vote Tracking
     [Networked]
@@ -92,13 +98,14 @@ public class VotingManager : NetworkBehaviour
 
     public override void Spawned()
     {
+        IsReady = true;
         Debug.Log($"[VotingManager] Spawned. IsHost: {HasStateAuthority}");
     }
 
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
-        if (!IsVotingActive) return;
+        if (!IsReady || !IsVotingActive) return;
 
         // Update timer (host only)
         RemainingTime -= Runner.DeltaTime;
@@ -465,6 +472,9 @@ public class VotingManager : NetworkBehaviour
     /// <param name="index">Index minigame hoặc ROULETTE_OPTION_INDEX</param>
     public int GetVoteCount(int index)
     {
+        // Kiểm tra đã spawn chưa
+        if (!IsReady) return 0;
+        
         if (index == ROULETTE_OPTION_INDEX)
         {
             return RouletteVoteCount;

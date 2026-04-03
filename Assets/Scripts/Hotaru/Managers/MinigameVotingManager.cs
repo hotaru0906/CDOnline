@@ -44,6 +44,12 @@ public class MinigameVotingManager : NetworkBehaviour
     #region Events
     public event System.Action OnMinigameListUpdated;
     #endregion
+    
+    /// <summary>
+    /// Kiểm tra xem manager đã spawn và sẵn sàng chưa
+    /// Phải kiểm tra trước khi truy cập Networked properties
+    /// </summary>
+    public bool IsReady { get; private set; } = false;
 
     private void Awake()
     {
@@ -57,6 +63,7 @@ public class MinigameVotingManager : NetworkBehaviour
 
     public override void Spawned()
     {
+        IsReady = true;
         Debug.Log($"[MinigameVotingManager] Spawned. Total minigames: {allMinigames.Count}");
         
         if (HasStateAuthority)
@@ -73,6 +80,9 @@ public class MinigameVotingManager : NetworkBehaviour
     public List<MinigameData> GetAvailableMinigames()
     {
         List<MinigameData> available = new List<MinigameData>();
+        
+        // Kiểm tra xem đã spawn chưa
+        if (!IsReady) return available;
         
         for (int i = 0; i < AvailableCount; i++)
         {
@@ -91,6 +101,8 @@ public class MinigameVotingManager : NetworkBehaviour
     /// </summary>
     public int GetAvailableMinigameCount()
     {
+        // Kiểm tra xem đã spawn chưa trước khi truy cập Networked property
+        if (!IsReady) return 0;
         return AvailableCount;
     }
 
@@ -99,6 +111,9 @@ public class MinigameVotingManager : NetworkBehaviour
     /// </summary>
     public MinigameData GetMinigameByAvailableIndex(int availableIndex)
     {
+        // Kiểm tra xem đã spawn chưa
+        if (!IsReady) return null;
+        
         if (availableIndex < 0 || availableIndex >= AvailableCount)
             return null;
             
@@ -115,6 +130,12 @@ public class MinigameVotingManager : NetworkBehaviour
     /// </summary>
     public void MarkMinigamePlayed(int availableIndex)
     {
+        if (!IsReady)
+        {
+            Debug.LogWarning("[MinigameVotingManager] Cannot mark played - not spawned yet");
+            return;
+        }
+        
         if (!HasStateAuthority)
         {
             RPC_RequestMarkPlayed(availableIndex);
@@ -154,7 +175,7 @@ public class MinigameVotingManager : NetworkBehaviour
     /// </summary>
     public void PrepareNextVotingRound()
     {
-        if (!HasStateAuthority) return;
+        if (!HasStateAuthority || !IsReady) return;
 
         Debug.Log("[MinigameVotingManager] Preparing next voting round...");
 
@@ -206,7 +227,7 @@ public class MinigameVotingManager : NetworkBehaviour
     /// </summary>
     public void ResetPlayedMinigames()
     {
-        if (!HasStateAuthority) return;
+        if (!HasStateAuthority || !IsReady) return;
 
         Debug.Log("[MinigameVotingManager] Resetting played minigames");
         PlayedCount = 0;
@@ -223,6 +244,8 @@ public class MinigameVotingManager : NetworkBehaviour
     /// </summary>
     public bool IsMinigamePlayed(int actualIndex)
     {
+        if (!IsReady) return false;
+        
         for (int i = 0; i < PlayedCount; i++)
         {
             if (PlayedMinigameIndices.Get(i) == actualIndex)
@@ -239,7 +262,7 @@ public class MinigameVotingManager : NetworkBehaviour
     /// <summary>
     /// Lấy số minigame đã chơi
     /// </summary>
-    public int PlayedMinigameCount => PlayedCount;
+    public int PlayedMinigameCount => IsReady ? PlayedCount : 0;
     #endregion
 
     #region RPCs

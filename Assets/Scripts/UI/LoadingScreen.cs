@@ -10,6 +10,7 @@ using System.Collections;
 public class LoadingScreen : MonoBehaviour
 {
     [Header("UI References")]
+    [SerializeField] private Canvas canvas;
     [SerializeField] private CanvasGroup canvasGroup;
     [SerializeField] private TextMeshProUGUI loadingText;
     [SerializeField] private Slider loadingBar;
@@ -20,6 +21,7 @@ public class LoadingScreen : MonoBehaviour
     [SerializeField] private float barFillSpeed = 0.5f;
     [SerializeField] private float barFillSpeedFast = 2f; // Tốc độ nhanh khi hoàn thành
     [SerializeField] private float delayBeforeHide = 3f;
+    [SerializeField] private int sortingOrder = 32767; // Giá trị cao nhất để luôn ở trên
 
     private static LoadingScreen _instance;
     private bool _isShowing;
@@ -42,6 +44,19 @@ public class LoadingScreen : MonoBehaviour
         _instance = this;
         DontDestroyOnLoad(gameObject);
 
+        // Tìm Canvas nếu chưa assign
+        if (canvas == null)
+        {
+            canvas = GetComponent<Canvas>();
+            if (canvas == null)
+            {
+                canvas = GetComponentInChildren<Canvas>();
+            }
+        }
+
+        // Đảm bảo Canvas luôn ở trên cùng
+        SetupCanvasOverlay();
+
         // Start hidden
         if (canvasGroup != null)
         {
@@ -49,6 +64,26 @@ public class LoadingScreen : MonoBehaviour
             canvasGroup.blocksRaycasts = false;
         }
         gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// Setup Canvas để luôn render ở trên tất cả UI khác
+    /// </summary>
+    private void SetupCanvasOverlay()
+    {
+        if (canvas != null)
+        {
+            // Dùng ScreenSpaceOverlay để không phụ thuộc vào camera
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            // Sort order cao nhất để che tất cả canvas khác
+            canvas.sortingOrder = sortingOrder;
+            
+            Debug.Log($"[LoadingScreen] Canvas setup - RenderMode: {canvas.renderMode}, SortingOrder: {canvas.sortingOrder}");
+        }
+        else
+        {
+            Debug.LogWarning("[LoadingScreen] Canvas component not found!");
+        }
     }
 
     private void Update()
@@ -179,6 +214,9 @@ public class LoadingScreen : MonoBehaviour
         _targetProgress = 0f;
         
         gameObject.SetActive(true);
+
+        // Đảm bảo Canvas luôn ở trên cùng mỗi khi show
+        SetupCanvasOverlay();
 
         if (loadingText != null)
         {

@@ -711,12 +711,17 @@ public class GameManager : NetworkBehaviour
 
         if (CameraManager.Instance != null)
         {
-            if (!useSharedCamera)
+            if (useSharedCamera)
+            {
+                // Đặt flag để CameraManager biết đang chờ MinigameCamera setup
+                // Điều này ngăn FirstPerson/ThirdPerson camera override trong khi chờ scene load
+                CameraManager.Instance.SetPendingSharedCameraMode(true);
+            }
+            else
             {
                 // Minigame dùng Third Person camera (như gameplay bình thường)
                 CameraManager.Instance.SwitchToThirdPersonCamera();
             }
-            // Nếu useSharedCamera = true, MinigameCamera component trong scene sẽ xử lý
         }
     }
     protected virtual void HandleScoreboardState()

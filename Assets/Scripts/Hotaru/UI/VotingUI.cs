@@ -25,16 +25,52 @@ public class VotingUI : MonoBehaviour
 
     private void OnEnable()
     {
-        if (VotingManager.Instance != null)
+        // Kiểm tra cả VotingManager và MinigameVotingManager trước khi subscribe/setup
+        if (VotingManager.Instance != null && VotingManager.Instance.IsReady)
         {
             SubscribeToEvents();
         }
 
         if (!isInitialized)
         {
+            // Delay Setup nếu MinigameVotingManager hoặc VotingManager chưa ready
+            bool minigameReady = MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady;
+            bool votingReady = VotingManager.Instance != null && VotingManager.Instance.IsReady;
+            
+            if (minigameReady && votingReady)
+            {
+                Setup();
+            }
+            else
+            {
+                // Đợi cả hai managers ready rồi mới setup
+                StartCoroutine(WaitForManagers());
+            }
+        }
+        else if (VotingManager.Instance != null && VotingManager.Instance.IsReady)
+        {
+            // Chỉ gọi ResetUI khi VotingManager đã ready
+            ResetUI();
+        }
+    }
+    
+    private System.Collections.IEnumerator WaitForManagers()
+    {
+        // Đợi cả MinigameVotingManager và VotingManager ready
+        while (MinigameVotingManager.Instance == null || !MinigameVotingManager.Instance.IsReady ||
+               VotingManager.Instance == null || !VotingManager.Instance.IsReady)
+        {
+            yield return null;
+        }
+        
+        // Subscribe events
+        SubscribeToEvents();
+        
+        if (!isInitialized)
+        {
             Setup();
         }
-
+        
         ResetUI();
     }
 
@@ -123,7 +159,8 @@ public class VotingUI : MonoBehaviour
         }
 
         // Sync with current voting state if voting is already active
-        if (VotingManager.Instance != null && VotingManager.Instance.IsVotingActive)
+        // Kiểm tra IsReady trước khi truy cập Networked properties
+        if (VotingManager.Instance != null && VotingManager.Instance.IsReady && VotingManager.Instance.IsVotingActive)
         {
             UpdateTimer(VotingManager.Instance.RemainingTime);
 

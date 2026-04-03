@@ -69,7 +69,9 @@ public class PlayerModelSwitcher : NetworkBehaviour
             }
         }
         
-        Debug.Log($"[PlayerModelSwitcher] Switched to model {_currentIndex}");
+        // Thêm debug chi tiết
+        bool isLocal = Object != null && Object.HasInputAuthority;
+        Debug.Log($"[PlayerModelSwitcher] Switched to model {_currentIndex} | IsLocal: {isLocal} | PlayerName: {gameObject.name}");
     }
 
     private void NotifyAnimator()
@@ -110,10 +112,18 @@ public class PlayerModelSwitcher : NetworkBehaviour
 
     /// <summary>
     /// Ẩn/hiện model cho First Person mode
-    /// Chỉ ẩn model của local player
+    /// CHỈ được gọi cho local player - KHÔNG ẩn remote players
     /// </summary>
     public void SetModelVisible(bool visible)
     {
+        // QUAN TRỌNG: Chỉ ẩn model của local player
+        if (Object != null && !Object.HasInputAuthority)
+        {
+            // Remote player - KHÔNG ẩn, luôn hiển thị
+            Debug.Log($"[PlayerModelSwitcher] Skipping SetModelVisible for remote player");
+            return;
+        }
+        
         var activeModel = GetActiveModel();
         if (activeModel != null)
         {
@@ -124,7 +134,7 @@ public class PlayerModelSwitcher : NetworkBehaviour
                 renderer.enabled = visible;
             }
             
-            Debug.Log($"[PlayerModelSwitcher] Model visibility set to: {visible}");
+            Debug.Log($"[PlayerModelSwitcher] Local player model visibility set to: {visible}");
         }
     }
 
