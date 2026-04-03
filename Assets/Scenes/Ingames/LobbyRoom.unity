@@ -5226,6 +5226,74 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1514002246}
   m_CullTransparentMesh: 1
+--- !u!1 &1531518967
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1531518970}
+  - component: {fileID: 1531518969}
+  - component: {fileID: 1531518968}
+  m_Layer: 0
+  m_Name: Voting Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1531518968
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1531518967}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  SortKey: 4134388807
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 1531518969}
+  ForceRemoteRenderTimeframe: 0
+--- !u!114 &1531518969
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1531518967}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6ca21c256c187e7469ff977c532950c5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  allMinigames:
+  - {fileID: 11400000, guid: 42116482f6a56cd4680d23dd7988ef42, type: 2}
+  displayCount: 1
+  shuffleMinigames: 1
+--- !u!4 &1531518970
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1531518967}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -19.404114, y: -2.544289, z: -34.11708}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1704931855
 GameObject:
   m_ObjectHideFlags: 0
@@ -6715,11 +6783,7 @@ MonoBehaviour:
   cardPrefab: {fileID: 438325297388340317, guid: bcd80311153437a498f7a994adb14577, type: 3}
   timerText: {fileID: 1496677393}
   statusText: {fileID: 330820138}
-  voteWeightText: {fileID: 0}
-  rouletteOptionPanel: {fileID: 0}
-  rouletteButton: {fileID: 0}
-  rouletteVoteCountText: {fileID: 0}
-  minigameCount: 1
+  maxMinigameCount: 3
 --- !u!114 &2061393358
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9272,3 +9336,4 @@ SceneRoots:
   - {fileID: 615761375}
   - {fileID: 1849453274}
   - {fileID: 1103611807}
+  - {fileID: 1531518970}

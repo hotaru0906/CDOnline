@@ -224,7 +224,7 @@ public class GameManager : NetworkBehaviour
 
     #region Host-Only Game Flow Methods
     /// <summary>
-    /// Bắt đầu match - Flow mới: Random minigame đầu tiên (không vote)
+    /// Bắt đầu match - Vote chọn minigame ngay từ đầu
     /// </summary>
     public void StartMatch()
     {
@@ -244,8 +244,15 @@ public class GameManager : NetworkBehaviour
             RouletteManager.Instance.ResetForNewGame();
         }
 
-        // Bắt đầu với random minigame (không vote)
-        StartRandomMinigame();
+        // Reset MinigameVotingManager để chuẩn bị danh sách minigame mới
+        if (MinigameVotingManager.Instance != null)
+        {
+            MinigameVotingManager.Instance.ResetPlayedMinigames();
+            MinigameVotingManager.Instance.PrepareNextVotingRound();
+        }
+
+        // Vote chọn minigame ngay từ đầu
+        StartVoting(VotingType.MinigameOnly);
     }
 
     /// <summary>
@@ -310,7 +317,29 @@ public class GameManager : NetworkBehaviour
         CurrentMinigameIndex = minigameIndex;
         CurrentRound++;
 
-        Debug.Log("[GameManager] Calling ChangeState(Playing)");
+        // Vào Tutorial state trước, scene sẽ load trong HandleTutorialState
+        Debug.Log("[GameManager] Calling ChangeState(Tutorial)");
+        ChangeState(GameState.Tutorial);
+    }
+
+    /// <summary>
+    /// Chuyển từ Tutorial sang Playing - được gọi bởi MinigameController sau countdown
+    /// </summary>
+    public void StartPlayingState()
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[GameManager] Only Host can call StartPlayingState()");
+            return;
+        }
+
+        if (CurrentState != GameState.Tutorial)
+        {
+            Debug.LogWarning($"[GameManager] StartPlayingState called but current state is {CurrentState}");
+            return;
+        }
+
+        Debug.Log("[GameManager] Tutorial complete, changing to Playing state");
         ChangeState(GameState.Playing);
     }
 
@@ -581,26 +610,58 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[GameManager] Entered Tutorial state");
         
-        // TODO: Hiện UI Tutorial cho minigame hiện tại
-        // - Tạo TutorialUI panel với hướng dẫn của minigame
-        // - Hiện canvas với thông tin từ MinigameData.tutorialInfo
-        // - Auto-hide sau vài giây hoặc khi player nhấn nút
-        
-        // Tạm thời: Ẩn tất cả UI và cursor (sẽ sửa khi có TutorialUI)
+        // Ẩn tất cả UI panels
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         
-        // Camera tùy theo minigame setup
-        // Giữ nguyên camera mode hiện tại cho đến khi Playing
+        // Tạm thời disable player input (sẽ enable lại khi Playing)
+        if (PlayerInputHandler.Instance != null)
+        {
+            PlayerInputHandler.Instance.InputEnabled = false;
+        }
+
+        // HOST: Load scene minigame
+        if (!HasStateAuthority)
+        {
+            Debug.Log("[GameManager] Not host, waiting for scene load");
+            return;
+        }
+
+        // Lấy MinigameData và load scene
+        if (availableMinigames == null || CurrentMinigameIndex < 0 || CurrentMinigameIndex >= availableMinigames.Length)
+        {
+            Debug.LogError("[GameManager] No valid minigame data!");
+            return;
+        }
+
+        var minigameData = availableMinigames[CurrentMinigameIndex];
+        Debug.Log($"[GameManager] Loading minigame scene: {minigameData.sceneName}");
+
+        // Setup camera mode
+        RPC_SetupMinigameCamera(minigameData.useSharedCamera);
+
+        // Load scene - Fusion sẽ sync tất cả clients
+        int sceneIndex = GetSceneIndex(minigameData.sceneName);
+        var sceneRef = SceneRef.FromIndex(sceneIndex);
+        
+        if (sceneRef.IsValid)
+        {
+            Debug.Log($"[GameManager] Loading scene via Runner.LoadScene...");
+            Runner.LoadScene(sceneRef);
+        }
+        else
+        {
+            Debug.LogError($"[GameManager] Invalid scene: {minigameData.sceneName}");
+        }
     }
 
     protected virtual void HandlePlayingState()
     {
         Debug.Log("[GameManager] Entered Playing state");
 
-        // Ẩn tất cả UI
+        // Ẩn tất cả UI panels
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
         SetActiveUI(scoreboardUI, false);
@@ -618,41 +679,9 @@ public class GameManager : NetworkBehaviour
             CursorManager.Instance.HideCursor();
         }
 
-        if (!HasStateAuthority)
-        {
-            Debug.Log("[GameManager] Not host, skipping scene load");
-            return;
-        }
-
-        // Lấy MinigameData
-        Debug.Log($"[GameManager] availableMinigames: {(availableMinigames != null ? availableMinigames.Length.ToString() : "NULL")}, CurrentMinigameIndex: {CurrentMinigameIndex}");
-        
-        if (availableMinigames == null || CurrentMinigameIndex < 0 || CurrentMinigameIndex >= availableMinigames.Length)
-        {
-            Debug.LogError("[GameManager] No valid minigame data!");
-            return;
-        }
-
-        var minigameData = availableMinigames[CurrentMinigameIndex];
-        Debug.Log($"[GameManager] Loading minigame scene: {minigameData.sceneName}");
-
-        // Notify về camera mode trước khi load scene
-        RPC_SetupMinigameCamera(minigameData.useSharedCamera);
-
-        // Load scene - Fusion sẽ tự động sync tất cả clients
-        int sceneIndex = GetSceneIndex(minigameData.sceneName);
-        Debug.Log($"[GameManager] Scene index for '{minigameData.sceneName}': {sceneIndex}");
-        
-        var sceneRef = SceneRef.FromIndex(sceneIndex);
-        if (sceneRef.IsValid)
-        {
-            Debug.Log($"[GameManager] Loading scene via Runner.LoadScene...");
-            Runner.LoadScene(sceneRef);
-        }
-        else
-        {
-            Debug.LogError($"[GameManager] Invalid scene: {minigameData.sceneName}");
-        }
+        // Scene đã được load trong Tutorial state
+        // MinigameController sẽ xử lý logic game
+        Debug.Log("[GameManager] Playing state active - game is now running");
     }
 
     /// <summary>

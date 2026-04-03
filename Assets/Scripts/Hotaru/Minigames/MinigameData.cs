@@ -19,11 +19,10 @@ public class MinigameData : ScriptableObject
     [Tooltip("Nếu true: Dùng shared camera cho tất cả player. Nếu false: Mỗi player có camera riêng")]
     public bool useSharedCamera = false;
 
-    [Header("Tutorial")]
-    [Tooltip("Tutorial data cho minigame này")]
-    public TutorialData tutorialData;
-
     [Header("Game Settings")]
     [Tooltip("Thời gian chơi minigame (giây). 0 = không giới hạn")]
     public float timeLimit = 60f;
+    
+    [Tooltip("Thời gian hiển thị tutorial trước khi bắt đầu game (giây)")]
+    public float tutorialDuration = 5f;
 }
