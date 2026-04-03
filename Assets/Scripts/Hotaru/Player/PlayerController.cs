@@ -29,6 +29,9 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float externalForceDrag = 5f; // Tốc độ giảm dần external force
     [SerializeField] private float externalForceThreshold = 0.1f; // Ngưỡng để reset về 0
 
+    [Header("UI")]
+    [SerializeField] private GameObject crosshairUI;
+
     [Networked] public PlayerState CurrentState { get; private set; }
     [Networked] private Vector3 ExternalVelocity { get; set; } // Lực từ bên ngoài (obstacle, knockback)
     [Networked] private float AttackTimer { get; set; }
@@ -101,7 +104,16 @@ public class PlayerController : NetworkBehaviour
             
             _cameraTransform = Camera.main?.transform;
             
+            // Crosshair sẽ được update trong Render() dựa trên camera mode
+            UpdateCrosshairVisibility();
+            
             Debug.Log("[PlayerController] Local player spawned and camera activated");
+        }
+        else
+        {
+            // Tắt crosshair cho player khác
+            if (crosshairUI != null)
+                crosshairUI.SetActive(false);
         }
     }
 
@@ -322,6 +334,9 @@ public class PlayerController : NetworkBehaviour
         // Remote players sẽ được sync rotation qua NetworkTransform hoặc không cần xoay local
         if (!HasInputAuthority) return;
         
+        // Update crosshair visibility dựa trên camera mode
+        UpdateCrosshairVisibility();
+        
         if (CameraManager.Instance == null) return;
         
         // First Person: Player body luôn xoay theo hướng camera nhìn
@@ -400,6 +415,23 @@ public class PlayerController : NetworkBehaviour
     /// </summary>
     private bool _isFrozen;
     public bool IsFrozen => _isFrozen;
+
+    /// <summary>
+    /// Update crosshair visibility based on camera mode
+    /// Crosshair chỉ hiển thị ở First Person mode
+    /// </summary>
+    private void UpdateCrosshairVisibility()
+    {
+        if (crosshairUI == null) return;
+        
+        bool shouldShow = CameraManager.Instance != null && 
+                          CameraManager.Instance.CurrentMode == CameraMode.FirstPerson;
+        
+        if (crosshairUI.activeSelf != shouldShow)
+        {
+            crosshairUI.SetActive(shouldShow);
+        }
+    }
 
     public void SetFrozen(bool frozen)
     {

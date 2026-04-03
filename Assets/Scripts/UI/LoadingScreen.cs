@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 
 /// <summary>
 /// Simple loading screen manager using prefab from Resources.
@@ -11,16 +12,24 @@ public class LoadingScreen : MonoBehaviour
     [Header("UI References")]
     [SerializeField] private CanvasGroup canvasGroup;
     [SerializeField] private TextMeshProUGUI loadingText;
-    //[SerializeField] private Image loadingIcon;
+    [SerializeField] private Slider loadingBar;
+    [SerializeField] private TextMeshProUGUI percentText;
 
     [Header("Settings")]
     [SerializeField] private float fadeSpeed = 3f;
-    //[SerializeField] private bool rotateIcon = true;
-    //[SerializeField] private float rotateSpeed = 200f;
+    [SerializeField] private float barFillSpeed = 0.5f;
+    [SerializeField] private float barFillSpeedFast = 2f; // Tốc độ nhanh khi hoàn thành
+    [SerializeField] private float delayBeforeHide = 3f;
 
     private static LoadingScreen _instance;
     private bool _isShowing;
     private float _targetAlpha;
+    
+    // Loading progress
+    private float _currentProgress;
+    private float _targetProgress;
+    private bool _isComplete;
+    private Coroutine _hideCoroutine;
 
     private void Awake()
     {
@@ -58,11 +67,35 @@ public class LoadingScreen : MonoBehaviour
             }
         }
 
-        // Rotate loading icon
-        // if (rotateIcon && loadingIcon != null && _isShowing)
-        // {
-        //     loadingIcon.transform.Rotate(0f, 0f, -rotateSpeed * Time.unscaledDeltaTime);
-        // }
+        // Update loading bar progress
+        if (_isShowing)
+        {
+            UpdateProgress();
+        }
+    }
+
+    private void UpdateProgress()
+    {
+        // Smoothly move current progress towards target
+        // Dùng tốc độ nhanh khi đã complete
+        float speed = _isComplete ? barFillSpeedFast : barFillSpeed;
+        
+        if (_currentProgress < _targetProgress)
+        {
+            _currentProgress = Mathf.MoveTowards(_currentProgress, _targetProgress, speed * Time.unscaledDeltaTime);
+        }
+
+        // Update UI
+        if (loadingBar != null)
+        {
+            loadingBar.value = _currentProgress;
+        }
+
+        if (percentText != null)
+        {
+            int percent = Mathf.RoundToInt(_currentProgress * 100f);
+            percentText.text = $"{percent}%";
+        }
     }
 
     private void OnDestroy()
@@ -88,13 +121,26 @@ public class LoadingScreen : MonoBehaviour
     }
 
     /// <summary>
-    /// Hide loading screen.
+    /// Hide loading screen with delay after reaching 100%.
     /// </summary>
     public static void Hide()
     {
         if (_instance != null)
         {
-            _instance.HideInternal();
+            _instance.CompleteAndHide();
+        }
+    }
+
+    /// <summary>
+    /// Update loading progress (0-1). Sẽ bị giới hạn ở 80% cho đến khi gọi Hide().
+    /// </summary>
+    public static void SetProgress(float progress)
+    {
+        if (_instance != null)
+        {
+            // Giới hạn progress ở 80% cho đến khi complete
+            float clampedProgress = Mathf.Clamp01(progress) * 0.8f;
+            _instance._targetProgress = Mathf.Max(_instance._targetProgress, clampedProgress);
         }
     }
 
@@ -120,12 +166,34 @@ public class LoadingScreen : MonoBehaviour
 
     private void ShowInternal(string message)
     {
+        // Cancel any pending hide
+        if (_hideCoroutine != null)
+        {
+            StopCoroutine(_hideCoroutine);
+            _hideCoroutine = null;
+        }
+
         _isShowing = true;
+        _isComplete = false;
+        _currentProgress = 0f;
+        _targetProgress = 0f;
+        
         gameObject.SetActive(true);
 
         if (loadingText != null)
         {
             loadingText.text = message;
+        }
+
+        // Reset loading bar
+        if (loadingBar != null)
+        {
+            loadingBar.value = 0f;
+        }
+
+        if (percentText != null)
+        {
+            percentText.text = "0%";
         }
 
         if (canvasGroup != null)
@@ -134,7 +202,58 @@ public class LoadingScreen : MonoBehaviour
             _targetAlpha = 1f;
         }
 
+        // Auto progress đến 50-60% trong khi chờ
+        StartCoroutine(AutoProgressCoroutine());
+
         Debug.Log($"[LoadingScreen] Show: {message}");
+    }
+
+    private IEnumerator AutoProgressCoroutine()
+    {
+        // Tự động tăng progress đến 50-60% trong khi chờ loading
+        float autoTarget = Random.Range(0.5f, 0.6f);
+        
+        while (_isShowing && !_isComplete && _targetProgress < autoTarget)
+        {
+            _targetProgress += 0.02f;
+            yield return new WaitForSecondsRealtime(0.1f);
+        }
+    }
+
+    private void CompleteAndHide()
+    {
+        if (!_isShowing) return;
+        
+        _isComplete = true;
+        _targetProgress = 1f; // Set target về 100%
+        
+        // Start coroutine để chờ bar đầy rồi mới hide
+        if (_hideCoroutine != null)
+        {
+            StopCoroutine(_hideCoroutine);
+        }
+        _hideCoroutine = StartCoroutine(DelayedHideCoroutine());
+    }
+
+    private IEnumerator DelayedHideCoroutine()
+    {
+        // Chờ progress bar đạt 100%
+        while (_currentProgress < 0.99f)
+        {
+            yield return null;
+        }
+
+        // Đảm bảo hiển thị 100%
+        _currentProgress = 1f;
+        if (loadingBar != null) loadingBar.value = 1f;
+        if (percentText != null) percentText.text = "100%";
+
+        // Delay thêm 3-5s
+        float delay = Random.Range(delayBeforeHide, delayBeforeHide + 2f);
+        yield return new WaitForSecondsRealtime(delay);
+
+        // Hide
+        HideInternal();
     }
 
     private void HideInternal()
