@@ -16,6 +16,7 @@ public class PlayerAnimator : NetworkBehaviour
     [SerializeField] private string isRunningParam = "IsRunning";
     [SerializeField] private string jumpTrigger = "Jump";
     [SerializeField] private string attackTrigger = "Attack";
+    [SerializeField] private string isSittingParam = "isSitting";
 
     private PlayerController _playerController;
     private bool _isAttacking = false;
@@ -70,9 +71,11 @@ public class PlayerAnimator : NetworkBehaviour
         // Giống PlayerMovement1: SetBool cho Walking và Running
         bool isWalking = state == PlayerState.Walking;
         bool isRunning = state == PlayerState.Running;
+        bool isCrouching = state == PlayerState.Crouching;
 
         animator.SetBool(isWalkingParam, isWalking && !_isAttacking);
         animator.SetBool(isRunningParam, isRunning && !_isAttacking);
+        animator.SetBool(isSittingParam, isCrouching);
     }
 
     /// <summary>

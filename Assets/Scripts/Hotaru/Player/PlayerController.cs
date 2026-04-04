@@ -8,7 +8,8 @@ public enum PlayerState
     Running,
     Jumping,
     Falling,
-    Attacking
+    Attacking,
+    Crouching
 }
 
 [RequireComponent(typeof(NetworkCharacterController))]
@@ -17,6 +18,7 @@ public class PlayerController : NetworkBehaviour
     [Header("Movement Settings")]
     [SerializeField] private float walkSpeed = 5f;
     [SerializeField] private float runSpeed = 9f;
+    [SerializeField] private float crouchSpeed = 2.5f;
     [SerializeField] private float rotationSpeed = 15f;
 
     [Header("Ground Check")]
@@ -36,6 +38,7 @@ public class PlayerController : NetworkBehaviour
     [Networked] private Vector3 ExternalVelocity { get; set; } // Lực từ bên ngoài (obstacle, knockback)
     [Networked] private float AttackTimer { get; set; }
     [Networked] private NetworkBool IsRunning { get; set; }
+    [Networked] private NetworkBool IsCrouching { get; set; }
     [Networked] private NetworkBool IsMoving { get; set; } // Có input di chuyển không
     [Networked] private float GroundedTimer { get; set; } // Timer để buffer ground check
 
@@ -182,8 +185,20 @@ public class PlayerController : NetworkBehaviour
         // Check running (giữ Shift)
         IsRunning = input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
         
-        // Tốc độ: chạy nếu đang giữ Shift VÀ đang di chuyển
-        float targetSpeed = IsMoving ? (IsRunning ? runSpeed : walkSpeed) : 0f;
+        // Check crouching (giữ C hoặc Left Ctrl)
+        IsCrouching = input.IsButtonPressed(PlayerInputData.BUTTON_CROUCH);
+        
+        // Tốc độ: ngồi < đi < chạy
+        float targetSpeed = 0f;
+        if (IsMoving)
+        {
+            if (IsCrouching)
+                targetSpeed = crouchSpeed;
+            else if (IsRunning)
+                targetSpeed = runSpeed;
+            else
+                targetSpeed = walkSpeed;
+        }
 
         // Tính final movement bao gồm external velocity
         Vector3 finalMovement = moveDirection.normalized * targetSpeed;
@@ -317,6 +332,11 @@ public class PlayerController : NetworkBehaviour
         if (!isBufferedGrounded)
         {
             CurrentState = velocity.y > 0.2f ? PlayerState.Jumping : PlayerState.Falling;
+        }
+        else if (IsCrouching)
+        {
+            // Crouching có priority cao hơn walking/running
+            CurrentState = PlayerState.Crouching;
         }
         else if (IsMoving) // Dựa vào input, không dựa vào velocity
         {

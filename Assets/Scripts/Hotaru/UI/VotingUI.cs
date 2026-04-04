@@ -155,7 +155,7 @@ public class VotingUI : MonoBehaviour
 
         if (statusText != null)
         {
-            statusText.text = "Kéo xuống để vote minigame!";
+            statusText.text = "Click or drag down to vote!";
         }
 
         // Sync with current voting state if voting is already active
@@ -201,7 +201,7 @@ public class VotingUI : MonoBehaviour
 
         if (statusText != null)
         {
-            statusText.text = "Đã vote!";
+            statusText.text = "Voted!";
         }
     }
 
@@ -267,7 +267,7 @@ public class VotingUI : MonoBehaviour
                         winnerName = minigameData.minigameName;
                     }
                 }
-                statusText.text = $"🎮 Bắt đầu: {winnerName}!";
+                statusText.text = $"Starting: {winnerName}!";
             }
         }
 

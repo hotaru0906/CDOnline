@@ -49,12 +49,19 @@ public class PlayerModelSwitcher : NetworkBehaviour
         // Notify PlayerAnimator về model mới
         NotifyAnimator();
         
-        // Nếu là local player và đang ở First Person, ẩn model
+        // Nếu là local player và đang ở First Person (KHÔNG phải Minigame), ẩn model
         if (Object != null && Object.HasInputAuthority && CameraManager.Instance != null)
         {
-            if (CameraManager.Instance.CurrentMode == CameraMode.FirstPerson)
+            var mode = CameraManager.Instance.CurrentMode;
+            // Chỉ ẩn khi THỰC SỰ ở First Person, không ẩn khi đang chờ switch sang Minigame
+            if (mode == CameraMode.FirstPerson && !CameraManager.Instance.IsPendingSharedCamera)
             {
                 SetModelVisible(false);
+            }
+            else
+            {
+                // Đảm bảo model được hiện khi không ở First Person
+                SetModelVisible(true);
             }
         }
     }

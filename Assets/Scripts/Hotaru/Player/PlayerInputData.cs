@@ -11,6 +11,7 @@ public struct PlayerInputData : INetworkInput
     public const int BUTTON_JUMP = 0;
     public const int BUTTON_PUNCH = 1;
     public const int BUTTON_SLIDE = 2;
+    public const int BUTTON_CROUCH = 3;
 
     public bool IsButtonPressed(int button) => Buttons.IsSet(button);
 }

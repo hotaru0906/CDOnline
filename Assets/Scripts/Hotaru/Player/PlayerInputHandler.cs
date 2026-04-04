@@ -11,6 +11,7 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
     private Vector2 _moveInput;
     private NetworkButtons _buttons;
     private bool _isRunning; // Trạng thái giữ Shift
+    private bool _isCrouching; // Trạng thái ngồi (C hoặc Left Ctrl)
 
     // Flag to disable input when UI is active (e.g., typing in text field)
     public bool InputEnabled { get; set; } = true;
@@ -56,6 +57,9 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
 
         // Run dùng GetKey (giữ Left Shift) - lưu riêng
         _isRunning = Input.GetKey(KeyCode.LeftShift);
+        
+        // Crouch dùng GetKey (giữ C hoặc Left Ctrl)
+        _isCrouching = Input.GetKey(KeyCode.C) || Input.GetKey(KeyCode.LeftControl);
     }
 
     public void OnInput(NetworkRunner runner, NetworkInput input)
@@ -65,10 +69,12 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
         // - Using PlayerRef parameter to identify which player needs input
         // - Or having separate input handlers per local player
 
-                // Set running button từ trạng thái hiện tại (không bị ảnh hưởng bởi reset)
+                // Set running/crouch button từ trạng thái hiện tại (không bị ảnh hưởng bởi reset)
         NetworkButtons finalButtons = _buttons;
         if (_isRunning)
             finalButtons.Set(PlayerInputData.BUTTON_SLIDE, true);
+        if (_isCrouching)
+            finalButtons.Set(PlayerInputData.BUTTON_CROUCH, true);
 
         // Lấy camera forward direction để gửi lên server
         Vector3 cameraForward = Vector3.forward;
