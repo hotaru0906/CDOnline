@@ -2799,6 +2799,7 @@ GameObject:
   - component: {fileID: -4535117371777528117}
   - component: {fileID: 5650056082442984469}
   - component: {fileID: -5116773515047285194}
+  - component: {fileID: 7191267470197781851}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -2850,6 +2851,7 @@ MonoBehaviour:
   - {fileID: -4535117371777528117}
   - {fileID: 5650056082442984469}
   - {fileID: -5116773515047285194}
+  - {fileID: 7191267470197781851}
   ForceRemoteRenderTimeframe: 0
 --- !u!143 &5773763795247233088
 CharacterController:
@@ -2875,7 +2877,7 @@ CharacterController:
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 1, z: 0}
+  m_Center: {x: 0, y: 1.15, z: 0}
 --- !u!114 &3244693939338179132
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2890,9 +2892,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   walkSpeed: 3
   runSpeed: 6
+  crouchSpeed: 2.5
   rotationSpeed: 15
   groundBufferTime: 0.15
   attackDuration: 0.7
+  crouchScale: 0.75
+  crouchScaleSpeed: 10
   externalForceDrag: 5
   externalForceThreshold: 0.1
   crosshairUI: {fileID: 0}
@@ -2969,6 +2974,7 @@ MonoBehaviour:
   isRunningParam: IsRunning
   jumpTrigger: Jump
   attackTrigger: Attack
+  isSittingParam: isSitting
 --- !u!114 &5650056082442984469
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3011,6 +3017,19 @@ MonoBehaviour:
   promptPrefab: {fileID: 7194082649025018885, guid: 35363317f971aee4a86acb154e664d3f, type: 3}
   playerInfoKey: 9
   showDebugRay: 1
+--- !u!114 &7191267470197781851
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9043744698373994564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e62c3013324b4c44f9b6367a57627cbc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _CurrentSeatIndex: -1
 --- !u!1 &9077173086571457645
 GameObject:
   m_ObjectHideFlags: 0

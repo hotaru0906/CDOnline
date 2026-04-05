@@ -12,6 +12,18 @@ public enum PlayerState
     Crouching
 }
 
+/// <summary>
+/// Các hành động có thể bị giới hạn bởi MinigameData
+/// </summary>
+public enum MinigameAction
+{
+    Move,
+    Jump,
+    Crouch,
+    Attack,
+    Run
+}
+
 [RequireComponent(typeof(NetworkCharacterController))]
 public class PlayerController : NetworkBehaviour
 {
@@ -26,6 +38,10 @@ public class PlayerController : NetworkBehaviour
 
     [Header("Attack Settings")]
     [SerializeField] private float attackDuration = 0.7f;
+
+    [Header("Crouch Settings")]
+    [SerializeField] private float crouchScale = 0.75f; // Scale khi crouch (0.75 = 75% kích thước)
+    [SerializeField] private float crouchScaleSpeed = 10f; // Tốc độ scale
 
     [Header("External Force Settings")]
     [SerializeField] private float externalForceDrag = 5f; // Tốc độ giảm dần external force
@@ -50,11 +66,17 @@ public class PlayerController : NetworkBehaviour
     private Transform _cameraTransform;
     private CameraOrbit _cameraOrbit;
     private PlayerAnimator _playerAnimator;
+    private Vector3 _normalScale;
+    private Vector3 _crouchScale;
 
     private void Awake()
     {
         _networkCC = GetComponent<NetworkCharacterController>();
         _playerAnimator = GetComponent<PlayerAnimator>();
+        
+        // Lưu scale gốc và tính scale crouch
+        _normalScale = transform.localScale;
+        _crouchScale = new Vector3(_normalScale.x, _normalScale.y * crouchScale, _normalScale.z);
     }
 
     public override void Spawned()
@@ -67,7 +89,7 @@ public class PlayerController : NetworkBehaviour
             if (CameraManager.Instance != null)
             {
                 CameraManager.Instance.RegisterLocalPlayer(transform);
-                
+
                 // Chọn camera mode dựa trên GameState hiện tại
                 if (GameManager.Instance != null)
                 {
@@ -79,8 +101,20 @@ public class PlayerController : NetworkBehaviour
                     }
                     else if (state == GameState.Playing)
                     {
-                        // Third Person cho Minigame (trừ khi dùng shared camera)
-                        CameraManager.Instance.SwitchToThirdPersonCamera();
+                        // Kiểm tra setting từ MinigameData
+                        var minigameData = GameManager.Instance.CurrentMinigameData;
+                        if (minigameData != null && !minigameData.useSharedCamera)
+                        {
+                            if (minigameData.useThirdPersonCamera)
+                                CameraManager.Instance.SwitchToThirdPersonCamera();
+                            else
+                                CameraManager.Instance.SwitchToFirstPersonCamera();
+                        }
+                        else
+                        {
+                            // Default: Third Person cho Minigame
+                            CameraManager.Instance.SwitchToThirdPersonCamera();
+                        }
                     }
                     else
                     {
@@ -93,23 +127,23 @@ public class PlayerController : NetworkBehaviour
                     // Fallback: First Person nếu không có GameManager
                     CameraManager.Instance.SwitchToFirstPersonCamera();
                 }
-                
+
                 // Lấy reference từ CameraManager
                 _cameraOrbit = CameraManager.Instance.CameraOrbit;
             }
-            
+
             // Fallback: tìm trực tiếp trên Main Camera
             if (_cameraOrbit == null)
             {
                 _cameraOrbit = Camera.main?.GetComponent<CameraOrbit>();
                 _cameraOrbit?.SetTarget(transform);
             }
-            
+
             _cameraTransform = Camera.main?.transform;
-            
+
             // Crosshair sẽ được update trong Render() dựa trên camera mode
             UpdateCrosshairVisibility();
-            
+
             Debug.Log("[PlayerController] Local player spawned and camera activated");
         }
         else
@@ -176,18 +210,25 @@ public class PlayerController : NetworkBehaviour
             return;
         }
 
+        // Kiểm tra minigame có cho phép di chuyển không
+        bool canMoveInMinigame = CanPerformAction(MinigameAction.Move);
+
         // Dùng camera direction từ input (đã được client gửi lên)
-        Vector3 moveDirection = CalculateMoveDirection(input.MoveDirection, input.CameraForward);
-        
+        Vector3 moveDirection = canMoveInMinigame 
+            ? CalculateMoveDirection(input.MoveDirection, input.CameraForward) 
+            : Vector3.zero;
+
         // Check có input di chuyển không
         IsMoving = moveDirection.magnitude > 0.01f;
-        
-        // Check running (giữ Shift)
-        IsRunning = input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
-        
-        // Check crouching (giữ C hoặc Left Ctrl)
-        IsCrouching = input.IsButtonPressed(PlayerInputData.BUTTON_CROUCH);
-        
+
+        // Check running (giữ Shift) - kiểm tra canRun
+        bool canRunInMinigame = CanPerformAction(MinigameAction.Run);
+        IsRunning = canRunInMinigame && input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
+
+        // Check crouching (giữ C hoặc Left Ctrl) - kiểm tra canCrouch
+        bool canCrouchInMinigame = CanPerformAction(MinigameAction.Crouch);
+        IsCrouching = canCrouchInMinigame && input.IsButtonPressed(PlayerInputData.BUTTON_CROUCH);
+
         // Tốc độ: ngồi < đi < chạy
         float targetSpeed = 0f;
         if (IsMoving)
@@ -202,7 +243,7 @@ public class PlayerController : NetworkBehaviour
 
         // Tính final movement bao gồm external velocity
         Vector3 finalMovement = moveDirection.normalized * targetSpeed;
-        
+
         // Thêm external velocity (lực đẩy từ obstacle)
         finalMovement += ExternalVelocity;
 
@@ -229,7 +270,7 @@ public class PlayerController : NetworkBehaviour
 
         // Decay external velocity
         Vector3 decay = ExternalVelocity.normalized * externalForceDrag * Runner.DeltaTime;
-        
+
         if (decay.sqrMagnitude >= ExternalVelocity.sqrMagnitude)
         {
             ExternalVelocity = Vector3.zero;
@@ -241,26 +282,47 @@ public class PlayerController : NetworkBehaviour
     }
 
     /// <summary>
-    /// Áp dụng lực từ bên ngoài (obstacle, knockback)
+    /// Áp dụng lực từ bên ngoài (obstacle, knockback) - HOST ONLY
     /// </summary>
     public void ApplyExternalForce(Vector3 force)
     {
         if (!HasStateAuthority) return;
-        
+
         ExternalVelocity += force;
         Debug.Log($"[PlayerController] Applied external force: {force}, total: {ExternalVelocity}");
+    }
+    
+    /// <summary>
+    /// Áp dụng knockback - gọi từ local player, RPC đến host
+    /// </summary>
+    public void ApplyKnockback(Vector3 force)
+    {
+        if (Object.HasInputAuthority)
+        {
+            RPC_RequestKnockback(force);
+        }
+    }
+    
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_RequestKnockback(Vector3 force)
+    {
+        ExternalVelocity += force;
+        Debug.Log($"[PlayerController] Knockback applied: {force}, total: {ExternalVelocity}");
     }
 
     private void HandleJump(PlayerInputData input)
     {
+        // Kiểm tra minigame có cho phép nhảy không
+        if (!CanPerformAction(MinigameAction.Jump)) return;
+        
         // Coyote time - cho phép nhảy trong buffer time sau khi rời mặt đất
         bool canJump = _networkCC.Grounded || GroundedTimer > 0;
-        
+
         if (input.IsButtonPressed(PlayerInputData.BUTTON_JUMP) && canJump)
         {
             _networkCC.Jump();
             GroundedTimer = 0; // Reset buffer khi đã nhảy
-            
+
             // Trigger jump animation
             if (_playerAnimator != null)
             {
@@ -271,14 +333,17 @@ public class PlayerController : NetworkBehaviour
 
     private void HandleAttack(PlayerInputData input)
     {
+        // Kiểm tra minigame có cho phép tấn công không
+        if (!CanPerformAction(MinigameAction.Attack)) return;
+        
         // Cho phép attack trong buffer time
         bool canAttack = _networkCC.Grounded || GroundedTimer > 0;
-        
+
         if (input.IsButtonPressed(PlayerInputData.BUTTON_PUNCH) && canAttack)
         {
             CurrentState = PlayerState.Attacking;
             AttackTimer = attackDuration;
-            
+
             // Trigger animation
             if (_playerAnimator != null)
             {
@@ -296,10 +361,10 @@ public class PlayerController : NetworkBehaviour
         Vector3 forward = cameraForward;
         if (forward.sqrMagnitude < 0.01f)
             forward = Vector3.forward;
-        
+
         forward.y = 0f;
         forward.Normalize();
-        
+
         // Tính right từ forward
         Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
 
@@ -329,6 +394,12 @@ public class PlayerController : NetworkBehaviour
         // Buffered ground check - vẫn coi như grounded nếu còn trong buffer time
         bool isBufferedGrounded = isGrounded || GroundedTimer > 0;
 
+        // Cập nhật hitbox crouch - chỉ khi đang ở trên mặt đất và không nhảy/rơi
+        if (isBufferedGrounded)
+        {
+            UpdateCrouchHitbox(IsCrouching);
+        }
+
         if (!isBufferedGrounded)
         {
             CurrentState = velocity.y > 0.2f ? PlayerState.Jumping : PlayerState.Falling;
@@ -353,19 +424,19 @@ public class PlayerController : NetworkBehaviour
         // CHỈ xử lý rotation cho LOCAL player (HasInputAuthority)
         // Remote players sẽ được sync rotation qua NetworkTransform hoặc không cần xoay local
         if (!HasInputAuthority) return;
-        
+
         // Update crosshair visibility dựa trên camera mode
         UpdateCrosshairVisibility();
-        
+
         if (CameraManager.Instance == null) return;
-        
+
         // First Person: Player body luôn xoay theo hướng camera nhìn
         if (CameraManager.Instance.CurrentMode == CameraMode.FirstPerson)
         {
             RotateToYaw(CameraManager.Instance.FPYaw);
             return;
         }
-        
+
         // Third Person: CHỈ xoay khi đang di chuyển (không xoay khi đứng yên)
         // Điều này cho phép xoay camera quanh player để ngắm model
         if (CameraManager.Instance.CurrentMode == CameraMode.ThirdPerson)
@@ -443,10 +514,10 @@ public class PlayerController : NetworkBehaviour
     private void UpdateCrosshairVisibility()
     {
         if (crosshairUI == null) return;
-        
-        bool shouldShow = CameraManager.Instance != null && 
+
+        bool shouldShow = CameraManager.Instance != null &&
                           CameraManager.Instance.CurrentMode == CameraMode.FirstPerson;
-        
+
         if (crosshairUI.activeSelf != shouldShow)
         {
             crosshairUI.SetActive(shouldShow);
@@ -457,7 +528,7 @@ public class PlayerController : NetworkBehaviour
     {
         _isFrozen = frozen;
         Debug.Log($"[PlayerController] Player {Object.InputAuthority} frozen: {frozen}");
-        
+
         if (frozen)
         {
             // Reset velocity khi freeze
@@ -476,6 +547,53 @@ public class PlayerController : NetworkBehaviour
         }
         ExternalVelocity = Vector3.zero;
     }
+
+    /// <summary>
+    /// Điều chỉnh scale của player khi crouch
+    /// Scale Y nhỏ lại sẽ làm CharacterController hitbox nhỏ theo
+    /// </summary>
+    private void UpdateCrouchHitbox(bool crouching)
+    {
+        Vector3 targetScale = crouching ? _crouchScale : _normalScale;
+        
+        // Lerp smooth scale
+        transform.localScale = Vector3.Lerp(
+            transform.localScale, 
+            targetScale, 
+            crouchScaleSpeed * Runner.DeltaTime
+        );
+    }
+
+    #region Minigame Action Check
+    /// <summary>
+    /// Kiểm tra xem hành động có được phép trong minigame hiện tại không
+    /// Nếu không trong minigame (Playing state), luôn trả về true
+    /// </summary>
+    private bool CanPerformAction(MinigameAction action)
+    {
+        // Không trong Playing state -> cho phép tất cả
+        if (GameManager.Instance == null)
+        {
+            return true;
+        }
+        
+        if (GameManager.Instance.CurrentState != GameState.Playing)
+        {
+            return true;
+        }
+        
+        // Đọc từ synced Networked properties (đã được host sync)
+        return action switch
+        {
+            MinigameAction.Move => GameManager.Instance.MG_CanMove,
+            MinigameAction.Jump => GameManager.Instance.MG_CanJump,
+            MinigameAction.Crouch => GameManager.Instance.MG_CanCrouch,
+            MinigameAction.Attack => GameManager.Instance.MG_CanAttack,
+            MinigameAction.Run => GameManager.Instance.MG_CanRun,
+            _ => true
+        };
+    }
+    #endregion
 
     private void OnDrawGizmosSelected()
     {

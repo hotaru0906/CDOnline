@@ -1,6 +1,7 @@
 using Fusion;
 using UnityEngine;
 using System;
+using System.Collections;
 
 public enum GameState
 {
@@ -32,10 +33,14 @@ public class GameManager : NetworkBehaviour
     #region UI References
     [Header("UI Panels (Auto-found via UIPanel component)")]
     [SerializeField] private GameObject lobbyUI;
-    [SerializeField] private GameObject votingUI;
+    [SerializeField] private GameObject votingUI;           // UI vote chọn minigame (MinigameOnly)
+    [SerializeField] private GameObject rouletteVotingUI;   // UI vote Roulette/Minigame (RouletteOrMinigame)
     [SerializeField] private GameObject scoreboardUI;
     [SerializeField] private GameObject resultUI;
-    // Roulette không dùng UI Panel, xử lý bằng gameplay 3D
+    
+    [Header("Scoreboard Settings")]
+    [SerializeField] private float scoreboardDisplayDuration = 3f; // Thời gian hiển thị scoreboard trước khi chuyển sang Voting
+    private Coroutine _scoreboardCoroutine;
     #endregion
 
     #region Minigame Data
@@ -67,6 +72,44 @@ public class GameManager : NetworkBehaviour
     /// </summary>
     [Networked]
     public int FinalWinnerId { get; private set; } = -1;
+    
+    #region Synced Minigame Settings (từ MinigameData, sync cho tất cả clients)
+    [Networked] public NetworkBool MG_CanMove { get; private set; } = true;
+    [Networked] public NetworkBool MG_CanJump { get; private set; } = true;
+    [Networked] public NetworkBool MG_CanCrouch { get; private set; } = true;
+    [Networked] public NetworkBool MG_CanAttack { get; private set; } = true;
+    [Networked] public NetworkBool MG_CanRun { get; private set; } = true;
+    [Networked] public NetworkBool MG_AllowRespawn { get; private set; } = true;
+    #endregion
+    #endregion
+
+    #region Public Properties
+    /// <summary>
+    /// Lấy MinigameData của minigame hiện tại
+    /// </summary>
+    public MinigameData CurrentMinigameData
+    {
+        get
+        {
+            if (CurrentMinigameIndex < 0)
+                return null;
+            
+            // Ưu tiên từ MinigameVotingManager
+            if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+            {
+                var data = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(CurrentMinigameIndex);
+                if (data != null) return data;
+            }
+            
+            // Fallback về availableMinigames
+            if (availableMinigames != null && CurrentMinigameIndex < availableMinigames.Length)
+            {
+                return availableMinigames[CurrentMinigameIndex];
+            }
+            
+            return null;
+        }
+    }
     #endregion
 
     #region Events
@@ -108,7 +151,7 @@ public class GameManager : NetworkBehaviour
             RegisterUIPanel(panel);
         }
 
-        Debug.Log($"[GameManager] FindUIReferences - Lobby:{lobbyUI != null}, Voting:{votingUI != null}, Scoreboard:{scoreboardUI != null}, Result:{resultUI != null}");
+        Debug.Log($"[GameManager] FindUIReferences - Lobby:{lobbyUI != null}, Voting:{votingUI != null}, RouletteVoting:{rouletteVotingUI != null}, Scoreboard:{scoreboardUI != null}, Result:{resultUI != null}");
     }
     
     /// <summary>
@@ -126,6 +169,9 @@ public class GameManager : NetworkBehaviour
             case UIPanelType.Voting:
                 votingUI = panel.gameObject;
                 break;
+            case UIPanelType.RouletteVoting:
+                rouletteVotingUI = panel.gameObject;
+                break;
             case UIPanelType.Scoreboard:
                 scoreboardUI = panel.gameObject;
                 break;
@@ -142,6 +188,7 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả trước
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
 
@@ -238,9 +285,16 @@ public class GameManager : NetworkBehaviour
         CurrentRound = 0;
         FinalWinnerId = -1;
 
-        // Reset RouletteManager
+        // Auto-assign tất cả players vào ghế
+        if (SeatManager.Instance != null)
+        {
+            SeatManager.Instance.AutoAssignAllPlayersToSeats();
+        }
+
+        // Lưu seat mapping cho Roulette teleport
         if (RouletteManager.Instance != null)
         {
+            RouletteManager.Instance.SaveSeatMapping();
             RouletteManager.Instance.ResetForNewGame();
         }
 
@@ -301,21 +355,64 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        if (availableMinigames == null)
+        MinigameData minigameData = null;
+
+        // Ưu tiên lấy minigame từ MinigameVotingManager (đồng bộ với VotingManager)
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
         {
-            Debug.LogError("[GameManager] availableMinigames is NULL!");
-            return;
+            int availableCount = MinigameVotingManager.Instance.GetAvailableMinigameCount();
+            if (minigameIndex < 0 || minigameIndex >= availableCount)
+            {
+                Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}, AvailableCount: {availableCount}");
+                return;
+            }
+
+            minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(minigameIndex);
+            if (minigameData == null)
+            {
+                Debug.LogError($"[GameManager] Failed to get minigame data for index: {minigameIndex}");
+                return;
+            }
+
+            Debug.Log($"[GameManager] Starting minigame #{minigameIndex}: {minigameData.minigameName} (from MinigameVotingManager)");
+            
+            // Đánh dấu minigame đã được chơi
+            MinigameVotingManager.Instance.MarkMinigamePlayed(minigameIndex);
         }
-        
-        if (minigameIndex < 0 || minigameIndex >= availableMinigames.Length)
+        else
         {
-            Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}, availableMinigames.Length: {availableMinigames.Length}");
-            return;
+            // Fallback: sử dụng availableMinigames array
+            if (availableMinigames == null)
+            {
+                Debug.LogError("[GameManager] availableMinigames is NULL and MinigameVotingManager not ready!");
+                return;
+            }
+            
+            if (minigameIndex < 0 || minigameIndex >= availableMinigames.Length)
+            {
+                Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}, availableMinigames.Length: {availableMinigames.Length}");
+                return;
+            }
+
+            minigameData = availableMinigames[minigameIndex];
+            Debug.Log($"[GameManager] Starting minigame #{minigameIndex}: {minigameData.minigameName} (from availableMinigames)");
         }
 
-        Debug.Log($"[GameManager] Starting minigame #{minigameIndex}: {availableMinigames[minigameIndex].minigameName}");
         CurrentMinigameIndex = minigameIndex;
         CurrentRound++;
+        
+        // Sync minigame settings cho tất cả clients
+        if (minigameData != null)
+        {
+            MG_CanMove = minigameData.canMove;
+            MG_CanJump = minigameData.canJump;
+            MG_CanCrouch = minigameData.canCrouch;
+            MG_CanAttack = minigameData.canAttack;
+            MG_CanRun = minigameData.canRun;
+            MG_AllowRespawn = minigameData.allowRespawn;
+            
+            Debug.Log($"[GameManager] Synced MG settings - Move:{MG_CanMove}, Jump:{MG_CanJump}, Crouch:{MG_CanCrouch}, Attack:{MG_CanAttack}, Run:{MG_CanRun}, Respawn:{MG_AllowRespawn}");
+        }
 
         // Vào Tutorial state trước, scene sẽ load trong HandleTutorialState
         Debug.Log("[GameManager] Calling ChangeState(Tutorial)");
@@ -550,6 +647,7 @@ public class GameManager : NetworkBehaviour
         // Show lobby UI, hide others
         SetActiveUI(lobbyUI, true);
         SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         
@@ -576,11 +674,24 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log($"[GameManager] Entered Voting state. VotingType: {CurrentVotingType}");
 
-        // Show voting UI, hide others
+        // Ẩn tất cả UI trước
         SetActiveUI(lobbyUI, false);
-        SetActiveUI(votingUI, true);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        
+        // Hiện UI dựa vào VotingType
+        if (CurrentVotingType == VotingType.MinigameOnly)
+        {
+            SetActiveUI(votingUI, true);
+            Debug.Log("[GameManager] Showing VotingUI (MinigameOnly)");
+        }
+        else // RouletteOrMinigame
+        {
+            SetActiveUI(rouletteVotingUI, true);
+            Debug.Log("[GameManager] Showing RouletteVotingUI (RouletteOrMinigame)");
+        }
         
         // Ẩn player input trong voting phase
         if (PlayerInputHandler.Instance != null)
@@ -613,6 +724,7 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả UI panels
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         
@@ -629,14 +741,26 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        // Lấy MinigameData và load scene
-        if (availableMinigames == null || CurrentMinigameIndex < 0 || CurrentMinigameIndex >= availableMinigames.Length)
+        // Lấy MinigameData - ưu tiên từ MinigameVotingManager
+        MinigameData minigameData = null;
+        
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
         {
-            Debug.LogError("[GameManager] No valid minigame data!");
+            minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(CurrentMinigameIndex);
+        }
+        
+        // Fallback về availableMinigames nếu không lấy được từ MinigameVotingManager
+        if (minigameData == null && availableMinigames != null && CurrentMinigameIndex >= 0 && CurrentMinigameIndex < availableMinigames.Length)
+        {
+            minigameData = availableMinigames[CurrentMinigameIndex];
+        }
+        
+        if (minigameData == null)
+        {
+            Debug.LogError($"[GameManager] No valid minigame data for index {CurrentMinigameIndex}!");
             return;
         }
 
-        var minigameData = availableMinigames[CurrentMinigameIndex];
         Debug.Log($"[GameManager] Loading minigame scene: {minigameData.sceneName}");
 
         // Setup camera mode
@@ -664,6 +788,7 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả UI panels
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         
@@ -730,8 +855,41 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, true);
         SetActiveUI(resultUI, false);
+        
+        // Hiện cursor khi xem scoreboard
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.ShowCursor();
+        }
+        
+        // Tắt player input khi xem scoreboard
+        if (PlayerInputHandler.Instance != null)
+        {
+            PlayerInputHandler.Instance.InputEnabled = false;
+        }
+        
+        // Auto-proceed to voting after delay (host only)
+        if (HasStateAuthority)
+        {
+            if (_scoreboardCoroutine != null)
+            {
+                StopCoroutine(_scoreboardCoroutine);
+            }
+            _scoreboardCoroutine = StartCoroutine(AutoProceedFromScoreboard());
+        }
+    }
+    
+    private IEnumerator AutoProceedFromScoreboard()
+    {
+        Debug.Log($"[GameManager] Scoreboard will auto-proceed in {scoreboardDisplayDuration}s...");
+        yield return new WaitForSeconds(scoreboardDisplayDuration);
+        
+        Debug.Log("[GameManager] Auto-proceeding from scoreboard...");
+        ProceedFromScoreboard();
+        _scoreboardCoroutine = null;
     }
 
     protected virtual void HandleRouletteState()
@@ -741,15 +899,15 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả UI - Roulette xử lí bằng gameplay 3D
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         
-        // === IMPORTANT: Roulette Camera Setup ===
         // Chuyển sang First Person camera trong Roulette
-        // Roulette sẽ load scene riêng (RouletteScene)
-        // Sau khi scene load, CameraManager sẽ tự động re-initialize
-        // TODO: Call SwitchToFirstPersonCamera() sau khi Roulette scene load xong
-        // =========================================
+        if (CameraManager.Instance != null)
+        {
+            CameraManager.Instance.SwitchToFirstPersonCamera();
+        }
 
         // Bật player input cho gameplay 3D
         if (PlayerInputHandler.Instance != null)
@@ -761,6 +919,12 @@ public class GameManager : NetworkBehaviour
         if (CursorManager.Instance != null)
         {
             CursorManager.Instance.HideCursor();
+        }
+
+        // Teleport players đến vị trí Roulette dựa trên seat từ Lobby
+        if (RouletteManager.Instance != null)
+        {
+            RouletteManager.Instance.TeleportPlayersToRoulettePositions();
         }
 
         // Start Roulette (host only)
@@ -781,6 +945,7 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, true);
 

@@ -60,9 +60,8 @@ public class PlayerInteractionHandler : NetworkBehaviour
             _promptInstance.Hide();
         }
         
-        Debug.Log("[PlayerInteractionHandler] Initialized for local player");
+        Debug.Log($"[PlayerInteractionHandler] Initialized for local player. Camera: {(_mainCamera != null ? _mainCamera.name : "NULL")}, PlayerNetworkData.Local: {(PlayerNetworkData.Local != null ? PlayerNetworkData.Local.PlayerName.ToString() : "NULL")}");
     }
-
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
         if (_promptInstance != null)
@@ -112,7 +111,11 @@ public class PlayerInteractionHandler : NetworkBehaviour
         if (_mainCamera == null)
         {
             _mainCamera = Camera.main;
-            if (_mainCamera == null) return;
+            if (_mainCamera == null) 
+            {
+                Debug.LogWarning("[PlayerInteractionHandler] Camera.main is null!");
+                return;
+            }
         }
         
         // Raycast từ center của camera

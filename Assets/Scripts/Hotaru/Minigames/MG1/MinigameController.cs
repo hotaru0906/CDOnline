@@ -28,7 +28,7 @@ public class MinigameController : NetworkBehaviour
     
     [Header("Scoreboard Canvas")]
     [SerializeField] private GameObject scoreboardCanvas;
-    [SerializeField] private float scoreboardDuration = 5f;
+    [SerializeField] private float scoreboardDuration = 3f; // 3s rồi chuyển sang Voting
 
     [Header("Game Settings")]
     [SerializeField] private bool freezePlayersOnStart = true;
@@ -51,7 +51,22 @@ public class MinigameController : NetworkBehaviour
 
     [Networked, OnChangedRender(nameof(OnCountdownChanged))]
     public float Countdown { get; private set; }
+    
+    /// <summary>
+    /// Thời gian còn lại của game (lấy từ MinigameData.timeLimit)
+    /// </summary>
+    [Networked, OnChangedRender(nameof(OnGameTimerChanged))]
+    public float GameTimer { get; private set; }
+    
+    /// <summary>
+    /// Số player còn sống (chưa bị loại)
+    /// </summary>
+    [Networked]
+    public int AlivePlayerCount { get; private set; }
     #endregion
+    
+    // Cached minigame data
+    private MinigameData _minigameData;
 
     // Local reference
     private List<PlayerController> spawnedPlayers = new List<PlayerController>();
@@ -92,6 +107,12 @@ public class MinigameController : NetworkBehaviour
     {
         Debug.Log($"[MinigameController] Spawned. IsHost: {HasStateAuthority}");
         _runner = Runner;
+        
+        // Lấy MinigameData từ GameManager
+        if (GameManager.Instance != null)
+        {
+            _minigameData = GameManager.Instance.CurrentMinigameData;
+        }
 
         // Setup start button (host only)
         if (startButton != null)
@@ -186,6 +207,22 @@ public class MinigameController : NetworkBehaviour
         
         IsGameStarted = true;
         
+        // Khởi tạo game timer từ MinigameData
+        if (HasStateAuthority)
+        {
+            if (_minigameData != null && _minigameData.timeLimit > 0)
+            {
+                GameTimer = _minigameData.timeLimit;
+            }
+            else
+            {
+                GameTimer = 0; // Không giới hạn thời gian
+            }
+            
+            // Đếm số player ban đầu
+            UpdateAlivePlayerCount();
+        }
+        
         // Enable trap spawner
         if (trapSpawner != null)
         {
@@ -270,7 +307,7 @@ public class MinigameController : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        // Countdown logic
+        // Countdown logic (Tutorial -> Playing)
         if (CurrentPhase == MinigamePhase.Countdown && Countdown > 0)
         {
             Countdown -= Runner.DeltaTime;
@@ -281,6 +318,146 @@ public class MinigameController : NetworkBehaviour
                 // Delay nhỏ để hiện "GO!"
                 StartCoroutine(StartPlayingAfterGo());
             }
+        }
+        
+        // Game timer logic (Playing phase)
+        if (CurrentPhase == MinigamePhase.Playing && !IsGameEnded)
+        {
+            // Update game timer nếu có time limit
+            if (GameTimer > 0)
+            {
+                GameTimer -= Runner.DeltaTime;
+                
+                if (GameTimer <= 0)
+                {
+                    GameTimer = 0;
+                    OnTimeUp();
+                    return;
+                }
+            }
+            
+            // Check elimination (nếu minigame không cho respawn)
+            UpdateAlivePlayerCount();
+            CheckEliminationWinCondition();
+        }
+    }
+    
+    /// <summary>
+    /// Callback khi GameTimer thay đổi
+    /// </summary>
+    private void OnGameTimerChanged()
+    {
+        // Override này để UI có thể subscribe và hiển thị timer
+    }
+    
+    /// <summary>
+    /// Cập nhật số player còn sống
+    /// </summary>
+    private void UpdateAlivePlayerCount()
+    {
+        var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        int alive = 0;
+        
+        foreach (var p in players)
+        {
+            if (!p.IsEliminated)
+            {
+                alive++;
+            }
+        }
+        
+        AlivePlayerCount = alive;
+    }
+    
+    /// <summary>
+    /// Kiểm tra điều kiện thắng khi có elimination
+    /// </summary>
+    private void CheckEliminationWinCondition()
+    {
+        // Chỉ check nếu minigame không cho respawn
+        if (_minigameData != null && _minigameData.allowRespawn)
+            return;
+        
+        // Nếu chỉ còn 1 player -> kết thúc
+        if (AlivePlayerCount <= 1)
+        {
+            // Tìm player còn sống
+            var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+            PlayerRef lastSurvivor = PlayerRef.None;
+            
+            foreach (var p in players)
+            {
+                if (!p.IsEliminated)
+                {
+                    lastSurvivor = p.Object.InputAuthority;
+                    break;
+                }
+            }
+            
+            Debug.Log($"[MinigameController] Only 1 player remaining: {lastSurvivor}");
+            EndGame(lastSurvivor);
+        }
+    }
+    
+    /// <summary>
+    /// Gọi khi hết thời gian
+    /// </summary>
+    private void OnTimeUp()
+    {
+        Debug.Log("[MinigameController] Time's up!");
+        
+        // Tìm winner dựa trên tiêu chí (có thể là người sống lâu nhất, checkpoint xa nhất, etc.)
+        // Mặc định: player còn sống với checkpoint cao nhất
+        PlayerRef winner = FindBestPlayer();
+        
+        EndGame(winner);
+    }
+    
+    /// <summary>
+    /// Tìm player tốt nhất (winner khi hết giờ)
+    /// </summary>
+    private PlayerRef FindBestPlayer()
+    {
+        var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        PlayerRef best = PlayerRef.None;
+        int bestCheckpoint = -1;
+        
+        foreach (var p in players)
+        {
+            if (!p.IsEliminated && p.CurrentCheckpointIndex > bestCheckpoint)
+            {
+                bestCheckpoint = p.CurrentCheckpointIndex;
+                best = p.Object.InputAuthority;
+            }
+        }
+        
+        return best;
+    }
+    
+    /// <summary>
+    /// Kết thúc game với winner
+    /// </summary>
+    private void EndGame(PlayerRef winner)
+    {
+        if (IsGameEnded) return;
+        
+        Debug.Log($"[MinigameController] Game ended. Winner: {winner}");
+        
+        Winner = winner;
+        IsGameEnded = true;
+        CurrentPhase = MinigamePhase.GameOver;
+        
+        // Notify all clients
+        RPC_OnPlayerWon(winner);
+        
+        // Freeze all players
+        RPC_SetPlayersFrozen(true);
+        
+        // Đưa player về vị trí spawn hoặc chờ kết thúc 
+        // Gọi GameManager.EndMinigame() để chuyển sang Scoreboard state (global)
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.EndMinigame(winner.PlayerId);
         }
     }
 
@@ -382,16 +559,18 @@ public class MinigameController : NetworkBehaviour
         if (IsGameEnded) return;
 
         Debug.Log($"[MinigameController] Player {playerRef} finished!");
-
-        Winner = playerRef;
-        IsGameEnded = true;
-        CurrentPhase = MinigamePhase.GameOver;
-
-        // Notify all clients
-        RPC_OnPlayerWon(playerRef);
-
-        // Show scoreboard sau delay
-        StartCoroutine(ShowScoreboardAfterDelay(2f));
+        EndGame(playerRef);
+    }
+    
+    /// <summary>
+    /// Gọi khi player bị loại (để cập nhật count)
+    /// </summary>
+    public void OnPlayerEliminated(PlayerRef playerRef)
+    {
+        if (!HasStateAuthority) return;
+        
+        Debug.Log($"[MinigameController] Player {playerRef} eliminated!");
+        UpdateAlivePlayerCount();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -410,7 +589,7 @@ public class MinigameController : NetworkBehaviour
     {
         yield return new WaitForSeconds(delay);
 
-        // Notify GameManager to go to Scoreboard state
+        // Gọi GameManager.EndMinigame - nó sẽ xử lý flow Scoreboard -> Voting
         if (GameManager.Instance != null)
         {
             GameManager.Instance.EndMinigame(Winner.PlayerId);

@@ -52,7 +52,8 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
         if (Input.GetButtonDown("Jump"))
             _buttons.Set(PlayerInputData.BUTTON_JUMP, true);
 
-        if (Input.GetButtonDown("Fire1"))
+        // Dùng mouse button cụ thể thay vì Fire1 (vì Fire1 mặc định bao gồm Left Ctrl)
+        if (Input.GetMouseButtonDown(0))
             _buttons.Set(PlayerInputData.BUTTON_PUNCH, true);
 
         // Run dùng GetKey (giữ Left Shift) - lưu riêng

@@ -31,11 +31,13 @@ public class RouletteVotingUI : MonoBehaviour
 
     private void OnEnable()
     {
+        // Subscribe events
         if (VotingManager.Instance != null)
         {
             SubscribeToEvents();
         }
         
+        // Reset UI khi enable (GameManager đã kiểm tra VotingType trước khi enable panel này)
         ResetUI();
     }
 
@@ -100,9 +102,6 @@ public class RouletteVotingUI : MonoBehaviour
         SetButtonSelected(rouletteButtonBackground, false);
         SetButtonSelected(minigameButtonBackground, false);
         
-        // Update visibility based on voting type
-        UpdateVisibility();
-        
         if (statusText != null)
         {
             statusText.text = "Vote: Về Roulette hoặc Tiếp tục Minigame?";
@@ -117,16 +116,6 @@ public class RouletteVotingUI : MonoBehaviour
             int rouletteCount = VotingManager.Instance.GetVoteCount(VotingManager.ROULETTE_OPTION_INDEX);
             if (rouletteVoteCountText != null)
                 rouletteVoteCountText.text = rouletteCount.ToString();
-        }
-    }
-
-    private void UpdateVisibility()
-    {
-        bool isRouletteOrMinigame = VotingManager.Instance?.CurrentVotingType == VotingType.RouletteOrMinigame;
-        
-        if (rootPanel != null)
-        {
-            rootPanel.SetActive(isRouletteOrMinigame);
         }
     }
 
@@ -246,6 +235,10 @@ public class RouletteVotingUI : MonoBehaviour
     private void OnVotingStarted()
     {
         Debug.Log("[RouletteVotingUI] Voting started");
+        hasVoted = false;
+        
+        // GameManager đã kiểm tra VotingType và chỉ enable panel này khi RouletteOrMinigame
+        // Nên ở đây chỉ cần reset UI
         ResetUI();
     }
 
@@ -273,9 +266,9 @@ public class RouletteVotingUI : MonoBehaviour
     private void OnVotingTypeChanged(VotingType newType)
     {
         Debug.Log($"[RouletteVotingUI] Voting type changed to: {newType}");
-        UpdateVisibility();
-        
-        if (newType == VotingType.RouletteOrMinigame)
+        // GameManager sẽ xử lý việc hiện/ẩn panel dựa vào VotingType
+        // Ở đây chỉ cần reset UI nếu cần
+        if (newType == VotingType.RouletteOrMinigame && gameObject.activeInHierarchy)
         {
             ResetUI();
         }

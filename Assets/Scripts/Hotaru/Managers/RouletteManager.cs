@@ -1024,4 +1024,109 @@ public class RouletteManager : NetworkBehaviour
         Debug.Log($"[RouletteManager] Roulette state: {(IsRouletteActive ? "Active" : "Inactive")}");
     }
     #endregion
+
+    #region Seat-Based Teleportation
+    
+    [Header("Roulette Spawn Points")]
+    [SerializeField] private Transform[] rouletteSpawnPoints; // Gán trong Inspector (8 điểm)
+    
+    /// <summary>
+    /// Dictionary mapping playerSlot -> seatIndex từ SeatManager
+    /// Lưu lại khi bắt đầu match để dùng cho Roulette teleport
+    /// </summary>
+    private Dictionary<int, int> _playerSlotToSeat = new Dictionary<int, int>();
+    
+    /// <summary>
+    /// Lưu seat mapping từ SeatManager (gọi trước khi vào Roulette)
+    /// </summary>
+    public void SaveSeatMapping()
+    {
+        _playerSlotToSeat.Clear();
+        
+        if (SeatManager.Instance != null)
+        {
+            _playerSlotToSeat = SeatManager.Instance.GetPlayerSlotToSeatMapping();
+            Debug.Log($"[RouletteManager] Saved {_playerSlotToSeat.Count} seat mappings");
+        }
+    }
+    
+    /// <summary>
+    /// Lấy seat index của player slot
+    /// </summary>
+    public int GetSeatIndexForSlot(int playerSlot)
+    {
+        if (_playerSlotToSeat.TryGetValue(playerSlot, out int seatIndex))
+        {
+            return seatIndex;
+        }
+        return playerSlot; // Fallback: dùng slot như seat index
+    }
+    
+    /// <summary>
+    /// Lấy vị trí spawn trong Roulette scene dựa trên seat
+    /// </summary>
+    public Vector3 GetRouletteSpawnPosition(int playerSlot)
+    {
+        int seatIndex = GetSeatIndexForSlot(playerSlot);
+        
+        if (rouletteSpawnPoints != null && seatIndex >= 0 && seatIndex < rouletteSpawnPoints.Length)
+        {
+            if (rouletteSpawnPoints[seatIndex] != null)
+                return rouletteSpawnPoints[seatIndex].position;
+        }
+        
+        // Fallback: vòng tròn
+        float angle = seatIndex * (360f / 8f) * Mathf.Deg2Rad;
+        return new Vector3(Mathf.Cos(angle) * 3f, 0f, Mathf.Sin(angle) * 3f);
+    }
+    
+    /// <summary>
+    /// Lấy rotation spawn trong Roulette scene dựa trên seat
+    /// </summary>
+    public Quaternion GetRouletteSpawnRotation(int playerSlot)
+    {
+        int seatIndex = GetSeatIndexForSlot(playerSlot);
+        
+        if (rouletteSpawnPoints != null && seatIndex >= 0 && seatIndex < rouletteSpawnPoints.Length)
+        {
+            if (rouletteSpawnPoints[seatIndex] != null)
+                return rouletteSpawnPoints[seatIndex].rotation;
+        }
+        
+        // Fallback: nhìn vào tâm
+        float angle = seatIndex * (360f / 8f);
+        return Quaternion.Euler(0f, angle + 180f, 0f);
+    }
+    
+    /// <summary>
+    /// Teleport tất cả players đến vị trí Roulette dựa trên seat
+    /// Gọi sau khi Roulette scene load xong
+    /// </summary>
+    public void TeleportPlayersToRoulettePositions()
+    {
+        var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+        
+        foreach (var player in players)
+        {
+            int slot = GetSlotFromPlayerRef(player.Object.InputAuthority);
+            if (slot < 0) continue;
+            
+            Vector3 position = GetRouletteSpawnPosition(slot);
+            Quaternion rotation = GetRouletteSpawnRotation(slot);
+            
+            var networkCC = player.GetComponent<NetworkCharacterController>();
+            if (networkCC != null)
+            {
+                networkCC.Teleport(position, rotation);
+            }
+            else
+            {
+                player.transform.position = position;
+                player.transform.rotation = rotation;
+            }
+            
+            Debug.Log($"[RouletteManager] Teleported slot {slot} to seat-based position");
+        }
+    }
+    #endregion
 }

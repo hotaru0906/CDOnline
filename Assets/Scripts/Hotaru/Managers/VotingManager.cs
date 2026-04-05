@@ -131,7 +131,18 @@ public class VotingManager : NetworkBehaviour
             CurrentVotingType = GameManager.Instance.CurrentVotingType;
         }
 
-        Debug.Log($"[VotingManager] Starting voting... Type: {CurrentVotingType}");
+        // Sync MinigameCount từ MinigameVotingManager
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+        {
+            MinigameCount = MinigameVotingManager.Instance.GetAvailableMinigameCount();
+            Debug.Log($"[VotingManager] Synced MinigameCount: {MinigameCount}");
+        }
+        else
+        {
+            Debug.LogWarning("[VotingManager] MinigameVotingManager not ready, using default MinigameCount");
+        }
+
+        Debug.Log($"[VotingManager] Starting voting... Type: {CurrentVotingType}, MinigameCount: {MinigameCount}");
 
         // Reset votes
         for (int i = 0; i < MinigameCount; i++)

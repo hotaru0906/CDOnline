@@ -31,6 +31,7 @@ public class RoomUI : MonoBehaviour
     private void Awake()
     {
         _runner = FindAnyObjectByType<NetworkRunner>();
+        DontDestroyOnLoad(gameObject);
     }
 
     void Start()

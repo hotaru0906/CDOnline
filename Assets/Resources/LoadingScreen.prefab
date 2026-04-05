@@ -398,7 +398,7 @@ VideoPlayer:
   - 1
   m_Url: 
   m_EnabledAudioTracks: 01
-  m_DirectAudioMutes: 00
+  m_DirectAudioMutes: 01
   m_ControlledAudioTrackCount: 1
   m_PlayOnAwake: 1
   m_SkipOnDrop: 1
@@ -1122,6 +1122,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 94c0d9dd5c0e72146b58f8311bfcdcd1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  canvas: {fileID: 0}
   canvasGroup: {fileID: 2522172892584245270}
   loadingText: {fileID: 1735447222405104020}
   loadingBar: {fileID: 1469220491839563142}
@@ -1130,3 +1131,4 @@ MonoBehaviour:
   barFillSpeed: 0.5
   barFillSpeedFast: 0.5
   delayBeforeHide: 2
+  sortingOrder: 32767

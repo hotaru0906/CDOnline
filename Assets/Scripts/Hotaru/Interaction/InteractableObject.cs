@@ -73,14 +73,14 @@ public class InteractableObject : MonoBehaviour
     }
 
 #if UNITY_EDITOR
-    private void OnDrawGizmosSelected()
+    protected virtual void OnDrawGizmosSelected()
     {
         // Vẽ range
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, interactionRange);
     }
     
-    private void OnValidate()
+    protected virtual void OnValidate()
     {
         // Đảm bảo object ở layer Interactable
         if (gameObject.layer != LayerMask.NameToLayer("Interactable"))
