@@ -2800,6 +2800,7 @@ GameObject:
   - component: {fileID: 5650056082442984469}
   - component: {fileID: -5116773515047285194}
   - component: {fileID: 7191267470197781851}
+  - component: {fileID: 6157941111856074996}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -2852,6 +2853,7 @@ MonoBehaviour:
   - {fileID: 5650056082442984469}
   - {fileID: -5116773515047285194}
   - {fileID: 7191267470197781851}
+  - {fileID: 6157941111856074996}
   ForceRemoteRenderTimeframe: 0
 --- !u!143 &5773763795247233088
 CharacterController:
@@ -2991,11 +2993,14 @@ MonoBehaviour:
   invincibilityTime: 2
   playerRenderers: []
   invincibleColor: {r: 1, g: 1, b: 1, a: 0.5}
+  eliminatedColor: {r: 0.3, g: 0.3, b: 0.3, a: 0.5}
   _CurrentCheckpointIndex: 0
   _CurrentRespawnPosition: {x: 0, y: 0, z: 0}
   _IsInvincible:
     _value: 0
   _IsDead:
+    _value: 0
+  _IsEliminated:
     _value: 0
 --- !u!114 &-5116773515047285194
 MonoBehaviour:
@@ -3030,6 +3035,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _CurrentSeatIndex: -1
+--- !u!114 &6157941111856074996
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9043744698373994564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bddd74d259fbab249b1745fc151f1c4c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  footstepSource: {fileID: 0}
+  actionSource: {fileID: 0}
+  minDistance: 1
+  maxDistance: 20
+  spatialBlend: 1
+  walkPitch: 1
+  runPitch: 1.3
+  debugMode: 0
 --- !u!1 &9077173086571457645
 GameObject:
   m_ObjectHideFlags: 0

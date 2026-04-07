@@ -356,9 +356,16 @@ public class SeatManager : NetworkBehaviour
 
     private int GetPlayerSlot(PlayerRef playerRef)
     {
+        // Thử lấy slot từ RouletteManager trước
         if (RouletteManager.Instance != null)
         {
-            return RouletteManager.Instance.GetSlotFromPlayerRef(playerRef);
+            int slot = RouletteManager.Instance.GetSlotFromPlayerRef(playerRef);
+            if (slot != INVALID_SEAT)
+            {
+                return slot;
+            }
+            // RouletteManager trả về -1, fallback sang PlayerId
+            Debug.Log($"[SeatManager] RouletteManager returned -1 for player {playerRef.PlayerId}, using PlayerId as slot");
         }
 
         // Fallback: use PlayerId

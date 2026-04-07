@@ -140,15 +140,25 @@ public class PlayerInteractionHandler : NetworkBehaviour
                 interactable = hit.collider.GetComponentInParent<InteractableObject>();
             }
             
-            if (interactable != null && interactable.CanInteract())
+            if (interactable != null)
             {
-                // Kiểm tra khoảng cách
+                bool canInteract = interactable.CanInteract();
                 float distance = Vector3.Distance(transform.position, hit.point);
-                if (distance <= interactable.InteractionRange)
+                
+                if (showDebugRay)
+                {
+                    Debug.Log($"[InteractionHandler] Hit: {hit.collider.name}, Interactable: {interactable.GetType().Name}, CanInteract: {canInteract}, Distance: {distance:F2}/{interactable.InteractionRange}");
+                }
+                
+                if (canInteract && distance <= interactable.InteractionRange)
                 {
                     newTarget = interactable;
                 }
             }
+        }
+        else if (showDebugRay && Time.frameCount % 60 == 0) // Log mỗi 60 frame nếu không hit gì
+        {
+            Debug.Log($"[InteractionHandler] Raycast NO HIT. Layer mask: {interactableLayer.value}");
         }
         
         // Target changed

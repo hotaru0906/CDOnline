@@ -59,18 +59,29 @@ public class Seat : InteractableObject
     /// </summary>
     public override bool CanInteract()
     {
-        if (!base.CanInteract()) return false;
+        bool baseCanInteract = base.CanInteract();
+        if (!baseCanInteract)
+        {
+            Debug.Log($"[Seat {SeatIndex}] CanInteract: FALSE (base.CanInteract failed)");
+            return false;
+        }
         
         // Chỉ trong Lobby
         if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameState.Lobby)
+        {
+            Debug.Log($"[Seat {SeatIndex}] CanInteract: FALSE (Not in Lobby, state: {GameManager.Instance.CurrentState})");
             return false;
+        }
         
         // Kiểm tra networked state từ SeatManager thay vì local state
         if (SeatManager.Instance != null && SeatIndex >= 0)
         {
-            return SeatManager.Instance.IsSeatAvailable(SeatIndex);
+            bool available = SeatManager.Instance.IsSeatAvailable(SeatIndex);
+            Debug.Log($"[Seat {SeatIndex}] CanInteract: {available} (SeatManager check)");
+            return available;
         }
         
+        Debug.Log($"[Seat {SeatIndex}] CanInteract: {IsAvailable} (local IsAvailable, SeatManager: {(SeatManager.Instance != null ? "exists" : "NULL")}, SeatIndex: {SeatIndex})");
         return IsAvailable;
     }
     
