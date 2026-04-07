@@ -65,7 +65,7 @@ public class VotingManager : NetworkBehaviour
     private bool hasVoted = false;
     private int localVoteIndex = -1;
     #endregion
-    
+
     /// <summary>
     /// Kiểm tra xem manager đã spawn và sẵn sàng chưa
     /// Phải kiểm tra trước khi truy cập Networked properties
@@ -75,13 +75,13 @@ public class VotingManager : NetworkBehaviour
     #region Networked Vote Tracking
     [Networked]
     private int TotalVotes { get; set; }
-    
+
     /// <summary>
     /// Tổng số vote có thể (tính theo weight)
     /// </summary>
     [Networked]
     private int TotalVoteWeight { get; set; }
-    
+
     [Networked]
     private int TotalPlayers { get; set; }
     #endregion
@@ -94,6 +94,7 @@ public class VotingManager : NetworkBehaviour
             return;
         }
         Instance = this;
+        DontDestroyOnLoad(gameObject); // Thêm dòng này
     }
 
     public override void Spawned()
@@ -215,7 +216,7 @@ public class VotingManager : NetworkBehaviour
             if (GameManager.Instance != null)
             {
                 GameManager.Instance.OnVotingComplete(chooseRoulette);
-                
+
                 // Nếu chọn minigame, start minigame
                 if (!chooseRoulette)
                 {
@@ -346,7 +347,7 @@ public class VotingManager : NetworkBehaviour
         {
             Debug.Log("[VotingManager] All players have voted!");
             RPC_NotifyAllVoted();
-            
+
             if (instantEndWhenAllVoted)
             {
                 // End voting ngay lập tức
@@ -382,7 +383,7 @@ public class VotingManager : NetworkBehaviour
         {
             Debug.Log("[VotingManager] All players have voted!");
             RPC_NotifyAllVoted();
-            
+
             if (instantEndWhenAllVoted)
             {
                 EndVoting();
@@ -485,7 +486,7 @@ public class VotingManager : NetworkBehaviour
     {
         // Kiểm tra đã spawn chưa
         if (!IsReady) return 0;
-        
+
         if (index == ROULETTE_OPTION_INDEX)
         {
             return RouletteVoteCount;

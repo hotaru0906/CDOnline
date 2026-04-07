@@ -16,27 +16,27 @@ public class MinigameVotingManager : NetworkBehaviour
 
     [Header("Minigame Configuration")]
     [SerializeField] private List<MinigameData> allMinigames = new List<MinigameData>();
-    
+
     [Header("Settings")]
     [SerializeField] private int displayCount = 3; // Số minigame hiển thị để vote mỗi lần
     [SerializeField] private bool shuffleMinigames = true;
-    
+
     #region Networked Properties
     /// <summary>
     /// Danh sách index của các minigame đã chơi trong session này
     /// </summary>
     [Networked, Capacity(20)]
     private NetworkArray<int> PlayedMinigameIndices => default;
-    
+
     [Networked]
     private int PlayedCount { get; set; }
-    
+
     /// <summary>
     /// Danh sách index của các minigame khả dụng cho lần vote hiện tại
     /// </summary>
     [Networked, Capacity(10)]
     private NetworkArray<int> AvailableMinigameIndices => default;
-    
+
     [Networked]
     private int AvailableCount { get; set; }
     #endregion
@@ -44,7 +44,7 @@ public class MinigameVotingManager : NetworkBehaviour
     #region Events
     public event System.Action OnMinigameListUpdated;
     #endregion
-    
+
     /// <summary>
     /// Kiểm tra xem manager đã spawn và sẵn sàng chưa
     /// Phải kiểm tra trước khi truy cập Networked properties
@@ -59,13 +59,13 @@ public class MinigameVotingManager : NetworkBehaviour
             return;
         }
         Instance = this;
+        DontDestroyOnLoad(gameObject); // Thêm dòng này
     }
-
     public override void Spawned()
     {
         IsReady = true;
         Debug.Log($"[MinigameVotingManager] Spawned. Total minigames: {allMinigames.Count}");
-        
+
         if (HasStateAuthority)
         {
             ResetPlayedMinigames();
@@ -80,10 +80,10 @@ public class MinigameVotingManager : NetworkBehaviour
     public List<MinigameData> GetAvailableMinigames()
     {
         List<MinigameData> available = new List<MinigameData>();
-        
+
         // Kiểm tra xem đã spawn chưa
         if (!IsReady) return available;
-        
+
         for (int i = 0; i < AvailableCount; i++)
         {
             int index = AvailableMinigameIndices.Get(i);
@@ -92,7 +92,7 @@ public class MinigameVotingManager : NetworkBehaviour
                 available.Add(allMinigames[index]);
             }
         }
-        
+
         return available;
     }
 
@@ -113,10 +113,10 @@ public class MinigameVotingManager : NetworkBehaviour
     {
         // Kiểm tra xem đã spawn chưa
         if (!IsReady) return null;
-        
+
         if (availableIndex < 0 || availableIndex >= AvailableCount)
             return null;
-            
+
         int actualIndex = AvailableMinigameIndices.Get(availableIndex);
         if (actualIndex >= 0 && actualIndex < allMinigames.Count)
         {
@@ -135,7 +135,7 @@ public class MinigameVotingManager : NetworkBehaviour
             Debug.LogWarning("[MinigameVotingManager] Cannot mark played - not spawned yet");
             return;
         }
-        
+
         if (!HasStateAuthority)
         {
             RPC_RequestMarkPlayed(availableIndex);
@@ -149,7 +149,7 @@ public class MinigameVotingManager : NetworkBehaviour
         }
 
         int actualIndex = AvailableMinigameIndices.Get(availableIndex);
-        
+
         // Kiểm tra xem đã chơi chưa
         for (int i = 0; i < PlayedCount; i++)
         {
@@ -231,7 +231,7 @@ public class MinigameVotingManager : NetworkBehaviour
 
         Debug.Log("[MinigameVotingManager] Resetting played minigames");
         PlayedCount = 0;
-        
+
         // Clear array
         for (int i = 0; i < 20; i++)
         {
@@ -245,7 +245,7 @@ public class MinigameVotingManager : NetworkBehaviour
     public bool IsMinigamePlayed(int actualIndex)
     {
         if (!IsReady) return false;
-        
+
         for (int i = 0; i < PlayedCount; i++)
         {
             if (PlayedMinigameIndices.Get(i) == actualIndex)

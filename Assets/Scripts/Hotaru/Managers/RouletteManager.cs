@@ -171,6 +171,7 @@ public class RouletteManager : NetworkBehaviour
             return;
         }
         Instance = this;
+        DontDestroyOnLoad(gameObject);
     }
 
     public override void Spawned()

@@ -47,8 +47,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   lobbyUI: {fileID: 0}
   votingUI: {fileID: 0}
+  rouletteVotingUI: {fileID: 0}
   scoreboardUI: {fileID: 0}
   resultUI: {fileID: 0}
+  scoreboardDisplayDuration: 3
   availableMinigames:
   - {fileID: 11400000, guid: 42116482f6a56cd4680d23dd7988ef42, type: 2}
   - {fileID: 11400000, guid: 32db69738dc488a4b9f5c84da97bb1eb, type: 2}
@@ -58,6 +60,18 @@ MonoBehaviour:
   _CurrentMinigameIndex: -1
   _CurrentVotingType: 0
   _FinalWinnerId: -1
+  _MG_CanMove:
+    _value: 1
+  _MG_CanJump:
+    _value: 1
+  _MG_CanCrouch:
+    _value: 1
+  _MG_CanAttack:
+    _value: 1
+  _MG_CanRun:
+    _value: 1
+  _MG_AllowRespawn:
+    _value: 1
 --- !u!114 &6315893020879435456
 MonoBehaviour:
   m_ObjectHideFlags: 0

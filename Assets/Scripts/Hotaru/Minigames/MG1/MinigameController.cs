@@ -7,7 +7,8 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Controller chính cho mỗi minigame scene.
-/// Quản lý Tutorial -> Countdown -> Playing -> Scoreboard
+/// Quản lý logic game: WaitingForPlayers -> Tutorial -> Countdown -> Playing -> GameOver -> Scoreboard
+/// UI (Tutorial, Countdown, Scoreboard) được quản lý bởi GameManager
 /// </summary>
 public class MinigameController : NetworkBehaviour
 {
@@ -17,18 +18,8 @@ public class MinigameController : NetworkBehaviour
     [SerializeField] private Transform[] spawnPoints;
     [SerializeField] private float spawnDelay = 1f;
 
-    [Header("Tutorial Canvas")]
-    [SerializeField] private GameObject tutorialCanvas;
-    [SerializeField] private Button startButton; // Host only
-    
-    [Header("Countdown Canvas")]
-    [SerializeField] private GameObject countdownCanvas;
-    [SerializeField] private TMP_Text countdownText;
-    [SerializeField] private float countdownTime = 3f;
-    
-    [Header("Scoreboard Canvas")]
-    [SerializeField] private GameObject scoreboardCanvas;
-    [SerializeField] private float scoreboardDuration = 3f; // 3s rồi chuyển sang Voting
+    [Header("Scoreboard Settings")]
+    [SerializeField] private float scoreboardDuration = 3f;
 
     [Header("Game Settings")]
     [SerializeField] private bool freezePlayersOnStart = true;
@@ -49,26 +40,15 @@ public class MinigameController : NetworkBehaviour
     [Networked]
     public PlayerRef Winner { get; private set; }
 
-    [Networked, OnChangedRender(nameof(OnCountdownChanged))]
-    public float Countdown { get; private set; }
-    
-    /// <summary>
-    /// Thời gian còn lại của game (lấy từ MinigameData.timeLimit)
-    /// </summary>
     [Networked, OnChangedRender(nameof(OnGameTimerChanged))]
     public float GameTimer { get; private set; }
-    
-    /// <summary>
-    /// Số player còn sống (chưa bị loại)
-    /// </summary>
+
     [Networked]
     public int AlivePlayerCount { get; private set; }
     #endregion
-    
-    // Cached minigame data
+
     private MinigameData _minigameData;
 
-    // Local reference
     private List<PlayerController> spawnedPlayers = new List<PlayerController>();
     private NetworkRunner _runner;
 
@@ -90,12 +70,7 @@ public class MinigameController : NetworkBehaviour
             return;
         }
         Instance = this;
-        
-        // Hide all canvases initially
-        SetCanvasActive(tutorialCanvas, false);
-        SetCanvasActive(countdownCanvas, false);
-        SetCanvasActive(scoreboardCanvas, false);
-        
+
         // Disable trap spawner initially
         if (trapSpawner != null)
         {
@@ -107,37 +82,48 @@ public class MinigameController : NetworkBehaviour
     {
         Debug.Log($"[MinigameController] Spawned. IsHost: {HasStateAuthority}");
         _runner = Runner;
-        
+
         // Lấy MinigameData từ GameManager
         if (GameManager.Instance != null)
         {
             _minigameData = GameManager.Instance.CurrentMinigameData;
         }
 
-        // Setup start button (host only)
-        if (startButton != null)
-        {
-            startButton.onClick.RemoveAllListeners();
-            startButton.onClick.AddListener(OnStartButtonClicked);
-            startButton.gameObject.SetActive(HasStateAuthority);
-        }
-
         if (HasStateAuthority)
         {
-            // Host bắt đầu setup minigame
-            StartCoroutine(SetupMinigame());
+            StartCoroutine(WaitForPlayersThenSetup());
         }
     }
-
-    private IEnumerator SetupMinigame()
+    private IEnumerator WaitForPlayersThenSetup()
     {
-        yield return new WaitForSeconds(spawnDelay);
-        yield return new WaitForSeconds(0.2f); // đảm bảo player spawn xong
+        Debug.Log("[Minigame] Waiting for players...");
 
-        // Teleport players to spawn points
+        if (_minigameData == null)
+        {
+            Debug.LogError("[Minigame] MinigameData is NULL!");
+            yield break;
+        }
+
+        while (true)
+        {
+            var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+
+            if (players.Length >= _minigameData.minPlayers)
+            {
+                Debug.Log("[Minigame] All players ready!");
+                break;
+            }
+
+            yield return null;
+        }
+
+        SetupMinigame();
+    }
+
+    private void SetupMinigame()
+    {
         TeleportPlayersToSpawnPoints();
 
-        // Freeze players
         if (freezePlayersOnStart)
         {
             RPC_SetPlayersFrozen(true);
@@ -145,13 +131,25 @@ public class MinigameController : NetworkBehaviour
 
         // Chuyển sang phase Tutorial
         CurrentPhase = MinigamePhase.Tutorial;
+        
+        // Báo GameManager hiển thị Tutorial UI
+        RPC_ShowTutorialUI();
+    }
+    
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowTutorialUI()
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ShowMinigameTutorial();
+        }
     }
 
     #region Phase Handlers
     private void OnPhaseChanged()
     {
         Debug.Log($"[MinigameController] Phase changed to: {CurrentPhase}");
-        
+
         switch (CurrentPhase)
         {
             case MinigamePhase.Tutorial:
@@ -175,38 +173,27 @@ public class MinigameController : NetworkBehaviour
     private void HandleTutorialPhase()
     {
         Debug.Log("[MinigameController] Tutorial phase started");
-        
-        SetCanvasActive(tutorialCanvas, true);
-        SetCanvasActive(countdownCanvas, false);
-        SetCanvasActive(scoreboardCanvas, false);
-        
-        // Update start button visibility
-        if (startButton != null)
-        {
-            bool isHost = _runner != null && _runner.IsServer;
-            startButton.gameObject.SetActive(isHost);
-        }
+        // UI được quản lý bởi GameManager.ShowMinigameTutorial()
     }
 
     private void HandleCountdownPhase()
     {
         Debug.Log("[MinigameController] Countdown phase started");
-        
-        SetCanvasActive(tutorialCanvas, false);
-        SetCanvasActive(countdownCanvas, true);
-        SetCanvasActive(scoreboardCanvas, false);
+        // Countdown UI được quản lý bởi GameManager
     }
 
     private void HandlePlayingPhase()
     {
         Debug.Log("[MinigameController] Playing phase started");
-        
-        SetCanvasActive(tutorialCanvas, false);
-        SetCanvasActive(countdownCanvas, false);
-        SetCanvasActive(scoreboardCanvas, false);
-        
+
+        // Ẩn countdown UI via GameManager
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.HideMinigameCountdown();
+        }
+
         IsGameStarted = true;
-        
+
         // Khởi tạo game timer từ MinigameData
         if (HasStateAuthority)
         {
@@ -218,50 +205,53 @@ public class MinigameController : NetworkBehaviour
             {
                 GameTimer = 0; // Không giới hạn thời gian
             }
-            
+
             // Đếm số player ban đầu
             UpdateAlivePlayerCount();
         }
-        
+
         // Enable trap spawner
         if (trapSpawner != null)
         {
             trapSpawner.enabled = true;
             trapSpawner.StartSpawning();
         }
-        
-        // Notify GameManager to switch to Playing state
-        if (HasStateAuthority && GameManager.Instance != null)
-        {
-            GameManager.Instance.StartPlayingState();
-        }
     }
 
     private void HandleGameOverPhase()
     {
         Debug.Log("[MinigameController] GameOver phase");
-        
+
         // Disable trap spawner
         if (trapSpawner != null)
         {
             trapSpawner.StopSpawning();
+            trapSpawner.enabled = false;
         }
-        
+
         // Freeze all players
         RPC_SetPlayersFrozen(true);
+        
+        // Chuyển sang Scoreboard sau 1 giây
+        if (HasStateAuthority)
+        {
+            StartCoroutine(ShowScoreboardAfterDelay(1f));
+        }
     }
 
     private void HandleScoreboardPhase()
     {
         Debug.Log("[MinigameController] Scoreboard phase");
-        
-        SetCanvasActive(tutorialCanvas, false);
-        SetCanvasActive(countdownCanvas, false);
-        SetCanvasActive(scoreboardCanvas, true);
-        
+
+        // Hiển thị Scoreboard via GameManager
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ShowMinigameScoreboard();
+        }
+
         // Debug scoreboard info
         LogScoreboardInfo();
-        
+
         // Host: End game sau scoreboard duration
         if (HasStateAuthority)
         {
@@ -272,54 +262,70 @@ public class MinigameController : NetworkBehaviour
     private void LogScoreboardInfo()
     {
         Debug.Log("========== SCOREBOARD ==========");
-        
+
         var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
         foreach (var player in players)
         {
-            bool isWinner = Winner != PlayerRef.None && 
+            bool isWinner = Winner != PlayerRef.None &&
                            player.Object.InputAuthority == Winner;
             string status = isWinner ? "🏆 WINNER" : "❌ LOSER";
             Debug.Log($"[Scoreboard] {player.PlayerName}: {status}");
         }
-        
+
         Debug.Log("================================");
     }
     #endregion
 
-    #region Countdown Logic
-    private void OnCountdownChanged()
+    #region Countdown Logic (Managed by GameManager)
+    /// <summary>
+    /// Gọi bởi GameManager khi countdown bắt đầu
+    /// </summary>
+    public void OnCountdownStarted()
     {
-        if (countdownText != null && CurrentPhase == MinigamePhase.Countdown)
+        if (CurrentPhase != MinigamePhase.Tutorial)
         {
-            int displayCount = Mathf.CeilToInt(Countdown);
-            if (displayCount > 0)
-            {
-                countdownText.text = displayCount.ToString();
-            }
-            else
-            {
-                countdownText.text = "GO!";
-            }
+            Debug.LogWarning($"[MinigameController] OnCountdownStarted called but phase is {CurrentPhase}");
+            return;
         }
+        
+        Debug.Log("[MinigameController] Countdown started (managed by GameManager)");
+        
+        if (HasStateAuthority)
+        {
+            CurrentPhase = MinigamePhase.Countdown;
+        }
+    }
+    
+    /// <summary>
+    /// Gọi bởi GameManager khi countdown kết thúc
+    /// </summary>
+    public void OnCountdownComplete()
+    {
+        Debug.Log("[MinigameController] Countdown complete - starting game");
+        
+        // Unfreeze players
+        if (HasStateAuthority)
+        {
+            RPC_SetPlayersFrozen(false);
+        }
+        
+        // Chờ GameManager chuyển state sang Playing
+        // MinigameController sẽ detect trong FixedUpdateNetwork
     }
 
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
 
-        // Countdown logic (Tutorial -> Playing)
-        if (CurrentPhase == MinigamePhase.Countdown && Countdown > 0)
+        // Detect khi GameManager chuyển sang Playing state
+        if (GameManager.Instance != null &&
+            GameManager.Instance.CurrentState == GameState.Playing &&
+            CurrentPhase != MinigamePhase.Playing)
         {
-            Countdown -= Runner.DeltaTime;
-
-            if (Countdown <= 0)
-            {
-                Countdown = 0;
-                // Delay nhỏ để hiện "GO!"
-                StartCoroutine(StartPlayingAfterGo());
-            }
+            Debug.Log("[Minigame] GameManager allowed Playing!");
+            CurrentPhase = MinigamePhase.Playing;
         }
-        
+
         // Game timer logic (Playing phase)
         if (CurrentPhase == MinigamePhase.Playing && !IsGameEnded)
         {
@@ -327,7 +333,7 @@ public class MinigameController : NetworkBehaviour
             if (GameTimer > 0)
             {
                 GameTimer -= Runner.DeltaTime;
-                
+
                 if (GameTimer <= 0)
                 {
                     GameTimer = 0;
@@ -335,13 +341,13 @@ public class MinigameController : NetworkBehaviour
                     return;
                 }
             }
-            
+
             // Check elimination (nếu minigame không cho respawn)
             UpdateAlivePlayerCount();
             CheckEliminationWinCondition();
         }
     }
-    
+
     /// <summary>
     /// Callback khi GameTimer thay đổi
     /// </summary>
@@ -349,7 +355,7 @@ public class MinigameController : NetworkBehaviour
     {
         // Override này để UI có thể subscribe và hiển thị timer
     }
-    
+
     /// <summary>
     /// Cập nhật số player còn sống
     /// </summary>
@@ -357,7 +363,7 @@ public class MinigameController : NetworkBehaviour
     {
         var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         int alive = 0;
-        
+
         foreach (var p in players)
         {
             if (!p.IsEliminated)
@@ -365,10 +371,10 @@ public class MinigameController : NetworkBehaviour
                 alive++;
             }
         }
-        
+
         AlivePlayerCount = alive;
     }
-    
+
     /// <summary>
     /// Kiểm tra điều kiện thắng khi có elimination
     /// </summary>
@@ -377,14 +383,14 @@ public class MinigameController : NetworkBehaviour
         // Chỉ check nếu minigame không cho respawn
         if (_minigameData != null && _minigameData.allowRespawn)
             return;
-        
+
         // Nếu chỉ còn 1 player -> kết thúc
         if (AlivePlayerCount <= 1)
         {
             // Tìm player còn sống
             var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
             PlayerRef lastSurvivor = PlayerRef.None;
-            
+
             foreach (var p in players)
             {
                 if (!p.IsEliminated)
@@ -393,26 +399,26 @@ public class MinigameController : NetworkBehaviour
                     break;
                 }
             }
-            
+
             Debug.Log($"[MinigameController] Only 1 player remaining: {lastSurvivor}");
             EndGame(lastSurvivor);
         }
     }
-    
+
     /// <summary>
     /// Gọi khi hết thời gian
     /// </summary>
     private void OnTimeUp()
     {
         Debug.Log("[MinigameController] Time's up!");
-        
+
         // Tìm winner dựa trên tiêu chí (có thể là người sống lâu nhất, checkpoint xa nhất, etc.)
         // Mặc định: player còn sống với checkpoint cao nhất
         PlayerRef winner = FindBestPlayer();
-        
+
         EndGame(winner);
     }
-    
+
     /// <summary>
     /// Tìm player tốt nhất (winner khi hết giờ)
     /// </summary>
@@ -421,7 +427,7 @@ public class MinigameController : NetworkBehaviour
         var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         PlayerRef best = PlayerRef.None;
         int bestCheckpoint = -1;
-        
+
         foreach (var p in players)
         {
             if (!p.IsEliminated && p.CurrentCheckpointIndex > bestCheckpoint)
@@ -430,69 +436,25 @@ public class MinigameController : NetworkBehaviour
                 best = p.Object.InputAuthority;
             }
         }
-        
+
         return best;
     }
-    
+
     /// <summary>
     /// Kết thúc game với winner
     /// </summary>
     private void EndGame(PlayerRef winner)
     {
         if (IsGameEnded) return;
-        
+
         Debug.Log($"[MinigameController] Game ended. Winner: {winner}");
-        
+
         Winner = winner;
         IsGameEnded = true;
         CurrentPhase = MinigamePhase.GameOver;
-        
-        // Notify all clients
+
         RPC_OnPlayerWon(winner);
-        
-        // Freeze all players
         RPC_SetPlayersFrozen(true);
-        
-        // Đưa player về vị trí spawn hoặc chờ kết thúc 
-        // Gọi GameManager.EndMinigame() để chuyển sang Scoreboard state (global)
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.EndMinigame(winner.PlayerId);
-        }
-    }
-
-    private IEnumerator StartPlayingAfterGo()
-    {
-        yield return new WaitForSeconds(0.5f);
-        
-        // Unfreeze players
-        RPC_SetPlayersFrozen(false);
-        
-        // Switch to Playing phase
-        CurrentPhase = MinigamePhase.Playing;
-    }
-    #endregion
-
-    #region Button & Input
-    private void OnStartButtonClicked()
-    {
-        if (!HasStateAuthority)
-        {
-            Debug.Log("[MinigameController] Only host can start");
-            return;
-        }
-
-        if (CurrentPhase != MinigamePhase.Tutorial)
-        {
-            Debug.Log($"[MinigameController] Cannot start, current phase: {CurrentPhase}");
-            return;
-        }
-
-        Debug.Log("[MinigameController] Host clicked Start - beginning countdown");
-        
-        // Start countdown
-        Countdown = countdownTime;
-        CurrentPhase = MinigamePhase.Countdown;
     }
     #endregion
 
@@ -500,12 +462,12 @@ public class MinigameController : NetworkBehaviour
     private void TeleportPlayersToSpawnPoints()
     {
         var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        
+
         // Sort theo PlayerRef để spawn order deterministic
         System.Array.Sort(players, (a, b) =>
             a.Object.InputAuthority.PlayerId.CompareTo(b.Object.InputAuthority.PlayerId)
         );
-        
+
         int spawnIndex = 0;
 
         foreach (var player in players)
@@ -561,14 +523,14 @@ public class MinigameController : NetworkBehaviour
         Debug.Log($"[MinigameController] Player {playerRef} finished!");
         EndGame(playerRef);
     }
-    
+
     /// <summary>
     /// Gọi khi player bị loại (để cập nhật count)
     /// </summary>
     public void OnPlayerEliminated(PlayerRef playerRef)
     {
         if (!HasStateAuthority) return;
-        
+
         Debug.Log($"[MinigameController] Player {playerRef} eliminated!");
         UpdateAlivePlayerCount();
     }
@@ -588,8 +550,6 @@ public class MinigameController : NetworkBehaviour
     private IEnumerator EndGameAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
-
-        // Gọi GameManager.EndMinigame - nó sẽ xử lý flow Scoreboard -> Voting
         if (GameManager.Instance != null)
         {
             GameManager.Instance.EndMinigame(Winner.PlayerId);
@@ -598,14 +558,6 @@ public class MinigameController : NetworkBehaviour
     #endregion
 
     #region Helpers
-    private void SetCanvasActive(GameObject canvas, bool active)
-    {
-        if (canvas != null)
-        {
-            canvas.SetActive(active);
-        }
-    }
-
     /// <summary>
     /// Lấy spawn point cho player
     /// </summary>

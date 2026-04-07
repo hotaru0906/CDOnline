@@ -38,9 +38,21 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private GameObject scoreboardUI;
     [SerializeField] private GameObject resultUI;
     
+    [Header("Minigame UI (Main UI - dùng chung)")]
+    [SerializeField] private GameObject minigameCountdownUI;  // Countdown UI chính (dùng chung)
+    [SerializeField] private TMPro.TMP_Text countdownText;    // Text hiển thị countdown
+    
+    [Header("Minigame Scene UI (Tìm khi scene load)")]
+    [SerializeField] private GameObject minigameTutorialUI;   // Tutorial trong minigame scene (mỗi scene khác nhau)
+    private UnityEngine.UI.Button _tutorialStartButton;       // Button Start trong tutorial (host only)
+    
+    [Header("Countdown Settings")]
+    [SerializeField] private float countdownTime = 3f;        // Thời gian countdown
+    
     [Header("Scoreboard Settings")]
     [SerializeField] private float scoreboardDisplayDuration = 3f; // Thời gian hiển thị scoreboard trước khi chuyển sang Voting
     private Coroutine _scoreboardCoroutine;
+    private Coroutine _countdownCoroutine;
     #endregion
 
     #region Minigame Data
@@ -84,9 +96,7 @@ public class GameManager : NetworkBehaviour
     #endregion
 
     #region Public Properties
-    /// <summary>
-    /// Lấy MinigameData của minigame hiện tại
-    /// </summary>
+
     public MinigameData CurrentMinigameData
     {
         get
@@ -151,7 +161,7 @@ public class GameManager : NetworkBehaviour
             RegisterUIPanel(panel);
         }
 
-        Debug.Log($"[GameManager] FindUIReferences - Lobby:{lobbyUI != null}, Voting:{votingUI != null}, RouletteVoting:{rouletteVotingUI != null}, Scoreboard:{scoreboardUI != null}, Result:{resultUI != null}");
+        Debug.Log($"[GameManager] FindUIReferences - Lobby:{lobbyUI != null}, Voting:{votingUI != null}, RouletteVoting:{rouletteVotingUI != null}, Scoreboard:{scoreboardUI != null}, Result:{resultUI != null}, MGTutorial:{minigameTutorialUI != null}, MGCountdown:{minigameCountdownUI != null}");
     }
     
     /// <summary>
@@ -178,8 +188,205 @@ public class GameManager : NetworkBehaviour
             case UIPanelType.Result:
                 resultUI = panel.gameObject;
                 break;
+            case UIPanelType.MinigameTutorial:
+                minigameTutorialUI = panel.gameObject;
+                SetupTutorialStartButton();
+                break;
+            case UIPanelType.MinigameCountdown:
+                minigameCountdownUI = panel.gameObject;
+                // Tìm TMP_Text trong countdown panel (tìm theo tag hoặc tên "CountdownText")
+                if (countdownText == null)
+                {
+                    var texts = panel.GetComponentsInChildren<TMPro.TMP_Text>(true);
+                    foreach (var txt in texts)
+                    {
+                        if (txt.CompareTag("CountdownText") || txt.name.ToLower().Contains("countdown"))
+                        {
+                            countdownText = txt;
+                            Debug.Log($"[GameManager] Found countdown text: {txt.name}");
+                            break;
+                        }
+                    }
+                    // Fallback: lấy TMP_Text đầu tiên nếu không tìm thấy
+                    if (countdownText == null && texts.Length > 0)
+                    {
+                        countdownText = texts[0];
+                        Debug.Log($"[GameManager] Using first TMP_Text as countdown: {countdownText.name}");
+                    }
+                }
+                break;
         }
     }
+    
+    /// <summary>
+    /// Tìm và setup Start button trong Tutorial panel
+    /// </summary>
+    private void SetupTutorialStartButton()
+    {
+        if (minigameTutorialUI == null) return;
+        
+        // Tìm button có tag "MinigameStartButton" hoặc component MinigameStartButton
+        var buttons = minigameTutorialUI.GetComponentsInChildren<UnityEngine.UI.Button>(true);
+        foreach (var btn in buttons)
+        {
+            if (btn.CompareTag("MinigameStartButton") || btn.name.ToLower().Contains("start"))
+            {
+                _tutorialStartButton = btn;
+                _tutorialStartButton.onClick.RemoveAllListeners();
+                _tutorialStartButton.onClick.AddListener(OnTutorialStartButtonClicked);
+                
+                // Chỉ host mới thấy button
+                _tutorialStartButton.gameObject.SetActive(HasStateAuthority);
+                Debug.Log($"[GameManager] Found and setup tutorial start button: {btn.name}");
+                break;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Gọi khi Host nhấn nút Start trong Tutorial
+    /// </summary>
+    private void OnTutorialStartButtonClicked()
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[GameManager] Only host can start minigame");
+            return;
+        }
+        
+        if (CurrentState != GameState.Tutorial)
+        {
+            Debug.LogWarning($"[GameManager] Cannot start, current state: {CurrentState}");
+            return;
+        }
+        
+        Debug.Log("[GameManager] Host clicked Start - hiding tutorial and starting countdown");
+        
+        // Bắt đầu countdown (sync to all clients)
+        RPC_StartCountdown();
+    }
+    
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_StartCountdown()
+    {
+        // Ẩn tutorial, hiện countdown
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, true);
+        
+        // Báo MinigameController chuyển phase
+        if (MinigameController.Instance != null)
+        {
+            MinigameController.Instance.OnCountdownStarted();
+        }
+        
+        // Host chạy countdown coroutine
+        if (HasStateAuthority)
+        {
+            if (_countdownCoroutine != null)
+            {
+                StopCoroutine(_countdownCoroutine);
+            }
+            _countdownCoroutine = StartCoroutine(RunCountdown());
+        }
+    }
+    
+    private IEnumerator RunCountdown()
+    {
+        float remaining = countdownTime;
+        
+        while (remaining > 0)
+        {
+            // Update UI for all clients
+            RPC_UpdateCountdownUI(Mathf.CeilToInt(remaining));
+            
+            yield return new WaitForSeconds(1f);
+            remaining -= 1f;
+        }
+        
+        // Hiện "GO!"
+        RPC_UpdateCountdownUI(0);
+        
+        yield return new WaitForSeconds(0.5f);
+        
+        // Countdown xong -> chuyển sang Playing
+        RPC_CountdownComplete();
+        
+        _countdownCoroutine = null;
+    }
+    
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_UpdateCountdownUI(int count)
+    {
+        if (countdownText != null)
+        {
+            countdownText.text = count > 0 ? count.ToString() : "GO!";
+        }
+    }
+    
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_CountdownComplete()
+    {
+        // Ẩn countdown UI
+        SetActiveUI(minigameCountdownUI, false);
+        
+        // Báo MinigameController bắt đầu game
+        if (MinigameController.Instance != null)
+        {
+            MinigameController.Instance.OnCountdownComplete();
+        }
+    }
+    
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowMinigameCountdown()
+    {
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, true);
+    }
+    
+    /// <summary>
+    /// Ẩn countdown UI - gọi khi countdown kết thúc
+    /// </summary>
+    public void HideMinigameCountdown()
+    {
+        SetActiveUI(minigameCountdownUI, false);
+    }
+    
+    /// <summary>
+    /// Hiển thị Tutorial UI - gọi bởi MinigameController khi scene đã load xong
+    /// </summary>
+    public void ShowMinigameTutorial()
+    {
+        // Tìm lại UI vì scene mới load
+        FindUIReferences();
+        
+        // Hiện tutorial UI
+        SetActiveUI(minigameTutorialUI, true);
+        SetActiveUI(minigameCountdownUI, false);
+        
+        // Setup lại button nếu cần
+        SetupTutorialStartButton();
+        
+        Debug.Log("[GameManager] Showing minigame tutorial UI");
+    }
+    
+    /// <summary>
+    /// Hiển thị Scoreboard trong minigame scene - thay thế cho scoreboard của MinigameController
+    /// </summary>
+    public void ShowMinigameScoreboard()
+    {
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
+        SetActiveUI(scoreboardUI, true);
+        
+        // Hiện cursor
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.ShowCursor();
+        }
+        
+        Debug.Log("[GameManager] Showing scoreboard");
+    }
+    
     private void InitializeUIState()
     {
         // Đảm bảo luôn tìm lại UI trước khi set
@@ -650,6 +857,8 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
         
         // Chuyển camera sang First Person trong Lobby
         if (CameraManager.Instance != null)
@@ -680,6 +889,8 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
         
         // Hiện UI dựa vào VotingType
         if (CurrentVotingType == VotingType.MinigameOnly)
@@ -721,12 +932,20 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[GameManager] Entered Tutorial state");
         
-        // Ẩn tất cả UI panels
+        // Ẩn tất cả UI panels (minigame UI sẽ được show sau khi scene load)
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
         SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
+        
+        // Hiện cursor cho tutorial
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.ShowCursor();
+        }
         
         // Tạm thời disable player input (sẽ enable lại khi Playing)
         if (PlayerInputHandler.Instance != null)
@@ -791,6 +1010,8 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
         
         // Bật lại player input
         if (PlayerInputHandler.Instance != null)
@@ -858,6 +1079,8 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, true);
         SetActiveUI(resultUI, false);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
         
         // Hiện cursor khi xem scoreboard
         if (CursorManager.Instance != null)
@@ -902,6 +1125,8 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
         
         // Chuyển sang First Person camera trong Roulette
         if (CameraManager.Instance != null)
@@ -948,6 +1173,8 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, true);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
 
         // Hiện cursor
         if (CursorManager.Instance != null)
