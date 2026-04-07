@@ -47,6 +47,9 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float externalForceDrag = 5f; // Tốc độ giảm dần external force
     [SerializeField] private float externalForceThreshold = 0.1f; // Ngưỡng để reset về 0
 
+    [Header("Hit Cooldown Settings")]
+    [SerializeField] private float hitCooldownDuration = 0.5f; // Thời gian cooldown sau khi bị hit
+
     [Header("UI")]
     [SerializeField] private GameObject crosshairUI;
 
@@ -57,6 +60,12 @@ public class PlayerController : NetworkBehaviour
     [Networked] private NetworkBool IsCrouching { get; set; }
     [Networked] private NetworkBool IsMoving { get; set; } // Có input di chuyển không
     [Networked] private float GroundedTimer { get; set; } // Timer để buffer ground check
+    [Networked] private TickTimer HitCooldownTimer { get; set; } // Timer cho hit cooldown
+
+    /// <summary>
+    /// Kiểm tra player có đang trong hit cooldown không
+    /// </summary>
+    public bool IsInHitCooldown => HitCooldownTimer.ExpiredOrNotRunning(Runner) == false;
 
     public Vector3 Velocity => _networkCC != null ? _networkCC.Velocity : Vector3.zero;
 
@@ -302,12 +311,107 @@ public class PlayerController : NetworkBehaviour
             RPC_RequestKnockback(force);
         }
     }
+
+    /// <summary>
+    /// Áp dụng knockback với hit cooldown - ngăn spam hit
+    /// </summary>
+    public void ApplyKnockbackWithCooldown(Vector3 force)
+    {
+        if (Object.HasInputAuthority)
+        {
+            RPC_RequestKnockbackWithCooldown(force);
+        }
+    }
+
+    /// <summary>
+    /// Request teleport từ local player - gửi RPC đến host với cooldown
+    /// </summary>
+    public void RequestTeleport(Vector3 targetPosition)
+    {
+        if (Object.HasInputAuthority)
+        {
+            RPC_RequestTeleportWithCooldown(targetPosition);
+        }
+    }
     
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     private void RPC_RequestKnockback(Vector3 force)
     {
         ExternalVelocity += force;
         Debug.Log($"[PlayerController] Knockback applied: {force}, total: {ExternalVelocity}");
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_RequestKnockbackWithCooldown(Vector3 force)
+    {
+        // Kiểm tra cooldown trên host
+        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
+        {
+            Debug.Log($"[PlayerController] Knockback ignored - still in cooldown");
+            return;
+        }
+
+        // Áp dụng knockback    
+        ExternalVelocity += force;
+        
+        // Bắt đầu cooldown timer
+        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldownDuration);
+        
+        Debug.Log($"[PlayerController] Knockback with cooldown applied: {force}, cooldown: {hitCooldownDuration}s");
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_RequestTeleportWithCooldown(Vector3 targetPosition)
+    {
+        // Kiểm tra cooldown trên host
+        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
+        {
+            Debug.Log($"[PlayerController] Teleport ignored - still in cooldown");
+            return;
+        }
+
+        // Teleport player
+        _networkCC.Teleport(targetPosition);
+        
+        // Bắt đầu cooldown timer
+        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldownDuration);
+        
+        Debug.Log($"[PlayerController] Teleport with cooldown applied: {targetPosition}, cooldown: {hitCooldownDuration}s");
+    }
+
+    /// <summary>
+    /// Kiểm tra và áp dụng hit từ bên ngoài (attack từ player khác, etc.)
+    /// Trả về true nếu hit được áp dụng, false nếu đang trong cooldown
+    /// </summary>
+    public bool TryApplyHit(Vector3 knockbackForce)
+    {
+        if (!HasStateAuthority) return false;
+        
+        // Kiểm tra cooldown
+        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
+        {
+            return false;
+        }
+
+        // Áp dụng knockback
+        ExternalVelocity += knockbackForce;
+        
+        // Bắt đầu cooldown
+        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldownDuration);
+        
+        Debug.Log($"[PlayerController] Hit applied with knockback: {knockbackForce}");
+        return true;
+    }
+
+    /// <summary>
+    /// Reset hit cooldown - dùng khi respawn hoặc round mới
+    /// </summary>
+    public void ResetHitCooldown()
+    {
+        if (HasStateAuthority)
+        {
+            HitCooldownTimer = TickTimer.None;
+        }
     }
 
     private void HandleJump(PlayerInputData input)
