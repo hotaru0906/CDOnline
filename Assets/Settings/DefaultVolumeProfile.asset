@@ -299,6 +299,49 @@ MonoBehaviour:
   cropToFit:
     m_OverrideState: 1
     m_Value: 1
+--- !u!114 &-2113387198795594848
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: edd84a052e7edbb41a966585293f2e52, type: 3}
+  m_Name: LensDistortionBrownConrady
+  m_EditorClassIdentifier: 
+  active: 1
+  FieldOfView:
+    m_OverrideState: 1
+    m_Value: {x: 45, y: 45}
+  DistortionScale:
+    m_OverrideState: 1
+    m_Value: 1
+  RadialDistortionCoefficients:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0, z: 0}
+  TangentialDistortionCoefficients:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  PrincipalPoint:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  OutOfViewportColor:
+    m_OverrideState: 1
+    m_Value: {r: 0, g: 0, b: 0, a: 1}
+  ShowGrid:
+    m_OverrideState: 1
+    m_Value: 0
+  GridColor:
+    m_OverrideState: 1
+    m_Value: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  GridResolution:
+    m_OverrideState: 1
+    m_Value: 12
+  GridLineWidth:
+    m_OverrideState: 1
+    m_Value: 6
 --- !u!114 &-1410297666881709256
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -342,6 +385,9 @@ MonoBehaviour:
   skyOcclusionIntensityMultiplier:
     m_OverrideState: 1
     m_Value: 1
+  worldOffset:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0, z: 0}
 --- !u!114 &-1216621516061285780
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -462,8 +508,7 @@ MonoBehaviour:
   - {fileID: -6288072647309666549}
   - {fileID: 7518938298396184218}
   - {fileID: -1410297666881709256}
-  - {fileID: -7750755424749557576}
-  - {fileID: -5139089513906902183}
+  - {fileID: -2113387198795594848}
 --- !u!114 &853819529557874667
 MonoBehaviour:
   m_ObjectHideFlags: 3
