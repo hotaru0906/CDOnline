@@ -30,15 +30,15 @@ public class CameraManager : MonoBehaviour
     [Header("First Person Settings")]
     [Tooltip("Offset từ player position đến vị trí camera (thường là đầu player)")]
     [SerializeField] private Vector3 firstPersonOffset = new Vector3(0f, 1.6f, 0f);
-    
+
     [Tooltip("Độ nhạy xoay camera First Person")]
     [SerializeField] private float fpSensitivityX = 3f;
     [SerializeField] private float fpSensitivityY = 2f;
-    
+
     [Tooltip("Giới hạn góc nhìn lên/xuống")]
     [SerializeField] private float fpMinPitch = -80f;
     [SerializeField] private float fpMaxPitch = 80f;
-    
+
     private float _fpYaw;
     private float _fpPitch;
 
@@ -48,7 +48,7 @@ public class CameraManager : MonoBehaviour
     private Transform _localPlayerTransform;
     private Transform _currentSharedCameraPosition;
     private CameraMode _currentMode = CameraMode.Fixed;
-    
+
     // Flag để biết đang chờ MinigameCamera setup shared camera
     private bool _pendingSharedCameraMode = false;
 
@@ -56,7 +56,7 @@ public class CameraManager : MonoBehaviour
     public bool IsPendingSharedCamera => _pendingSharedCameraMode;
     public Camera MainCamera => mainCamera;
     public CameraOrbit CameraOrbit => cameraOrbit;
-    
+
     // First Person properties
     public float FPYaw => _fpYaw;
     public float FPPitch => _fpPitch;
@@ -75,40 +75,40 @@ public class CameraManager : MonoBehaviour
         // Auto-find components nếu chưa assign
         if (mainCamera == null)
             mainCamera = Camera.main;
-        
+
         if (cameraOrbit == null && mainCamera != null)
             cameraOrbit = mainCamera.GetComponent<CameraOrbit>();
-        
+
         // Đăng ký event khi scene thay đổi
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
-    
+
     private void OnDestroy()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
     }
-    
+
     /// <summary>
     /// Gọi khi scene mới được load - tự động tìm lại camera
     /// </summary>
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         Debug.Log($"[CameraManager] Scene loaded: {scene.name}, re-initializing camera...");
-        
+
         // Tìm lại Main Camera trong scene mới
         StartCoroutine(ReinitializeCameraDelayed());
     }
-    
+
     /// <summary>
     /// Delay một frame để đảm bảo scene đã load xong
     /// </summary>
     private System.Collections.IEnumerator ReinitializeCameraDelayed()
     {
         yield return null; // Đợi 1 frame
-        
+
         ReinitializeCamera();
     }
-    
+
     /// <summary>
     /// Tìm lại camera và components - gọi khi scene thay đổi
     /// </summary>
@@ -116,16 +116,16 @@ public class CameraManager : MonoBehaviour
     {
         // Tìm Main Camera mới
         mainCamera = Camera.main;
-        
+
         if (mainCamera == null)
         {
             Debug.LogWarning("[CameraManager] No Main Camera found in scene!");
             return;
         }
-        
+
         // Tìm CameraOrbit trên camera mới
         cameraOrbit = mainCamera.GetComponent<CameraOrbit>();
-        
+
         // Nếu đang chờ shared camera mode, disable CameraOrbit và đợi MinigameCamera setup
         if (_pendingSharedCameraMode)
         {
@@ -136,19 +136,19 @@ public class CameraManager : MonoBehaviour
             Debug.Log($"[CameraManager] Re-initialized. Waiting for MinigameCamera to setup shared camera...");
             return;
         }
-        
+
         // Nếu đang ở First Person mode, đảm bảo CameraOrbit disabled
         if (_currentMode == CameraMode.FirstPerson && cameraOrbit != null)
         {
             cameraOrbit.enabled = false;
         }
-        
+
         // Nếu có local player, cập nhật lại target
         if (_localPlayerTransform != null && cameraOrbit != null)
         {
             cameraOrbit.SetTarget(_localPlayerTransform);
         }
-        
+
         Debug.Log($"[CameraManager] Re-initialized. Camera: {mainCamera.name}, CameraOrbit: {(cameraOrbit != null ? "Found" : "None")}, Mode: {_currentMode}");
     }
 
@@ -166,7 +166,7 @@ public class CameraManager : MonoBehaviour
         {
             ToggleCursor();
         }
-        
+
         // Toggle giữa First Person và Third Person với V
         if (Input.GetKeyDown(KeyCode.V) && _localPlayerTransform != null)
         {
@@ -181,7 +181,7 @@ public class CameraManager : MonoBehaviour
     {
         // Không xử lý camera nếu đang chờ MinigameCamera setup
         if (_pendingSharedCameraMode) return;
-        
+
         // Chỉ xử lý First Person trong LateUpdate
         if (_currentMode == CameraMode.FirstPerson && _localPlayerTransform != null)
         {
@@ -195,18 +195,15 @@ public class CameraManager : MonoBehaviour
     private void UpdateFirstPersonCamera()
     {
         // Mouse input
-        if (Cursor.lockState == CursorLockMode.Locked)
-        {
-            _fpYaw += Input.GetAxis("Mouse X") * fpSensitivityX;
-            _fpPitch -= Input.GetAxis("Mouse Y") * fpSensitivityY;
-            _fpPitch = Mathf.Clamp(_fpPitch, fpMinPitch, fpMaxPitch);
-        }
+        _fpYaw += Input.GetAxis("Mouse X") * fpSensitivityX;
+        _fpPitch -= Input.GetAxis("Mouse Y") * fpSensitivityY;
+        _fpPitch = Mathf.Clamp(_fpPitch, fpMinPitch, fpMaxPitch);
 
-        // Camera position = player position + offset
-        Vector3 targetPos = _localPlayerTransform.position + firstPersonOffset;
-        mainCamera.transform.position = targetPos;
+        // 👉 Player xoay theo yaw
+        _localPlayerTransform.rotation = Quaternion.Euler(0, _fpYaw, 0);
 
-        // Camera rotation
+        // 👉 Camera chỉ xử lý pitch
+        mainCamera.transform.position = _localPlayerTransform.position + firstPersonOffset;
         mainCamera.transform.rotation = Quaternion.Euler(_fpPitch, _fpYaw, 0);
     }
 
@@ -236,7 +233,7 @@ public class CameraManager : MonoBehaviour
         }
 
         _localPlayerTransform = playerTransform;
-        
+
         // Set target cho CameraOrbit
         if (cameraOrbit != null)
         {
@@ -274,7 +271,7 @@ public class CameraManager : MonoBehaviour
         {
             cameraOrbit.enabled = false;
         }
-        
+
         // Unlock cursor trong Fixed mode
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -303,13 +300,13 @@ public class CameraManager : MonoBehaviour
         {
             cameraOrbit.enabled = false;
         }
-        
+
         // Đảm bảo camera render tất cả layers
         if (mainCamera != null)
         {
             mainCamera.cullingMask = -1; // Everything
         }
-        
+
         // Lock cursor
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -320,7 +317,7 @@ public class CameraManager : MonoBehaviour
             _fpYaw = _localPlayerTransform.eulerAngles.y;
             _fpPitch = 0f;
         }
-        
+
         // Ẩn model của local player (giống GTA 5)
         SetLocalPlayerModelVisible(false);
 
@@ -339,27 +336,27 @@ public class CameraManager : MonoBehaviour
         {
             cameraOrbit.enabled = true;
             cameraOrbit.SetTarget(_localPlayerTransform);
-            
+
             // Sync yaw từ First Person nếu có
             cameraOrbit.SetYaw(_fpYaw);
         }
-        
+
         // Đảm bảo camera render tất cả layers
         if (mainCamera != null)
         {
             mainCamera.cullingMask = -1; // Everything
         }
-        
+
         // Lock cursor
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        
+
         // Hiện lại model của local player
         SetLocalPlayerModelVisible(true);
 
         Debug.Log("[CameraManager] Switched to Third Person Camera (CameraOrbit)");
     }
-    
+
     /// <summary>
     /// Ẩn/hiện model của local player
     /// Dùng cho First Person mode
@@ -367,7 +364,7 @@ public class CameraManager : MonoBehaviour
     private void SetLocalPlayerModelVisible(bool visible)
     {
         if (_localPlayerTransform == null) return;
-        
+
         var modelSwitcher = _localPlayerTransform.GetComponent<PlayerModelSwitcher>();
         if (modelSwitcher != null)
         {
@@ -382,9 +379,9 @@ public class CameraManager : MonoBehaviour
     /// <param name="lockCursor">Có lock cursor không (tùy gameplay của minigame)</param>
     public void SwitchToMinigameCamera(Transform cameraPosition = null, bool lockCursor = false)
     {
-        // Clear pending flag vì đã setup xong
+        _fpPitch = 0f;
         _pendingSharedCameraMode = false;
-        
+
         _currentMode = CameraMode.Minigame;
         _currentSharedCameraPosition = cameraPosition;
 
@@ -400,16 +397,16 @@ public class CameraManager : MonoBehaviour
             mainCamera.transform.position = cameraPosition.position;
             mainCamera.transform.rotation = cameraPosition.rotation;
         }
-        
+
         // Đảm bảo camera render tất cả layers (tránh lỗi không thấy player)
         if (mainCamera != null)
         {
             mainCamera.cullingMask = -1; // -1 = Everything (tất cả layers)
         }
-        
+
         // Hiện lại model của local player (quan trọng khi chuyển từ FirstPerson)
         SetLocalPlayerModelVisible(true);
-        
+
         // Cursor setting tùy minigame
         Cursor.lockState = lockCursor ? CursorLockMode.Locked : CursorLockMode.None;
         Cursor.visible = !lockCursor;
@@ -424,7 +421,7 @@ public class CameraManager : MonoBehaviour
     public void SetPendingSharedCameraMode(bool pending)
     {
         _pendingSharedCameraMode = pending;
-        
+
         if (pending)
         {
             // Disable CameraOrbit ngay lập tức để tránh nó cập nhật camera
@@ -496,7 +493,7 @@ public class CameraManager : MonoBehaviour
         {
             return cameraOrbit.GetForwardDirection();
         }
-        
+
         return mainCamera.transform.forward;
     }
 
@@ -514,7 +511,7 @@ public class CameraManager : MonoBehaviour
         {
             return cameraOrbit.GetRightDirection();
         }
-        
+
         return mainCamera.transform.right;
     }
 

@@ -38,8 +38,6 @@ public class SeatManager : NetworkBehaviour
     #endregion
 
     #region Events
-    public event Action<int, int> OnPlayerSeated;      // seatIndex, playerSlot
-    public event Action<int, int> OnPlayerUnseated;    // seatIndex, playerSlot
     public event Action OnAllPlayersSeated;
     #endregion
 

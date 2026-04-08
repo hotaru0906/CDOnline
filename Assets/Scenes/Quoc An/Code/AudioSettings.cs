@@ -20,6 +20,10 @@ public class AudioSettings : MonoBehaviour
     [SerializeField] private TextMeshProUGUI sfxValueText;
     [SerializeField] private TextMeshProUGUI uiValueText;
 
+    [Header("=== Toggles ===")]
+    [SerializeField] private Toggle bgmToggle;
+    [SerializeField] private Toggle sfxToggle;
+
     // ==============================
     //         UNITY EVENTS
     // ==============================
@@ -39,6 +43,12 @@ public class AudioSettings : MonoBehaviour
         musicSlider.onValueChanged.AddListener(SetMusicVolume);
         sfxSlider.onValueChanged.AddListener(SetSFXVolume);
         uiSlider.onValueChanged.AddListener(SetUIVolume);
+
+        // Gắn sự kiện cho toggle
+        if (bgmToggle != null)
+            bgmToggle.onValueChanged.AddListener(SetBGMEnabled);
+        if (sfxToggle != null)
+            sfxToggle.onValueChanged.AddListener(SetSFXEnabled);
     }
 
     // ==============================
@@ -86,6 +96,21 @@ public class AudioSettings : MonoBehaviour
     }
 
     // ==============================
+    //    TOGGLE BGM / SFX (AudioManager)
+    // ==============================
+    public void SetBGMEnabled(bool isOn)
+    {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.SetBGM(isOn);
+    }
+
+    public void SetSFXEnabled(bool isOn)
+    {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.SetSFX(isOn);
+    }
+
+    // ==============================
     //       SAVE / LOAD
     // ==============================
     private void LoadAudioSettings()
@@ -101,6 +126,15 @@ public class AudioSettings : MonoBehaviour
         musicSlider.value  = music;
         sfxSlider.value    = sfx;
         uiSlider.value     = ui;
+
+        // Load BGM/SFX toggle từ AudioManager
+        if (AudioManager.Instance != null)
+        {
+            if (bgmToggle != null)
+                bgmToggle.isOn = AudioManager.Instance.IsBGMOn;
+            if (sfxToggle != null)
+                sfxToggle.isOn = AudioManager.Instance.IsSFXOn;
+        }
     }
 
     // Reset về mặc định
@@ -110,5 +144,11 @@ public class AudioSettings : MonoBehaviour
         musicSlider.value  = 1f;
         sfxSlider.value    = 1f;
         uiSlider.value     = 1f;
+
+        // Reset toggles
+        if (bgmToggle != null)
+            bgmToggle.isOn = true;
+        if (sfxToggle != null)
+            sfxToggle.isOn = true;
     }
 }

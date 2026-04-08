@@ -13,6 +13,9 @@ public class MenuManager : MonoBehaviour
     [SerializeField] private GameObject canvasCreateRoom;
     [SerializeField] private GameObject canvasItemUI;
 
+    [Header("Settings")]
+    [SerializeField] private SettingsManager settingsManager;
+
     [Header("Lobby References")]
     [SerializeField] private LobbyRunner lobbyRunner;
     [SerializeField] private TMP_InputField roomNameInput;
@@ -71,6 +74,12 @@ public class MenuManager : MonoBehaviour
     public void ShowPlayOnline() => SwitchScreen(canvasPlayOnline);
     public void ShowFindLobby() => SwitchScreen(canvasFindLobby);
     public void ShowCreateRoom() => SwitchScreen(canvasCreateRoom);
+
+    public void ShowSettings()
+    {
+        if (settingsManager != null)
+            settingsManager.OpenSettings();
+    }
 
     public void ShowItemUI()
     {

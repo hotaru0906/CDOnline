@@ -329,6 +329,12 @@ public class GameManager : NetworkBehaviour
         // Ẩn countdown UI
         SetActiveUI(minigameCountdownUI, false);
         
+        // Host chuyển state sang Playing
+        if (HasStateAuthority)
+        {
+            CurrentState = GameState.Playing;
+        }
+        
         // Báo MinigameController bắt đầu game
         if (MinigameController.Instance != null)
         {
@@ -398,6 +404,7 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        SetActiveUI(minigameCountdownUI, false);
 
         // Chỉ bật Lobby
         SetActiveUI(lobbyUI, true);

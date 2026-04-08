@@ -16,7 +16,6 @@ public class MinigameController : NetworkBehaviour
 
     [Header("Spawn Settings")]
     [SerializeField] private Transform[] spawnPoints;
-    [SerializeField] private float spawnDelay = 1f;
 
     [Header("Scoreboard Settings")]
     [SerializeField] private float scoreboardDuration = 3f;
@@ -131,11 +130,11 @@ public class MinigameController : NetworkBehaviour
 
         // Chuyển sang phase Tutorial
         CurrentPhase = MinigamePhase.Tutorial;
-        
+
         // Báo GameManager hiển thị Tutorial UI
         RPC_ShowTutorialUI();
     }
-    
+
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_ShowTutorialUI()
     {
@@ -231,12 +230,6 @@ public class MinigameController : NetworkBehaviour
 
         // Freeze all players
         RPC_SetPlayersFrozen(true);
-        
-        // Chuyển sang Scoreboard sau 1 giây
-        if (HasStateAuthority)
-        {
-            StartCoroutine(ShowScoreboardAfterDelay(1f));
-        }
     }
 
     private void HandleScoreboardPhase()
@@ -251,12 +244,6 @@ public class MinigameController : NetworkBehaviour
 
         // Debug scoreboard info
         LogScoreboardInfo();
-
-        // Host: End game sau scoreboard duration
-        if (HasStateAuthority)
-        {
-            StartCoroutine(EndGameAfterDelay(scoreboardDuration));
-        }
     }
 
     private void LogScoreboardInfo()
@@ -287,28 +274,28 @@ public class MinigameController : NetworkBehaviour
             Debug.LogWarning($"[MinigameController] OnCountdownStarted called but phase is {CurrentPhase}");
             return;
         }
-        
+
         Debug.Log("[MinigameController] Countdown started (managed by GameManager)");
-        
+
         if (HasStateAuthority)
         {
             CurrentPhase = MinigamePhase.Countdown;
         }
     }
-    
+
     /// <summary>
     /// Gọi bởi GameManager khi countdown kết thúc
     /// </summary>
     public void OnCountdownComplete()
     {
         Debug.Log("[MinigameController] Countdown complete - starting game");
-        
+
         // Unfreeze players
         if (HasStateAuthority)
         {
             RPC_SetPlayersFrozen(false);
         }
-        
+
         // Chờ GameManager chuyển state sang Playing
         // MinigameController sẽ detect trong FixedUpdateNetwork
     }
@@ -455,6 +442,14 @@ public class MinigameController : NetworkBehaviour
 
         RPC_OnPlayerWon(winner);
         RPC_SetPlayersFrozen(true);
+        // HandleGameOverPhase();
+        // HandleScoreboardPhase();
+
+        if (HasStateAuthority && GameManager.Instance != null)
+        {
+            GameManager.Instance.ShowMinigameScoreboard();
+            GameManager.Instance.EndMinigame(winner.PlayerId);
+        }
     }
     #endregion
 

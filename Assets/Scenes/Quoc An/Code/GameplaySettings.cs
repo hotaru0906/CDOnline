@@ -11,18 +11,12 @@ public class GameplaySettings : MonoBehaviour
     [Header("=== Invert Y-Axis ===")]
     [SerializeField] private Toggle invertYToggle;
 
-    [Header("=== FOV ===")]
-    [SerializeField] private Slider fovSlider;
-    [SerializeField] private TextMeshProUGUI fovValueText;
-    [SerializeField] private Camera playerCamera; // Gắn Camera chính vào đây
-
     [Header("=== Language ===")]
     [SerializeField] private TMP_Dropdown languageDropdown;
 
     // Static để các script khác có thể truy cập
     public static float MouseSensitivity { get; private set; } = 3f;
     public static bool IsInvertY { get; private set; } = false;
-    public static float CurrentFOV { get; private set; } = 90f;
 
     // ==============================
     //         UNITY EVENTS
@@ -37,7 +31,6 @@ public class GameplaySettings : MonoBehaviour
     {
         sensitivitySlider.onValueChanged.AddListener(SetSensitivity);
         invertYToggle.onValueChanged.AddListener(SetInvertY);
-        fovSlider.onValueChanged.AddListener(SetFOV);
         languageDropdown.onValueChanged.AddListener(SetLanguage);
     }
 
@@ -55,18 +48,6 @@ public class GameplaySettings : MonoBehaviour
     {
         IsInvertY = isOn;
         PlayerPrefs.SetInt("InvertY", isOn ? 1 : 0);
-    }
-
-    public void SetFOV(float value)
-    {
-        CurrentFOV = value;
-        fovValueText.text = Mathf.RoundToInt(value) + "°";
-
-        // Áp dụng FOV ngay lên Camera
-        if (playerCamera != null)
-            playerCamera.fieldOfView = value;
-
-        PlayerPrefs.SetFloat("FOV", value);
     }
 
     public void SetLanguage(int index)
@@ -88,12 +69,10 @@ public class GameplaySettings : MonoBehaviour
     {
         float sensitivity = PlayerPrefs.GetFloat("Sensitivity", 3f);
         bool invertY      = PlayerPrefs.GetInt("InvertY", 0) == 1;
-        float fov         = PlayerPrefs.GetFloat("FOV", 90f);
         int language      = PlayerPrefs.GetInt("Language", 0);
 
         sensitivitySlider.value   = sensitivity;
         invertYToggle.isOn        = invertY;
-        fovSlider.value           = fov;
         languageDropdown.value    = language;
     }
 
@@ -101,7 +80,6 @@ public class GameplaySettings : MonoBehaviour
     {
         sensitivitySlider.value = 3f;
         invertYToggle.isOn      = false;
-        fovSlider.value         = 90f;
         languageDropdown.value  = 0;
     }
 }
