@@ -70,7 +70,7 @@ public class CustomizationManager : MonoBehaviour
         
         // Auto-detect scene mode
         if (CameraManager.Instance != null)
-            sceneMode = CustomizationScene.Lobby;
+            sceneMode = CustomizationScene.Menu;
     }
     
     private void Update()
