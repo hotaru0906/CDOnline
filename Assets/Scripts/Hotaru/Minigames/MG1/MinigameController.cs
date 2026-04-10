@@ -17,9 +17,6 @@ public class MinigameController : NetworkBehaviour
     [Header("Spawn Settings")]
     [SerializeField] private Transform[] spawnPoints;
 
-    [Header("Scoreboard Settings")]
-    [SerializeField] private float scoreboardDuration = 3f;
-
     [Header("Game Settings")]
     [SerializeField] private bool freezePlayersOnStart = true;
 

@@ -94,7 +94,14 @@ public class VotingManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        DontDestroyOnLoad(gameObject); // Thêm dòng này
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     public override void Spawned()
@@ -145,12 +152,16 @@ public class VotingManager : NetworkBehaviour
 
         Debug.Log($"[VotingManager] Starting voting... Type: {CurrentVotingType}, MinigameCount: {MinigameCount}");
 
-        // Reset votes
-        for (int i = 0; i < MinigameCount; i++)
+        // Reset ALL votes (cả trong NetworkArray)
+        for (int i = 0; i < VoteCounts.Length; i++)
         {
             VoteCounts.Set(i, 0);
         }
         RouletteVoteCount = 0;
+
+        // Reset local vote state trên Host
+        hasVoted = false;
+        localVoteIndex = -1;
 
         // Đếm số player và tính tổng vote weight
         var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);

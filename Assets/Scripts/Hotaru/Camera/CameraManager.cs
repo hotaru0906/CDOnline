@@ -52,8 +52,12 @@ public class CameraManager : MonoBehaviour
     // Flag để biết đang chờ MinigameCamera setup shared camera
     private bool _pendingSharedCameraMode = false;
 
+    // Flag để khóa xoay camera (dùng khi Voting, Scoreboard, etc.)
+    private bool _cameraRotationLocked = false;
+
     public CameraMode CurrentMode => _currentMode;
     public bool IsPendingSharedCamera => _pendingSharedCameraMode;
+    public bool IsCameraRotationLocked => _cameraRotationLocked;
     public Camera MainCamera => mainCamera;
     public CameraOrbit CameraOrbit => cameraOrbit;
 
@@ -68,9 +72,8 @@ public class CameraManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
-
         Instance = this;
-        DontDestroyOnLoad(gameObject);
+        DontDestroyOnLoad(gameObject); // Giữ nguyên camera khi load scene mới
 
         // Auto-find components nếu chưa assign
         if (mainCamera == null)
@@ -86,6 +89,11 @@ public class CameraManager : MonoBehaviour
     private void OnDestroy()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+        
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     /// <summary>
@@ -137,14 +145,52 @@ public class CameraManager : MonoBehaviour
             return;
         }
 
-        // Nếu đang ở First Person mode, đảm bảo CameraOrbit disabled
-        if (_currentMode == CameraMode.FirstPerson && cameraOrbit != null)
+        // Auto-switch camera dựa trên GameState và MinigameData
+        if (GameManager.Instance != null)
         {
-            cameraOrbit.enabled = false;
+            var state = GameManager.Instance.CurrentState;
+            var minigameData = GameManager.Instance.CurrentMinigameData;
+
+            // Nếu đang Playing và có MinigameData
+            if (state == GameState.Playing && minigameData != null && !minigameData.useSharedCamera)
+            {
+                if (minigameData.useThirdPersonCamera)
+                {
+                    Debug.Log("[CameraManager] Auto-switching to Third Person for minigame");
+                    SwitchToThirdPersonCamera();
+                }
+                else
+                {
+                    Debug.Log("[CameraManager] Auto-switching to First Person for minigame");
+                    SwitchToFirstPersonCamera();
+                }
+                return; // Đã xử lý xong
+            }
         }
 
-        // Nếu có local player, cập nhật lại target
-        if (_localPlayerTransform != null && cameraOrbit != null)
+        // Xử lý camera mode sau khi reinitialize (fallback)
+        if (cameraOrbit != null)
+        {
+            if (_currentMode == CameraMode.FirstPerson)
+            {
+                cameraOrbit.enabled = false;
+            }
+            else if (_currentMode == CameraMode.ThirdPerson)
+            {
+                cameraOrbit.enabled = true;
+                if (_localPlayerTransform != null)
+                {
+                    cameraOrbit.SetTarget(_localPlayerTransform);
+                }
+            }
+            else if (_currentMode == CameraMode.Minigame || _currentMode == CameraMode.Fixed)
+            {
+                cameraOrbit.enabled = false;
+            }
+        }
+
+        // Nếu có local player và đang ở ThirdPerson, đảm bảo target được set
+        if (_localPlayerTransform != null && cameraOrbit != null && _currentMode == CameraMode.ThirdPerson)
         {
             cameraOrbit.SetTarget(_localPlayerTransform);
         }
@@ -194,17 +240,38 @@ public class CameraManager : MonoBehaviour
     /// </summary>
     private void UpdateFirstPersonCamera()
     {
-        // Mouse input
-        _fpYaw += Input.GetAxis("Mouse X") * fpSensitivityX;
-        _fpPitch -= Input.GetAxis("Mouse Y") * fpSensitivityY;
-        _fpPitch = Mathf.Clamp(_fpPitch, fpMinPitch, fpMaxPitch);
+        // Chỉ xử lý mouse input nếu camera rotation không bị khóa
+        if (!_cameraRotationLocked)
+        {
+            // Mouse input
+            _fpYaw += Input.GetAxis("Mouse X") * fpSensitivityX;
+            _fpPitch -= Input.GetAxis("Mouse Y") * fpSensitivityY;
+            _fpPitch = Mathf.Clamp(_fpPitch, fpMinPitch, fpMaxPitch);
 
-        // 👉 Player xoay theo yaw
-        _localPlayerTransform.rotation = Quaternion.Euler(0, _fpYaw, 0);
+            // 👉 Player xoay theo yaw
+            _localPlayerTransform.rotation = Quaternion.Euler(0, _fpYaw, 0);
+        }
 
-        // 👉 Camera chỉ xử lý pitch
+        // 👉 Camera chỉ xử lý pitch (luôn cập nhật vị trí)
         mainCamera.transform.position = _localPlayerTransform.position + firstPersonOffset;
         mainCamera.transform.rotation = Quaternion.Euler(_fpPitch, _fpYaw, 0);
+    }
+
+    /// <summary>
+    /// Khóa/mở khóa xoay camera
+    /// Dùng khi vào Voting, Scoreboard, hoặc các state không cho phép xoay
+    /// </summary>
+    public void SetCameraRotationLocked(bool locked)
+    {
+        _cameraRotationLocked = locked;
+
+        // Cũng disable/enable CameraOrbit nếu đang ở Third Person
+        if (_currentMode == CameraMode.ThirdPerson && cameraOrbit != null)
+        {
+            cameraOrbit.SetRotationLocked(locked);
+        }
+
+        Debug.Log($"[CameraManager] Camera rotation {(locked ? "LOCKED" : "UNLOCKED")}");
     }
 
     private void ToggleCursor()

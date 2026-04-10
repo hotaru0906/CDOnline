@@ -59,7 +59,16 @@ public class MinigameVotingManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        DontDestroyOnLoad(gameObject); // Thêm dòng này
+        // Không dùng DontDestroyOnLoad vì NetworkBehaviour cần được NetworkRunner quản lý
+        // Thay vào đó, MinigameVotingManager nên là child của GameManager prefab
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
     public override void Spawned()
     {

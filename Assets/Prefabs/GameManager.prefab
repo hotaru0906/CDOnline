@@ -30,7 +30,10 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 4492251615145651124}
+  - {fileID: 4215866185362398922}
+  - {fileID: 5206395206275043171}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8480985857533359269
@@ -50,6 +53,10 @@ MonoBehaviour:
   rouletteVotingUI: {fileID: 0}
   scoreboardUI: {fileID: 0}
   resultUI: {fileID: 0}
+  minigameCountdownUI: {fileID: 0}
+  countdownText: {fileID: 0}
+  minigameTutorialUI: {fileID: 0}
+  countdownTime: 3
   scoreboardDisplayDuration: 3
   availableMinigames:
   - {fileID: 11400000, guid: 42116482f6a56cd4680d23dd7988ef42, type: 2}
@@ -87,7 +94,230 @@ MonoBehaviour:
   SortKey: 1570431533
   ObjectInterest: 1
   Flags: 262145
-  NestedObjects: []
+  NestedObjects:
+  - {fileID: 4014867705912632668}
+  - {fileID: 7004595549159159419}
+  - {fileID: 2228824143576003094}
   NetworkedBehaviours:
   - {fileID: 8480985857533359269}
   ForceRemoteRenderTimeframe: 0
+--- !u!1 &1888691848845231222
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4492251615145651124}
+  - component: {fileID: 4014867705912632668}
+  - component: {fileID: 2607858251839178170}
+  m_Layer: 0
+  m_Name: Voting Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4492251615145651124
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1888691848845231222}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -19.404114, y: -2.544289, z: -34.11708}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8027664525814779364}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4014867705912632668
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1888691848845231222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  SortKey: 4003124931
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 2607858251839178170}
+  ForceRemoteRenderTimeframe: 0
+--- !u!114 &2607858251839178170
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1888691848845231222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88ae28aeb1f37e6419ccc5238998c7fa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _RemainingTime: 0
+  _IsVotingActive:
+    _value: 0
+  _WinnerIndex: -1
+  _MinigameCount: 3
+  _CurrentVotingType: 0
+  _RouletteVoteCount: 0
+  votingDuration: 10
+  quickEndTime: 3
+  instantEndWhenAllVoted: 0
+--- !u!1 &5410280941758782221
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5206395206275043171}
+  - component: {fileID: 2038888794300004217}
+  - component: {fileID: 2228824143576003094}
+  m_Layer: 0
+  m_Name: Roulette Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5206395206275043171
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5410280941758782221}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -12.365012, y: 1.3999066, z: -5.4062076}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8027664525814779364}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2038888794300004217
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5410280941758782221}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 890644beee4b01649bb1fdc4ff08e207, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _ActivePlayerCount: 0
+  _CurrentShooterSlot: -1
+  _IsRouletteActive:
+    _value: 0
+  _MinigamesSinceLastRoulette: 0
+  _IsWaitingForShot:
+    _value: 0
+  _LastMinigameWinnerSlot: -1
+  _PreviousMinigameWinnerSlot: -1
+  shootTimeLimit: 15
+  resultDisplayTime: 3
+  realBulletChance: 0.5
+  rouletteSpawnPoints: []
+--- !u!114 &2228824143576003094
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5410280941758782221}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  SortKey: 4036657022
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 2038888794300004217}
+  ForceRemoteRenderTimeframe: 0
+--- !u!1 &6856786576917715820
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4215866185362398922}
+  - component: {fileID: 7004595549159159419}
+  - component: {fileID: 775468200200238756}
+  m_Layer: 0
+  m_Name: Minigame Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4215866185362398922
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6856786576917715820}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1021.7997, y: 794.55676, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8027664525814779364}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7004595549159159419
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6856786576917715820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  SortKey: 34845039
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 775468200200238756}
+  ForceRemoteRenderTimeframe: 0
+--- !u!114 &775468200200238756
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6856786576917715820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6ca21c256c187e7469ff977c532950c5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  allMinigames:
+  - {fileID: 11400000, guid: 42116482f6a56cd4680d23dd7988ef42, type: 2}
+  - {fileID: 11400000, guid: 32db69738dc488a4b9f5c84da97bb1eb, type: 2}
+  displayCount: 3
+  shuffleMinigames: 1

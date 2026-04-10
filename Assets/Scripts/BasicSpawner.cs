@@ -195,11 +195,19 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         Debug.Log("[BasicSpawner] Spawning GameManager...");
+        
+        // Spawn với flags để không bị destroy khi đổi scene
+        // Tất cả children (VotingManager, MinigameVotingManager) sẽ đi theo
         _gameManagerInstance = _runner.Spawn(
             gameManagerPrefab,
             Vector3.zero,
             Quaternion.identity,
-            null // No input authority - server controlled
+            null, // No input authority - server controlled
+            onBeforeSpawned: (runner, obj) =>
+            {
+                // Object sẽ không bị destroy khi đổi scene
+                UnityEngine.Object.DontDestroyOnLoad(obj.gameObject);
+            }
         );
     }
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)

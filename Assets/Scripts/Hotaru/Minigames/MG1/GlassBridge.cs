@@ -1,20 +1,14 @@
 using Fusion;
-using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Glass Bridge minigame - Quản lý random logic cho các platform.
-/// Mỗi hàng có 2 ô: 1 an toàn, 1 sẽ biến mất khi đạp vào.
-/// Random đảm bảo mỗi hàng luôn có 1 ô sống và 1 ô chết.
-/// </summary>
 public class GlassBridge : NetworkBehaviour
 {
     [Header("Bridge Settings")]
     [SerializeField] private int rowCount = 6;
-    
-    [Networked, Capacity(32)] 
-    private NetworkArray<NetworkBool> LeftIsSafe { get; }
-    
+
+    [Networked, Capacity(32)]
+    private NetworkArray<NetworkBool> LeftIsSafe => default;
+
     [Networked]
     private NetworkBool IsInitialized { get; set; }
 
@@ -27,58 +21,86 @@ public class GlassBridge : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Random xác định ô nào an toàn trong mỗi hàng.
-    /// Mỗi hàng: 1 sống - 1 chết, không random riêng lẻ.
-    /// </summary>
     private void RandomizeBridge()
     {
         for (int i = 0; i < rowCount && i < LeftIsSafe.Length; i++)
         {
-            // Random 50/50: true = left an toàn, false = right an toàn
             LeftIsSafe.Set(i, Random.value > 0.5f);
         }
-        
+
         Debug.Log($"[GlassBridge] Randomized {rowCount} rows");
     }
 
-    /// <summary>
-    /// Kiểm tra platform có an toàn không.
-    /// </summary>
     public bool IsPlatformSafe(int rowIndex, bool isLeft)
     {
         if (rowIndex < 0 || rowIndex >= rowCount || rowIndex >= LeftIsSafe.Length)
-            return true; // Default safe nếu invalid
-            
+            return true;
+
         bool leftIsSafe = LeftIsSafe[rowIndex];
         return isLeft ? leftIsSafe : !leftIsSafe;
     }
 
     /// <summary>
-    /// Được gọi khi player đạp vào platform không an toàn.
+    /// Client gọi method này để request Host kiểm tra platform
     /// </summary>
+    public void RequestCheckPlatform(int rowIndex, bool isLeft)
+    {
+        Debug.Log($"[GlassBridge] RequestCheckPlatform row {rowIndex}, isLeft: {isLeft}");
+        RPC_RequestCheck(rowIndex, isLeft);
+    }
+
+    /// <summary>
+    /// RPC từ Client đến Host để kiểm tra và break platform nếu cần
+    /// </summary>
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestCheck(int rowIndex, bool isLeft)
+    {
+        Debug.Log($"[GlassBridge] Host checking row {rowIndex}, isLeft: {isLeft}");
+
+        bool isSafe = IsPlatformSafe(rowIndex, isLeft);
+
+        if (!isSafe)
+        {
+            Debug.Log($"[GlassBridge] Platform NOT safe - breaking!");
+            // Tìm platform và break qua RPC đến tất cả clients
+            RPC_BreakPlatform(rowIndex, isLeft);
+        }
+        else
+        {
+            Debug.Log($"[GlassBridge] Platform is SAFE");
+        }
+    }
+
     public void BreakPlatform(GlassPlatform platform)
     {
-        if (Object.HasStateAuthority)
-        {
-            RPC_BreakPlatform(platform.RowIndex, platform.IsLeft);
-        }
+        if (!Object.HasStateAuthority) return;
+
+        // Chỉ gọi RPC, KHÔNG xử lý local ở đây
+        RPC_BreakPlatform(platform.RowIndex, platform.IsLeft);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_BreakPlatform(int rowIndex, bool isLeft)
     {
-        Debug.Log($"[GlassBridge] Platform broken at row {rowIndex}, isLeft: {isLeft}");
+        // Tìm đúng platform và break
+        foreach (var platform in FindObjectsByType<GlassPlatform>(FindObjectsSortMode.None))
+        {
+            if (platform.RowIndex == rowIndex && platform.IsLeft == isLeft)
+            {
+                platform.Break();
+                break;
+            }
+        }
     }
 
-    /// <summary>
-    /// Reset và random lại bridge.
-    /// </summary>
     public void ResetBridge()
     {
         if (!Object.HasStateAuthority) return;
-        RandomizeBridge();
-        Debug.Log("[GlassBridge] Bridge re-randomized");
-    }
 
+        IsInitialized = false;
+        RandomizeBridge();
+        IsInitialized = true;
+
+        Debug.Log("[GlassBridge] Bridge reset");
+    }
 }

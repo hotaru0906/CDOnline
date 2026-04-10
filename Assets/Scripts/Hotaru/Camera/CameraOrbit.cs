@@ -47,10 +47,12 @@ public class CameraOrbit : MonoBehaviour
     private Vector3 _currentVelocity;
     private float _targetDistance;
     private float _currentDistance; // Distance hiện tại sau khi xử lý collision
+    private bool _rotationLocked = false; // Flag khóa xoay camera
 
     public float Yaw => _yaw;
     public float Pitch => _pitch;
     public float CurrentDistance => _currentDistance;
+    public bool IsRotationLocked => _rotationLocked;
 
     private void Start()
     {
@@ -93,8 +95,8 @@ public class CameraOrbit : MonoBehaviour
     {
         if (target == null) return;
 
-        // Check if should rotate camera
-        bool canRotate = !holdRightClickToRotate || Input.GetMouseButton(1);
+        // Check if should rotate camera (không xoay nếu bị lock)
+        bool canRotate = !_rotationLocked && (!holdRightClickToRotate || Input.GetMouseButton(1));
 
         if (canRotate)
         {
@@ -238,5 +240,13 @@ public class CameraOrbit : MonoBehaviour
     {
         Vector3 right = Quaternion.Euler(0, _yaw, 0) * Vector3.right;
         return right.normalized;
+    }
+
+    /// <summary>
+    /// Khóa/mở khóa xoay camera
+    /// </summary>
+    public void SetRotationLocked(bool locked)
+    {
+        _rotationLocked = locked;
     }
 }

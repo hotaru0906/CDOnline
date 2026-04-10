@@ -1,9 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// Component gắn sẵn vào từng platform glass trên map.
-/// Xử lý collision với player và báo về GlassBridge.
-/// </summary>
 [RequireComponent(typeof(Collider))]
 public class GlassPlatform : MonoBehaviour
 {
@@ -20,29 +16,25 @@ public class GlassPlatform : MonoBehaviour
     private void OnTriggerEnter(Collider other)
     {
         if (bridge == null || isBroken) return;
-        
-        // Kiểm tra có phải player không
+
         if (!other.TryGetComponent(out PlayerController player)) return;
-        
-        // Chỉ xử lý nếu player có state authority
-        if (!player.Object.HasStateAuthority) return;
-        
-        Debug.Log($"[GlassPlatform] Player stepped on row {rowIndex}, isLeft: {isLeft}");
-        
-        // Kiểm tra platform có an toàn không
-        bool isSafe = bridge.IsPlatformSafe(rowIndex, isLeft);
-        
-        if (!isSafe)
-        {
-            Debug.Log($"[GlassPlatform] Platform is UNSAFE! Breaking...");
-            isBroken = true;
-            bridge.BreakPlatform(this);
-            gameObject.SetActive(false);
-        }
-        else
-        {
-            Debug.Log($"[GlassPlatform] Platform is SAFE");
-        }
+
+        // Chỉ xử lý nếu đây là LOCAL player (người đang control)
+        if (!player.Object.HasInputAuthority) return;
+
+        Debug.Log($"[GlassPlatform] Local player stepped on row {rowIndex}, isLeft: {isLeft}");
+
+        // Gửi request đến Host thông qua GlassBridge
+        bridge.RequestCheckPlatform(rowIndex, isLeft);
+    }
+    public void Break()
+    {
+        if (isBroken) return;
+
+        isBroken = true;
+        gameObject.SetActive(false);
+
+        Debug.Log($"[GlassPlatform] Platform BROKEN at row {rowIndex}, isLeft: {isLeft}");
     }
 
     private void OnEnable()

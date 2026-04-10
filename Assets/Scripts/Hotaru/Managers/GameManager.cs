@@ -37,18 +37,18 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private GameObject rouletteVotingUI;   // UI vote Roulette/Minigame (RouletteOrMinigame)
     [SerializeField] private GameObject scoreboardUI;
     [SerializeField] private GameObject resultUI;
-    
+
     [Header("Minigame UI (Main UI - dùng chung)")]
     [SerializeField] private GameObject minigameCountdownUI;  // Countdown UI chính (dùng chung)
     [SerializeField] private TMPro.TMP_Text countdownText;    // Text hiển thị countdown
-    
+
     [Header("Minigame Scene UI (Tìm khi scene load)")]
     [SerializeField] private GameObject minigameTutorialUI;   // Tutorial trong minigame scene (mỗi scene khác nhau)
     private UnityEngine.UI.Button _tutorialStartButton;       // Button Start trong tutorial (host only)
-    
+
     [Header("Countdown Settings")]
     [SerializeField] private float countdownTime = 3f;        // Thời gian countdown
-    
+
     [Header("Scoreboard Settings")]
     [SerializeField] private float scoreboardDisplayDuration = 3f; // Thời gian hiển thị scoreboard trước khi chuyển sang Voting
     private Coroutine _scoreboardCoroutine;
@@ -69,7 +69,7 @@ public class GameManager : NetworkBehaviour
 
     [Networked]
     public int TotalRounds { get; private set; } = 3;
-    
+
     [Networked]
     public int CurrentMinigameIndex { get; private set; } = -1;
 
@@ -84,7 +84,7 @@ public class GameManager : NetworkBehaviour
     /// </summary>
     [Networked]
     public int FinalWinnerId { get; private set; } = -1;
-    
+
     #region Synced Minigame Settings (từ MinigameData, sync cho tất cả clients)
     [Networked] public NetworkBool MG_CanMove { get; private set; } = true;
     [Networked] public NetworkBool MG_CanJump { get; private set; } = true;
@@ -103,20 +103,20 @@ public class GameManager : NetworkBehaviour
         {
             if (CurrentMinigameIndex < 0)
                 return null;
-            
+
             // Ưu tiên từ MinigameVotingManager
             if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
             {
                 var data = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(CurrentMinigameIndex);
                 if (data != null) return data;
             }
-            
+
             // Fallback về availableMinigames
             if (availableMinigames != null && CurrentMinigameIndex < availableMinigames.Length)
             {
                 return availableMinigames[CurrentMinigameIndex];
             }
-            
+
             return null;
         }
     }
@@ -135,7 +135,17 @@ public class GameManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
+        // Không dùng DontDestroyOnLoad cho NetworkBehaviour
+        // NetworkRunner quản lý lifecycle của NetworkObject
+        // VotingManager, MinigameVotingManager nên là CHILD của GameManager prefab
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     public override void Spawned()
@@ -155,7 +165,7 @@ public class GameManager : NetworkBehaviour
     {
         // Tìm tất cả UIPanel kể cả inactive
         var panels = FindObjectsByType<UIPanel>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-        
+
         foreach (var panel in panels)
         {
             RegisterUIPanel(panel);
@@ -163,14 +173,14 @@ public class GameManager : NetworkBehaviour
 
         Debug.Log($"[GameManager] FindUIReferences - Lobby:{lobbyUI != null}, Voting:{votingUI != null}, RouletteVoting:{rouletteVotingUI != null}, Scoreboard:{scoreboardUI != null}, Result:{resultUI != null}, MGTutorial:{minigameTutorialUI != null}, MGCountdown:{minigameCountdownUI != null}");
     }
-    
+
     /// <summary>
     /// Đăng ký UI Panel - được gọi bởi UIPanel component
     /// </summary>
     public void RegisterUIPanel(UIPanel panel)
     {
         if (panel == null) return;
-        
+
         switch (panel.PanelType)
         {
             case UIPanelType.Lobby:
@@ -217,14 +227,14 @@ public class GameManager : NetworkBehaviour
                 break;
         }
     }
-    
+
     /// <summary>
     /// Tìm và setup Start button trong Tutorial panel
     /// </summary>
     private void SetupTutorialStartButton()
     {
         if (minigameTutorialUI == null) return;
-        
+
         // Tìm button có tag "MinigameStartButton" hoặc component MinigameStartButton
         var buttons = minigameTutorialUI.GetComponentsInChildren<UnityEngine.UI.Button>(true);
         foreach (var btn in buttons)
@@ -234,7 +244,7 @@ public class GameManager : NetworkBehaviour
                 _tutorialStartButton = btn;
                 _tutorialStartButton.onClick.RemoveAllListeners();
                 _tutorialStartButton.onClick.AddListener(OnTutorialStartButtonClicked);
-                
+
                 // Chỉ host mới thấy button
                 _tutorialStartButton.gameObject.SetActive(HasStateAuthority);
                 Debug.Log($"[GameManager] Found and setup tutorial start button: {btn.name}");
@@ -242,7 +252,7 @@ public class GameManager : NetworkBehaviour
             }
         }
     }
-    
+
     /// <summary>
     /// Gọi khi Host nhấn nút Start trong Tutorial
     /// </summary>
@@ -253,32 +263,32 @@ public class GameManager : NetworkBehaviour
             Debug.LogWarning("[GameManager] Only host can start minigame");
             return;
         }
-        
+
         if (CurrentState != GameState.Tutorial)
         {
             Debug.LogWarning($"[GameManager] Cannot start, current state: {CurrentState}");
             return;
         }
-        
+
         Debug.Log("[GameManager] Host clicked Start - hiding tutorial and starting countdown");
-        
+
         // Bắt đầu countdown (sync to all clients)
         RPC_StartCountdown();
     }
-    
+
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_StartCountdown()
     {
         // Ẩn tutorial, hiện countdown
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, true);
-        
+
         // Báo MinigameController chuyển phase
         if (MinigameController.Instance != null)
         {
             MinigameController.Instance.OnCountdownStarted();
         }
-        
+
         // Host chạy countdown coroutine
         if (HasStateAuthority)
         {
@@ -289,31 +299,31 @@ public class GameManager : NetworkBehaviour
             _countdownCoroutine = StartCoroutine(RunCountdown());
         }
     }
-    
+
     private IEnumerator RunCountdown()
     {
         float remaining = countdownTime;
-        
+
         while (remaining > 0)
         {
             // Update UI for all clients
             RPC_UpdateCountdownUI(Mathf.CeilToInt(remaining));
-            
+
             yield return new WaitForSeconds(1f);
             remaining -= 1f;
         }
-        
+
         // Hiện "GO!"
         RPC_UpdateCountdownUI(0);
-        
+
         yield return new WaitForSeconds(0.5f);
-        
+
         // Countdown xong -> chuyển sang Playing
         RPC_CountdownComplete();
-        
+
         _countdownCoroutine = null;
     }
-    
+
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_UpdateCountdownUI(int count)
     {
@@ -322,33 +332,33 @@ public class GameManager : NetworkBehaviour
             countdownText.text = count > 0 ? count.ToString() : "GO!";
         }
     }
-    
+
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_CountdownComplete()
     {
         // Ẩn countdown UI
         SetActiveUI(minigameCountdownUI, false);
-        
+
         // Host chuyển state sang Playing
         if (HasStateAuthority)
         {
             CurrentState = GameState.Playing;
         }
-        
+
         // Báo MinigameController bắt đầu game
         if (MinigameController.Instance != null)
         {
             MinigameController.Instance.OnCountdownComplete();
         }
     }
-    
+
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_ShowMinigameCountdown()
     {
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, true);
     }
-    
+
     /// <summary>
     /// Ẩn countdown UI - gọi khi countdown kết thúc
     /// </summary>
@@ -356,7 +366,7 @@ public class GameManager : NetworkBehaviour
     {
         SetActiveUI(minigameCountdownUI, false);
     }
-    
+
     /// <summary>
     /// Hiển thị Tutorial UI - gọi bởi MinigameController khi scene đã load xong
     /// </summary>
@@ -364,17 +374,17 @@ public class GameManager : NetworkBehaviour
     {
         // Tìm lại UI vì scene mới load
         FindUIReferences();
-        
+
         // Hiện tutorial UI
         SetActiveUI(minigameTutorialUI, true);
         SetActiveUI(minigameCountdownUI, false);
-        
+
         // Setup lại button nếu cần
         SetupTutorialStartButton();
-        
+
         Debug.Log("[GameManager] Showing minigame tutorial UI");
     }
-    
+
     /// <summary>
     /// Hiển thị Scoreboard trong minigame scene - thay thế cho scoreboard của MinigameController
     /// </summary>
@@ -383,16 +393,16 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
         SetActiveUI(scoreboardUI, true);
-        
+
         // Hiện cursor
         if (CursorManager.Instance != null)
         {
             CursorManager.Instance.ShowCursor();
         }
-        
+
         Debug.Log("[GameManager] Showing scoreboard");
     }
-    
+
     private void InitializeUIState()
     {
         // Đảm bảo luôn tìm lại UI trước khi set
@@ -538,7 +548,7 @@ public class GameManager : NetworkBehaviour
 
         int randomIndex = UnityEngine.Random.Range(0, availableMinigames.Length);
         Debug.Log($"[GameManager] Starting random minigame #{randomIndex}: {availableMinigames[randomIndex].minigameName}");
-        
+
         StartMinigame(randomIndex);
     }
 
@@ -553,7 +563,6 @@ public class GameManager : NetworkBehaviour
             Debug.LogWarning("[GameManager] Only Host can call StartVoting()");
             return;
         }
-
         CurrentVotingType = votingType;
         Debug.Log($"[GameManager] Starting voting phase... Type: {votingType}");
         ChangeState(GameState.Voting);
@@ -562,7 +571,7 @@ public class GameManager : NetworkBehaviour
     public void StartMinigame(int minigameIndex)
     {
         Debug.Log($"[GameManager] StartMinigame called with index: {minigameIndex}, HasStateAuthority: {HasStateAuthority}");
-        
+
         if (!HasStateAuthority)
         {
             Debug.LogWarning("[GameManager] Only Host can call StartMinigame()");
@@ -589,7 +598,7 @@ public class GameManager : NetworkBehaviour
             }
 
             Debug.Log($"[GameManager] Starting minigame #{minigameIndex}: {minigameData.minigameName} (from MinigameVotingManager)");
-            
+
             // Đánh dấu minigame đã được chơi
             MinigameVotingManager.Instance.MarkMinigamePlayed(minigameIndex);
         }
@@ -601,7 +610,7 @@ public class GameManager : NetworkBehaviour
                 Debug.LogError("[GameManager] availableMinigames is NULL and MinigameVotingManager not ready!");
                 return;
             }
-            
+
             if (minigameIndex < 0 || minigameIndex >= availableMinigames.Length)
             {
                 Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}, availableMinigames.Length: {availableMinigames.Length}");
@@ -614,7 +623,7 @@ public class GameManager : NetworkBehaviour
 
         CurrentMinigameIndex = minigameIndex;
         CurrentRound++;
-        
+
         // Sync minigame settings cho tất cả clients
         if (minigameData != null)
         {
@@ -624,7 +633,7 @@ public class GameManager : NetworkBehaviour
             MG_CanAttack = minigameData.canAttack;
             MG_CanRun = minigameData.canRun;
             MG_AllowRespawn = minigameData.allowRespawn;
-            
+
             Debug.Log($"[GameManager] Synced MG settings - Move:{MG_CanMove}, Jump:{MG_CanJump}, Crouch:{MG_CanCrouch}, Attack:{MG_CanAttack}, Run:{MG_CanRun}, Respawn:{MG_AllowRespawn}");
         }
 
@@ -672,7 +681,7 @@ public class GameManager : NetworkBehaviour
         if (RouletteManager.Instance != null)
         {
             RouletteManager.Instance.OnMinigameCompleted();
-            
+
             if (winnerId >= 0)
             {
                 // Convert PlayerId to PlayerRef
@@ -866,13 +875,14 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
-        
-        // Chuyển camera sang First Person trong Lobby
+
+        // Chuyển camera sang First Person trong Lobby và cho phép xoay
         if (CameraManager.Instance != null)
         {
             CameraManager.Instance.SwitchToFirstPersonCamera();
+            CameraManager.Instance.SetCameraRotationLocked(false);
         }
-        
+
         // Hiện cursor trong lobby
         if (CursorManager.Instance != null)
         {
@@ -898,7 +908,7 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
-        
+
         // Hiện UI dựa vào VotingType
         if (CurrentVotingType == VotingType.MinigameOnly)
         {
@@ -910,13 +920,19 @@ public class GameManager : NetworkBehaviour
             SetActiveUI(rouletteVotingUI, true);
             Debug.Log("[GameManager] Showing RouletteVotingUI (RouletteOrMinigame)");
         }
-        
+
+        // Khóa xoay camera khi voting
+        if (CameraManager.Instance != null)
+        {
+            CameraManager.Instance.SetCameraRotationLocked(true);
+        }
+
         // Ẩn player input trong voting phase
         if (PlayerInputHandler.Instance != null)
         {
             PlayerInputHandler.Instance.InputEnabled = false;
         }
-        
+
         // Hiện cursor để vote
         if (CursorManager.Instance != null)
         {
@@ -926,19 +942,26 @@ public class GameManager : NetworkBehaviour
         // Start voting (host only)
         if (HasStateAuthority && VotingManager.Instance != null)
         {
-            Debug.Log("[GameManager] Host starting VotingManager.StartVoting()");
-            VotingManager.Instance.StartVoting();
+            StartCoroutine(StartVotingWhenReady());
         }
         else if (VotingManager.Instance == null)
         {
             Debug.LogError("[GameManager] VotingManager.Instance is NULL!");
         }
     }
+    IEnumerator StartVotingWhenReady()
+    {
+        yield return new WaitUntil(() =>
+            VotingManager.Instance != null &&
+            VotingManager.Instance.IsReady
+        );
 
+        VotingManager.Instance.StartVoting();
+    }
     protected virtual void HandleTutorialState()
     {
         Debug.Log("[GameManager] Entered Tutorial state");
-        
+
         // Ẩn tất cả UI panels (minigame UI sẽ được show sau khi scene load)
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
@@ -947,13 +970,19 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
-        
+
+        // Khóa xoay camera khi xem tutorial
+        if (CameraManager.Instance != null)
+        {
+            CameraManager.Instance.SetCameraRotationLocked(true);
+        }
+
         // Hiện cursor cho tutorial
         if (CursorManager.Instance != null)
         {
             CursorManager.Instance.ShowCursor();
         }
-        
+
         // Tạm thời disable player input (sẽ enable lại khi Playing)
         if (PlayerInputHandler.Instance != null)
         {
@@ -969,18 +998,18 @@ public class GameManager : NetworkBehaviour
 
         // Lấy MinigameData - ưu tiên từ MinigameVotingManager
         MinigameData minigameData = null;
-        
+
         if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
         {
             minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(CurrentMinigameIndex);
         }
-        
+
         // Fallback về availableMinigames nếu không lấy được từ MinigameVotingManager
         if (minigameData == null && availableMinigames != null && CurrentMinigameIndex >= 0 && CurrentMinigameIndex < availableMinigames.Length)
         {
             minigameData = availableMinigames[CurrentMinigameIndex];
         }
-        
+
         if (minigameData == null)
         {
             Debug.LogError($"[GameManager] No valid minigame data for index {CurrentMinigameIndex}!");
@@ -995,7 +1024,7 @@ public class GameManager : NetworkBehaviour
         // Load scene - Fusion sẽ sync tất cả clients
         int sceneIndex = GetSceneIndex(minigameData.sceneName);
         var sceneRef = SceneRef.FromIndex(sceneIndex);
-        
+
         if (sceneRef.IsValid)
         {
             Debug.Log($"[GameManager] Loading scene via Runner.LoadScene...");
@@ -1019,13 +1048,19 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
-        
+
+        // Mở khóa xoay camera khi chơi
+        if (CameraManager.Instance != null)
+        {
+            CameraManager.Instance.SetCameraRotationLocked(false);
+        }
+
         // Bật lại player input
         if (PlayerInputHandler.Instance != null)
         {
             PlayerInputHandler.Instance.InputEnabled = true;
         }
-        
+
         // Ẩn cursor khi chơi
         if (CursorManager.Instance != null)
         {
@@ -1088,19 +1123,25 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
-        
+
+        // Khóa xoay camera khi xem scoreboard
+        if (CameraManager.Instance != null)
+        {
+            CameraManager.Instance.SetCameraRotationLocked(true);
+        }
+
         // Hiện cursor khi xem scoreboard
         if (CursorManager.Instance != null)
         {
             CursorManager.Instance.ShowCursor();
         }
-        
+
         // Tắt player input khi xem scoreboard
         if (PlayerInputHandler.Instance != null)
         {
             PlayerInputHandler.Instance.InputEnabled = false;
         }
-        
+
         // Auto-proceed to voting after delay (host only)
         if (HasStateAuthority)
         {
@@ -1111,12 +1152,12 @@ public class GameManager : NetworkBehaviour
             _scoreboardCoroutine = StartCoroutine(AutoProceedFromScoreboard());
         }
     }
-    
+
     private IEnumerator AutoProceedFromScoreboard()
     {
         Debug.Log($"[GameManager] Scoreboard will auto-proceed in {scoreboardDisplayDuration}s...");
         yield return new WaitForSeconds(scoreboardDisplayDuration);
-        
+
         Debug.Log("[GameManager] Auto-proceeding from scoreboard...");
         ProceedFromScoreboard();
         _scoreboardCoroutine = null;
@@ -1134,11 +1175,12 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
-        
+
         // Chuyển sang First Person camera trong Roulette
         if (CameraManager.Instance != null)
         {
             CameraManager.Instance.SwitchToFirstPersonCamera();
+            CameraManager.Instance.SetCameraRotationLocked(false);
         }
 
         // Bật player input cho gameplay 3D
@@ -1218,7 +1260,7 @@ public class GameManager : NetworkBehaviour
     private void ChangeState(GameState newState)
     {
         Debug.Log($"[GameManager] ChangeState called: {newState}, HasStateAuthority: {HasStateAuthority}");
-        
+
         if (!HasStateAuthority)
         {
             Debug.LogWarning("[GameManager] ChangeState rejected - not host");
