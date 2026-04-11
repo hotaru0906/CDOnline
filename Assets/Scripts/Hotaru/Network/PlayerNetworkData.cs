@@ -21,6 +21,9 @@ public class PlayerNetworkData : NetworkBehaviour
         {
             Local = this;
             
+            // Hide loading screen when local player spawns
+            LoadingScreen.Hide();
+            
             // Load saved character selection từ CharacterSelectionData (PlayerPrefs)
             string savedName = CharacterSelectionData.PlayerName;
             int savedIndex = CharacterSelectionData.SelectedCharacterIndex;
@@ -48,6 +51,9 @@ public class PlayerNetworkData : NetworkBehaviour
         
         // Cập nhật model ngay sau khi spawn (vì OnChangedRender không trigger nếu giá trị không đổi)
         UpdateCharacterModel();
+        
+        // Cập nhật tên hiển thị
+        UpdateNameDisplay();
     }
     
     /// <summary>
@@ -66,6 +72,21 @@ public class PlayerNetworkData : NetworkBehaviour
     {
         // Called when name changes on any client
         Debug.Log($"[PlayerNetworkData] Name changed to: {PlayerName}");
+        
+        // Cập nhật UI hiển thị tên player
+        UpdateNameDisplay();
+    }
+    
+    /// <summary>
+    /// Cập nhật tên hiển thị trên World Space Canvas
+    /// </summary>
+    public void UpdateNameDisplay()
+    {
+        var nameDisplay = GetComponentInChildren<PlayerNameDisplay>();
+        if (nameDisplay != null)
+        {
+            nameDisplay.UpdateNameText(PlayerName.ToString());
+        }
     }
 
     private void OnCharacterIndexChanged()
@@ -84,6 +105,13 @@ public class PlayerNetworkData : NetworkBehaviour
         if (!HasInputAuthority) return;
 
         RPC_SetReady(!IsReady);
+    }
+
+    public void SetReady(bool ready)
+    {
+        if (!HasInputAuthority) return;
+
+        RPC_SetReady(ready);
     }
 
     public void SetPlayerName(string newName)

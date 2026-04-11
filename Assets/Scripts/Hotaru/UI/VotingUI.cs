@@ -1,7 +1,14 @@
 using UnityEngine;
+using UnityEngine.UI;
 using System.Collections.Generic;
 using TMPro;
 
+/// <summary>
+/// UI quản lý việc vote chọn minigame
+/// - Hiển thị các minigame card để vote
+/// - Tích hợp với MinigameVotingManager để lọc minigame đã chơi
+/// - Roulette voting được xử lý bởi RouletteVotingUI riêng
+/// </summary>
 public class VotingUI : MonoBehaviour
 {
     [Header("UI References")]
@@ -11,23 +18,59 @@ public class VotingUI : MonoBehaviour
     [SerializeField] private TMP_Text statusText;
 
     [Header("Settings")]
-    [SerializeField] private int minigameCount = 3;
+    [SerializeField] private int maxMinigameCount = 3;
 
     private List<MinigameCardUI> cards = new List<MinigameCardUI>();
     private bool isInitialized = false;
 
     private void OnEnable()
     {
-        if (VotingManager.Instance != null)
+        // Kiểm tra cả VotingManager và MinigameVotingManager trước khi subscribe/setup
+        if (VotingManager.Instance != null && VotingManager.Instance.IsReady)
         {
             SubscribeToEvents();
         }
 
         if (!isInitialized)
         {
+            // Delay Setup nếu MinigameVotingManager hoặc VotingManager chưa ready
+            bool minigameReady = MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady;
+            bool votingReady = VotingManager.Instance != null && VotingManager.Instance.IsReady;
+            
+            if (minigameReady && votingReady)
+            {
+                Setup();
+            }
+            else
+            {
+                // Đợi cả hai managers ready rồi mới setup
+                StartCoroutine(WaitForManagers());
+            }
+        }
+        else if (VotingManager.Instance != null && VotingManager.Instance.IsReady)
+        {
+            // Chỉ gọi ResetUI khi VotingManager đã ready
+            ResetUI();
+        }
+    }
+    
+    private System.Collections.IEnumerator WaitForManagers()
+    {
+        // Đợi cả MinigameVotingManager và VotingManager ready
+        while (MinigameVotingManager.Instance == null || !MinigameVotingManager.Instance.IsReady ||
+               VotingManager.Instance == null || !VotingManager.Instance.IsReady)
+        {
+            yield return null;
+        }
+        
+        // Subscribe events
+        SubscribeToEvents();
+        
+        if (!isInitialized)
+        {
             Setup();
         }
-
+        
         ResetUI();
     }
 
@@ -68,11 +111,34 @@ public class VotingUI : MonoBehaviour
         }
         cards.Clear();
 
-        // Create new cards
-        for (int i = 0; i < minigameCount; i++)
+        // Lấy số lượng minigame khả dụng từ MinigameVotingManager
+        int availableCount = maxMinigameCount;
+        if (MinigameVotingManager.Instance != null)
+        {
+            availableCount = MinigameVotingManager.Instance.GetAvailableMinigameCount();
+        }
+
+        // Create new cards based on available minigames
+        for (int i = 0; i < availableCount; i++)
         {
             var card = Instantiate(cardPrefab, cardContainer);
-            card.Setup(i, this);
+            
+            // Lấy minigame data từ MinigameVotingManager nếu có
+            MinigameData minigameData = null;
+            if (MinigameVotingManager.Instance != null)
+            {
+                minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(i);
+            }
+            
+            if (minigameData != null)
+            {
+                card.Setup(i, this, minigameData);
+            }
+            else
+            {
+                card.Setup(i, this);
+            }
+            
             cards.Add(card);
         }
 
@@ -81,30 +147,27 @@ public class VotingUI : MonoBehaviour
 
     private void ResetUI()
     {
-        // Reset all vote counts to 0
+        // Reset all cards
         foreach (var card in cards)
         {
-            card.UpdateVoteCount(0);
-            card.SetInteractable(true);
+            card.ResetCard();
         }
 
         if (statusText != null)
         {
-            statusText.text = "Vote for a minigame!";
+            statusText.text = "Click or drag down to vote!";
         }
 
         // Sync with current voting state if voting is already active
-        if (VotingManager.Instance != null && VotingManager.Instance.IsVotingActive)
+        // Kiểm tra IsReady trước khi truy cập Networked properties
+        if (VotingManager.Instance != null && VotingManager.Instance.IsReady && VotingManager.Instance.IsVotingActive)
         {
             UpdateTimer(VotingManager.Instance.RemainingTime);
 
-            for (int i = 0; i < minigameCount; i++)
+            for (int i = 0; i < cards.Count; i++)
             {
                 int count = VotingManager.Instance.GetVoteCount(i);
-                if (i < cards.Count)
-                {
-                    cards[i].UpdateVoteCount(count);
-                }
+                cards[i].UpdateVoteCount(count);
             }
         }
     }
@@ -128,10 +191,7 @@ public class VotingUI : MonoBehaviour
         VotingManager.Instance.SubmitVote(minigameIndex);
 
         // Disable all cards after voting
-        foreach (var card in cards)
-        {
-            card.SetInteractable(false);
-        }
+        DisableAllVoteOptions();
 
         // Highlight the voted card
         if (minigameIndex < cards.Count)
@@ -141,7 +201,15 @@ public class VotingUI : MonoBehaviour
 
         if (statusText != null)
         {
-            statusText.text = "Vote submitted!";
+            statusText.text = "Voted!";
+        }
+    }
+
+    private void DisableAllVoteOptions()
+    {
+        foreach (var card in cards)
+        {
+            card.SetInteractable(false);
         }
     }
 
@@ -155,6 +223,13 @@ public class VotingUI : MonoBehaviour
 
     private void UpdateVoteCount(int minigameIndex, int newCount)
     {
+        // Bỏ qua roulette vote count - handled by RouletteVotingUI
+        if (minigameIndex == VotingManager.ROULETTE_OPTION_INDEX)
+        {
+            return;
+        }
+
+        // Handle minigame vote count
         if (minigameIndex >= 0 && minigameIndex < cards.Count)
         {
             cards[minigameIndex].UpdateVoteCount(newCount);
@@ -164,6 +239,10 @@ public class VotingUI : MonoBehaviour
     private void OnVotingStarted()
     {
         Debug.Log("[VotingUI] Voting started");
+        
+        // Re-setup cards khi bắt đầu voting mới
+        // (có thể có minigame mới hoặc loại bỏ minigame đã chơi)
+        Setup();
         ResetUI();
     }
 
@@ -174,13 +253,25 @@ public class VotingUI : MonoBehaviour
         if (statusText != null)
         {
             int winner = VotingManager.Instance?.WinnerIndex ?? 0;
-            statusText.text = $"Winner: Minigame #{winner + 1}!";
+            
+            // Chỉ hiển thị kết quả nếu là minigame (không phải roulette)
+            if (winner != VotingManager.ROULETTE_OPTION_INDEX)
+            {
+                // Lấy tên minigame nếu có
+                string winnerName = $"Minigame #{winner + 1}";
+                if (MinigameVotingManager.Instance != null)
+                {
+                    var minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(winner);
+                    if (minigameData != null)
+                    {
+                        winnerName = minigameData.minigameName;
+                    }
+                }
+                statusText.text = $"Starting: {winnerName}!";
+            }
         }
 
         // Disable all interactions
-        foreach (var card in cards)
-        {
-            card.SetInteractable(false);
-        }
+        DisableAllVoteOptions();
     }
 }

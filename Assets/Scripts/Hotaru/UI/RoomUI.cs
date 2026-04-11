@@ -15,8 +15,8 @@ public class RoomUI : MonoBehaviour
     [SerializeField] private Button startGameButton;
 
     [Header("Player Data")]
-    [SerializeField] private PlayerListUI playerListUI;
-    [SerializeField] private PlayerListItemUI playerListItemPrefab;
+    [SerializeField] private PlayerInfoUI playerInfoUI;
+    [SerializeField] private PlayerInfoItemUI playerInfoItemPrefab;
     [SerializeField] private Button closePlayerListButton;
 
     [Header("Settings")]
@@ -31,6 +31,7 @@ public class RoomUI : MonoBehaviour
     private void Awake()
     {
         _runner = FindAnyObjectByType<NetworkRunner>();
+        DontDestroyOnLoad(gameObject);
     }
 
     void Start()
@@ -141,14 +142,17 @@ public class RoomUI : MonoBehaviour
 
     private void OnPlayerInfoClicked()
     {
-        if (playerListUI == null) return;
+        if (playerInfoUI == null) return;
 
-        bool isActive = playerListUI.gameObject.activeSelf;
-        playerListUI.gameObject.SetActive(!isActive);
-
+        bool isActive = playerInfoUI.gameObject.activeSelf;
+        
         if (!isActive)
         {
-            playerListUI.RefreshList();
+            playerInfoUI.Show();
+        }
+        else
+        {
+            playerInfoUI.Hide();
         }
 
         // Show/hide close button with player list
@@ -160,9 +164,9 @@ public class RoomUI : MonoBehaviour
 
     private void OnClosePlayerListClicked()
     {
-        if (playerListUI != null)
+        if (playerInfoUI != null)
         {
-            playerListUI.gameObject.SetActive(false);
+            playerInfoUI.Hide();
         }
 
         if (closePlayerListButton != null)

@@ -26,6 +26,18 @@ public class CameraOrbit : MonoBehaviour
     public float positionSmoothTime = 0.1f;
     public float rotationSmoothTime = 0.05f;
 
+    [Header("Collision Settings")]
+    [Tooltip("Layer mask cho collision detection (nên bỏ Player layer)")]
+    public LayerMask collisionMask = ~0; // Mặc định tất cả layers
+    [Tooltip("Offset từ điểm va chạm để tránh clipping")]
+    public float collisionOffset = 0.2f;
+    [Tooltip("Bán kính sphere cast (0 = dùng raycast)")]
+    public float collisionRadius = 0.3f;
+    [Tooltip("Tốc độ camera zoom in khi va chạm")]
+    public float collisionZoomSpeed = 10f;
+    [Tooltip("Tốc độ camera zoom out khi hết va chạm")]
+    public float collisionRecoverSpeed = 5f;
+
     [Header("Cursor Settings")]
     public bool lockCursorOnStart = true;
     public bool holdRightClickToRotate = false; // false = luôn xoay camera khi di chuột
@@ -34,13 +46,18 @@ public class CameraOrbit : MonoBehaviour
     private float _pitch;
     private Vector3 _currentVelocity;
     private float _targetDistance;
+    private float _currentDistance; // Distance hiện tại sau khi xử lý collision
+    private bool _rotationLocked = false; // Flag khóa xoay camera
 
     public float Yaw => _yaw;
     public float Pitch => _pitch;
+    public float CurrentDistance => _currentDistance;
+    public bool IsRotationLocked => _rotationLocked;
 
     private void Start()
     {
         _targetDistance = distance;
+        _currentDistance = distance;
         
         if (lockCursorOnStart && !holdRightClickToRotate)
         {
@@ -78,8 +95,8 @@ public class CameraOrbit : MonoBehaviour
     {
         if (target == null) return;
 
-        // Check if should rotate camera
-        bool canRotate = !holdRightClickToRotate || Input.GetMouseButton(1);
+        // Check if should rotate camera (không xoay nếu bị lock)
+        bool canRotate = !_rotationLocked && (!holdRightClickToRotate || Input.GetMouseButton(1));
 
         if (canRotate)
         {
@@ -89,7 +106,7 @@ public class CameraOrbit : MonoBehaviour
             _pitch = Mathf.Clamp(_pitch, minY, maxY);
         }
 
-        // Smooth distance
+        // Smooth distance (target distance từ scroll wheel)
         distance = Mathf.Lerp(distance, _targetDistance, Time.deltaTime * 10f);
 
         // Rotation
@@ -98,8 +115,28 @@ public class CameraOrbit : MonoBehaviour
         // Target position (player center + offset up)
         Vector3 targetPos = target.position + Vector3.up * 1.5f;
 
-        // Camera position
-        Vector3 offset = rotation * new Vector3(0, 0, -distance);
+        // Tính hướng từ target đến camera
+        Vector3 directionFromTarget = rotation * Vector3.back;
+        
+        // Tính khoảng cách thực tế sau collision check
+        float desiredDistance = distance;
+        float actualDistance = CheckCameraCollision(targetPos, directionFromTarget, desiredDistance);
+        
+        // Smooth collision distance
+        // Zoom in nhanh khi có collision, zoom out chậm khi hết collision
+        if (actualDistance < _currentDistance)
+        {
+            // Đang bị block - zoom in nhanh
+            _currentDistance = Mathf.Lerp(_currentDistance, actualDistance, Time.deltaTime * collisionZoomSpeed);
+        }
+        else
+        {
+            // Không bị block - zoom out chậm hơn
+            _currentDistance = Mathf.Lerp(_currentDistance, actualDistance, Time.deltaTime * collisionRecoverSpeed);
+        }
+
+        // Camera position với collision-adjusted distance
+        Vector3 offset = directionFromTarget * _currentDistance;
         Vector3 desiredPosition = targetPos + offset;
 
         // Smooth position
@@ -110,11 +147,61 @@ public class CameraOrbit : MonoBehaviour
     }
 
     /// <summary>
+    /// Kiểm tra collision giữa target và camera position
+    /// </summary>
+    /// <param name="from">Vị trí target (player)</param>
+    /// <param name="direction">Hướng từ target đến camera</param>
+    /// <param name="maxDistance">Khoảng cách mong muốn</param>
+    /// <returns>Khoảng cách thực tế sau collision check</returns>
+    private float CheckCameraCollision(Vector3 from, Vector3 direction, float maxDistance)
+    {
+        RaycastHit hit;
+        
+        if (collisionRadius > 0)
+        {
+            // SphereCast cho kết quả mượt hơn
+            if (Physics.SphereCast(from, collisionRadius, direction, out hit, maxDistance, collisionMask))
+            {
+                // Trả về khoảng cách đến điểm va chạm trừ offset
+                return Mathf.Max(minDistance, hit.distance - collisionOffset);
+            }
+        }
+        else
+        {
+            // Raycast đơn giản
+            if (Physics.Raycast(from, direction, out hit, maxDistance, collisionMask))
+            {
+                return Mathf.Max(minDistance, hit.distance - collisionOffset);
+            }
+        }
+        
+        // Không có collision - trả về khoảng cách mong muốn
+        return maxDistance;
+    }
+
+    /// <summary>
     /// Set target ngay lập tức (gọi từ PlayerController khi spawn)
     /// </summary>
     public void SetTarget(Transform newTarget)
     {
         target = newTarget;
+    }
+
+    /// <summary>
+    /// Set yaw angle (dùng khi chuyển từ First Person sang Third Person)
+    /// </summary>
+    public void SetYaw(float yaw)
+    {
+        _yaw = yaw;
+    }
+
+    /// <summary>
+    /// Set cả yaw và pitch
+    /// </summary>
+    public void SetRotation(float yaw, float pitch)
+    {
+        _yaw = yaw;
+        _pitch = Mathf.Clamp(pitch, minY, maxY);
     }
 
     public void ToggleCursor()
@@ -153,5 +240,13 @@ public class CameraOrbit : MonoBehaviour
     {
         Vector3 right = Quaternion.Euler(0, _yaw, 0) * Vector3.right;
         return right.normalized;
+    }
+
+    /// <summary>
+    /// Khóa/mở khóa xoay camera
+    /// </summary>
+    public void SetRotationLocked(bool locked)
+    {
+        _rotationLocked = locked;
     }
 }

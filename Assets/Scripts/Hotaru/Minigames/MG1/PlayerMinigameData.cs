@@ -15,6 +15,7 @@ public class PlayerMinigameData : NetworkBehaviour
     [Header("Visual Feedback")]
     [SerializeField] private Renderer[] playerRenderers;
     [SerializeField] private Color invincibleColor = new Color(1f, 1f, 1f, 0.5f);
+    [SerializeField] private Color eliminatedColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
 
     [Networked]
     public int CurrentCheckpointIndex { get; private set; }
@@ -27,6 +28,12 @@ public class PlayerMinigameData : NetworkBehaviour
 
     [Networked]
     public NetworkBool IsDead { get; private set; }
+    
+    /// <summary>
+    /// Player đã bị loại khỏi minigame (không được respawn)
+    /// </summary>
+    [Networked]
+    public NetworkBool IsEliminated { get; private set; }
 
     // Dùng TickTimer thay vì Coroutine
     [Networked]
@@ -38,6 +45,10 @@ public class PlayerMinigameData : NetworkBehaviour
     private PlayerController playerController;
     private Color[] originalColors;
     private bool _lastInvincibleState; // Track để detect thay đổi
+    private bool _lastEliminatedState;
+    
+    // Event khi player bị loại
+    public event System.Action<PlayerMinigameData> OnPlayerEliminated;
 
     public override void Spawned()
     {
@@ -48,6 +59,7 @@ public class PlayerMinigameData : NetworkBehaviour
 
         // Init state tracking
         _lastInvincibleState = IsInvincible;
+        _lastEliminatedState = IsEliminated;
 
         if (HasStateAuthority && CurrentRespawnPosition == Vector3.zero)
         {
@@ -76,8 +88,8 @@ public class PlayerMinigameData : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        // Check respawn timer
-        if (IsDead && RespawnTimer.Expired(Runner))
+        // Check respawn timer - không respawn nếu đã bị loại
+        if (IsDead && !IsEliminated && RespawnTimer.Expired(Runner))
         {
             DoRespawn();
         }
@@ -100,6 +112,13 @@ public class PlayerMinigameData : NetworkBehaviour
             CurrentRespawnPosition = spawnPosition;
             IsDead = false;
             IsInvincible = false;
+            IsEliminated = false;
+            
+            if (playerController != null)
+            {
+                playerController.SetFrozen(false);
+            }
+            
             Debug.Log($"[PlayerMinigameData] Checkpoint reset to position {spawnPosition}");
         }
     }
@@ -121,7 +140,7 @@ public class PlayerMinigameData : NetworkBehaviour
     }
 
     /// <summary>
-    /// Gọi khi player chết - trigger respawn
+    /// Gọi khi player chết - trigger respawn hoặc elimination
     /// </summary>
     public void Die()
     {
@@ -131,13 +150,50 @@ public class PlayerMinigameData : NetworkBehaviour
         if (Object.HasInputAuthority)
         {
             // Local player gọi RPC để thông báo host
-            RPC_RequestRespawn();
+            RPC_RequestDeath();
+        }
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_RequestDeath()
+    {
+        if (!CanTakeDamage()) return;
+        
+        // Đọc allowRespawn từ synced Networked property (thay vì lookup MinigameData)
+        bool canRespawn = true;
+        
+        if (GameManager.Instance != null)
+        {
+            canRespawn = GameManager.Instance.MG_AllowRespawn;
+            Debug.Log($"[PlayerMinigameData] MG_AllowRespawn from GameManager: {canRespawn}");
+        }
+        
+        if (canRespawn)
+        {
+            // Respawn bình thường
+            Debug.Log($"[PlayerMinigameData] Player {Object.InputAuthority} died, respawning in {respawnDelay}s...");
+            IsDead = true;
+            RespawnTimer = TickTimer.CreateFromSeconds(Runner, respawnDelay);
+        }
+        else
+        {
+            // Loại player khỏi minigame
+            Debug.Log($"[PlayerMinigameData] Player {Object.InputAuthority} eliminated!");
+            IsDead = true;
+            IsEliminated = true;
+            
+            // Disable player input/movement
+            if (playerController != null)
+            {
+                playerController.SetFrozen(true);
+            }
         }
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     private void RPC_RequestRespawn()
     {
+        // Legacy - giữ lại cho backward compatibility
         if (!CanTakeDamage()) return;
 
         Debug.Log($"[PlayerMinigameData] Player {Object.InputAuthority} died, respawning in {respawnDelay}s...");
@@ -169,6 +225,30 @@ public class PlayerMinigameData : NetworkBehaviour
 
         Debug.Log("[PlayerMinigameData] Respawn complete!");
     }
+    
+    /// <summary>
+    /// Kích hoạt invincibility ngắn sau khi bị knockback
+    /// Dùng để player không bị hit liên tục bởi trap
+    /// </summary>
+    public void TriggerKnockbackInvincibility(float duration = 0.25f)
+    {
+        if (!HasStateAuthority)
+        {
+            RPC_TriggerKnockbackInvincibility(duration);
+            return;
+        }
+        
+        IsInvincible = true;
+        InvincibilityTimer = TickTimer.CreateFromSeconds(Runner, duration);
+        Debug.Log($"[PlayerMinigameData] Knockback invincibility: {duration}s");
+    }
+    
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_TriggerKnockbackInvincibility(float duration)
+    {
+        IsInvincible = true;
+        InvincibilityTimer = TickTimer.CreateFromSeconds(Runner, duration);
+    }
 
     /// <summary>
     /// Render() được gọi mỗi frame - dùng để sync visual
@@ -179,25 +259,85 @@ public class PlayerMinigameData : NetworkBehaviour
         if (_lastInvincibleState != IsInvincible)
         {
             _lastInvincibleState = IsInvincible;
-            UpdateInvincibleVisual();
+            UpdateVisual();
+        }
+        
+        // Check nếu IsEliminated thay đổi
+        if (_lastEliminatedState != IsEliminated)
+        {
+            _lastEliminatedState = IsEliminated;
+            UpdateVisual();
+            
+            // Fire event khi player bị loại
+            if (IsEliminated)
+            {
+                OnPlayerEliminated?.Invoke(this);
+            }
+        }
+    }
+
+    private void UpdateVisual()
+    {
+        if (playerRenderers == null) return;
+
+        Color targetColor;
+        if (IsEliminated)
+        {
+            targetColor = eliminatedColor;
+        }
+        else if (IsInvincible)
+        {
+            targetColor = invincibleColor;
+        }
+        else
+        {
+            // Original color - handled per renderer
+            for (int i = 0; i < playerRenderers.Length; i++)
+            {
+                if (playerRenderers[i] != null && playerRenderers[i].material != null && i < originalColors.Length)
+                {
+                    playerRenderers[i].material.color = originalColors[i];
+                }
+            }
+            return;
+        }
+        
+        // Apply target color
+        for (int i = 0; i < playerRenderers.Length; i++)
+        {
+            if (playerRenderers[i] != null && playerRenderers[i].material != null)
+            {
+                playerRenderers[i].material.color = targetColor;
+            }
         }
     }
 
     private void UpdateInvincibleVisual()
     {
-        if (playerRenderers == null) return;
-
-        for (int i = 0; i < playerRenderers.Length; i++)
-        {
-            if (playerRenderers[i] != null && playerRenderers[i].material != null)
-            {
-                playerRenderers[i].sharedMaterial.color = IsInvincible ? invincibleColor : originalColors[i];
-            }
-        }
+        // Legacy - giữ lại nhưng redirect sang UpdateVisual
+        UpdateVisual();
     }
 
     public bool CanTakeDamage()
     {
-        return !IsInvincible && !IsDead;
+        return !IsInvincible && !IsDead && !IsEliminated;
+    }
+    
+    /// <summary>
+    /// Reset trạng thái cho round mới
+    /// </summary>
+    public void ResetForNewRound()
+    {
+        if (!HasStateAuthority) return;
+        
+        IsDead = false;
+        IsEliminated = false;
+        IsInvincible = false;
+        CurrentCheckpointIndex = 0;
+        
+        if (playerController != null)
+        {
+            playerController.SetFrozen(false);
+        }
     }
 }

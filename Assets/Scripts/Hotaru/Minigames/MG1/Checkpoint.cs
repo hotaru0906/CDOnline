@@ -17,11 +17,13 @@ public class Checkpoint : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        Debug.Log($"Checkpoint {checkpointIndex} triggered by {other.name}");
         if (!other.TryGetComponent(out PlayerController player)) return;
         if (!player.Object.HasStateAuthority) return;
 
         if (player.TryGetComponent(out PlayerMinigameData data))
         {
+            Debug.Log($"Setting checkpoint {checkpointIndex} for player {player.name} at position {RespawnPosition}");
             data.SetCheckpoint(checkpointIndex, RespawnPosition);
         }
     }

@@ -13,6 +13,9 @@ public class MenuManager : MonoBehaviour
     [SerializeField] private GameObject canvasCreateRoom;
     [SerializeField] private GameObject canvasItemUI;
 
+    [Header("Settings")]
+    [SerializeField] private SettingsManager settingsManager;
+
     [Header("Lobby References")]
     [SerializeField] private LobbyRunner lobbyRunner;
     [SerializeField] private TMP_InputField roomNameInput;
@@ -72,20 +75,21 @@ public class MenuManager : MonoBehaviour
     public void ShowFindLobby() => SwitchScreen(canvasFindLobby);
     public void ShowCreateRoom() => SwitchScreen(canvasCreateRoom);
 
+    public void ShowSettings()
+    {
+        if (settingsManager != null)
+            settingsManager.OpenSettings();
+    }
+
     public void ShowItemUI()
     {
         SwitchScreen(canvasItemUI);
-        
-        // Kích hoạt CustomizationManager để chuyển camera
         if (customizationManager != null)
-        {
             customizationManager.Activate();
-        }
     }
 
     private void OnBackFromCustomization()
     {
-        // Tắt canvas ItemUI và quay lại màn hình trước
         GoBack();
     }
 
@@ -93,11 +97,8 @@ public class MenuManager : MonoBehaviour
     {
         if (_screenHistory.Count == 0) return;
 
-        // Nếu đang ở ItemUI, deactivate CustomizationManager
         if (_currentScreen == canvasItemUI && customizationManager != null)
-        {
             customizationManager.Deactivate();
-        }
 
         _currentScreen.SetActive(false);
         _currentScreen = _screenHistory.Pop();
@@ -111,12 +112,35 @@ public class MenuManager : MonoBehaviour
             _screenHistory.Push(_currentScreen);
             _currentScreen.SetActive(false);
         }
+
+        // Chuyển screen ngay lập tức - không cần loading cho menu navigation
         _currentScreen = targetScreen;
         _currentScreen.SetActive(true);
     }
     #endregion
 
     #region Lobby Functions
+    private void CreateRoom()
+    {
+        if (lobbyRunner == null)
+        {
+            Debug.LogError("[MenuManager] LobbyRunner not assigned.");
+            return;
+        }
+
+        var roomName = roomNameInput?.text;
+        if (string.IsNullOrWhiteSpace(roomName))
+        {
+            Debug.LogWarning("[MenuManager] Room name cannot be empty.");
+            return;
+        }
+
+        // Loading is shown in LobbyRunner.CreateSession()
+        lobbyRunner.CreateSession(roomName);
+        // Loading will be hidden in PlayerNetworkData.Spawned() when player spawns successfully
+    }
+    #endregion
+
     public void UpdateRoomList(List<SessionInfo> sessions)
     {
         ClearRoomItems();
@@ -139,23 +163,4 @@ public class MenuManager : MonoBehaviour
         }
         _roomItems.Clear();
     }
-
-    private void CreateRoom()
-    {
-        if (lobbyRunner == null)
-        {
-            Debug.LogError("[MenuManager] LobbyRunner chưa được gán.");
-            return;
-        }
-
-        var roomName = roomNameInput?.text;
-        if (string.IsNullOrWhiteSpace(roomName))
-        {
-            Debug.LogWarning("[MenuManager] Tên phòng không được để trống.");
-            return;
-        }
-
-        lobbyRunner.CreateSession(roomName);
-    }
-    #endregion
 }

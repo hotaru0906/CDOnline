@@ -48,6 +48,22 @@ public class PlayerModelSwitcher : NetworkBehaviour
         
         // Notify PlayerAnimator về model mới
         NotifyAnimator();
+        
+        // Nếu là local player và đang ở First Person (KHÔNG phải Minigame), ẩn model
+        if (Object != null && Object.HasInputAuthority && CameraManager.Instance != null)
+        {
+            var mode = CameraManager.Instance.CurrentMode;
+            // Chỉ ẩn khi THỰC SỰ ở First Person, không ẩn khi đang chờ switch sang Minigame
+            if (mode == CameraMode.FirstPerson && !CameraManager.Instance.IsPendingSharedCamera)
+            {
+                SetModelVisible(false);
+            }
+            else
+            {
+                // Đảm bảo model được hiện khi không ở First Person
+                SetModelVisible(true);
+            }
+        }
     }
 
     private void UpdateModelVisibility()
@@ -60,7 +76,9 @@ public class PlayerModelSwitcher : NetworkBehaviour
             }
         }
         
-        Debug.Log($"[PlayerModelSwitcher] Switched to model {_currentIndex}");
+        // Thêm debug chi tiết
+        bool isLocal = Object != null && Object.HasInputAuthority;
+        Debug.Log($"[PlayerModelSwitcher] Switched to model {_currentIndex} | IsLocal: {isLocal} | PlayerName: {gameObject.name}");
     }
 
     private void NotifyAnimator()
@@ -96,6 +114,55 @@ public class PlayerModelSwitcher : NetworkBehaviour
         {
             if (model != null)
                 model.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// Ẩn/hiện model cho First Person mode
+    /// CHỈ được gọi cho local player - KHÔNG ẩn remote players
+    /// </summary>
+    public void SetModelVisible(bool visible)
+    {
+        // QUAN TRỌNG: Chỉ ẩn model của local player
+        if (Object != null && !Object.HasInputAuthority)
+        {
+            // Remote player - KHÔNG ẩn, luôn hiển thị
+            Debug.Log($"[PlayerModelSwitcher] Skipping SetModelVisible for remote player");
+            return;
+        }
+        
+        var activeModel = GetActiveModel();
+        if (activeModel != null)
+        {
+            // Ẩn tất cả renderers trong model
+            var renderers = activeModel.GetComponentsInChildren<Renderer>(true);
+            foreach (var renderer in renderers)
+            {
+                renderer.enabled = visible;
+            }
+            
+            Debug.Log($"[PlayerModelSwitcher] Local player model visibility set to: {visible}");
+        }
+    }
+
+    /// <summary>
+    /// Set layer cho model (để camera culling)
+    /// </summary>
+    public void SetModelLayer(int layer)
+    {
+        var activeModel = GetActiveModel();
+        if (activeModel != null)
+        {
+            SetLayerRecursively(activeModel, layer);
+        }
+    }
+    
+    private void SetLayerRecursively(GameObject obj, int layer)
+    {
+        obj.layer = layer;
+        foreach (Transform child in obj.transform)
+        {
+            SetLayerRecursively(child.gameObject, layer);
         }
     }
 

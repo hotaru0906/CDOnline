@@ -22,6 +22,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     private Dictionary<PlayerRef, NetworkObject> _spawnedPlayers = new Dictionary<PlayerRef, NetworkObject>();
     private NetworkObject _gameManagerInstance;
     private static BasicSpawner _instance;
+    private bool _callbacksAdded = false; // Track nếu callbacks đã được thêm
     public static BasicSpawner Instance => _instance;
 
     public void Awake()
@@ -69,24 +70,20 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        _runner.ProvideInput = true;
-        _runner.AddCallbacks(this);
-
-        // Add PlayerInputHandler for input collection
-        if (_inputHandler == null)
-        {
-            _inputHandler = gameObject.AddComponent<PlayerInputHandler>();
-        }
-        _runner.AddCallbacks(_inputHandler);
+        // Cấu hình runner với ProvideInput và callbacks
+        EnsureRunnerConfigured();
 
         var res = await _runner.JoinSessionLobby(SessionLobby.ClientServer);
         if (res.Ok)
         {
             Debug.Log("[BasicSpawner] Joined lobby successfully.");
+            // Hide loading khi vào lobby thành công
+            LoadingScreen.Hide();
         }
         else
         {
             Debug.LogError($"[BasicSpawner] Failed to join lobby: {res.ShutdownReason}");
+            LoadingScreen.Hide();
         }
     }
 
@@ -96,6 +93,10 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             _runner = gameObject.AddComponent<NetworkRunner>();
         }
+        
+        // Đảm bảo runner được cấu hình đúng
+        EnsureRunnerConfigured();
+        
         var sceneManager = GetComponent<NetworkSceneManagerDefault>();
         if (sceneManager == null)
         {
@@ -121,6 +122,14 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
 
     public async Task StartClient(string sessionName)
     {
+        if (_runner == null)
+        {
+            _runner = gameObject.AddComponent<NetworkRunner>();
+        }
+        
+        // Đảm bảo runner được cấu hình đúng
+        EnsureRunnerConfigured();
+        
         // Get or create scene manager
         var sceneManager = GetComponent<NetworkSceneManagerDefault>();
         if (sceneManager == null)
@@ -141,6 +150,34 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         else
         {
             Debug.LogError($"[BasicSpawner] Failed to start client: {res.ShutdownReason}");
+            LoadingScreen.Hide();
+        }
+    }
+    
+    /// <summary>
+    /// Đảm bảo NetworkRunner được cấu hình đúng với ProvideInput và callbacks
+    /// </summary>
+    private void EnsureRunnerConfigured()
+    {
+        if (_runner == null) return;
+        
+        // Quan trọng: ProvideInput = true cho phép client gửi input
+        _runner.ProvideInput = true;
+        
+        // Chỉ thêm callbacks nếu chưa thêm
+        if (!_callbacksAdded)
+        {
+            _runner.AddCallbacks(this);
+            
+            // Thêm PlayerInputHandler
+            if (_inputHandler == null)
+            {
+                _inputHandler = gameObject.AddComponent<PlayerInputHandler>();
+            }
+            _runner.AddCallbacks(_inputHandler);
+            
+            _callbacksAdded = true;
+            Debug.Log("[BasicSpawner] Runner configured with ProvideInput and callbacks");
         }
     }
     private void SpawnGameManager()
@@ -158,11 +195,19 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         Debug.Log("[BasicSpawner] Spawning GameManager...");
+        
+        // Spawn với flags để không bị destroy khi đổi scene
+        // Tất cả children (VotingManager, MinigameVotingManager) sẽ đi theo
         _gameManagerInstance = _runner.Spawn(
             gameManagerPrefab,
             Vector3.zero,
             Quaternion.identity,
-            null // No input authority - server controlled
+            null, // No input authority - server controlled
+            onBeforeSpawned: (runner, obj) =>
+            {
+                // Object sẽ không bị destroy khi đổi scene
+                UnityEngine.Object.DontDestroyOnLoad(obj.gameObject);
+            }
         );
     }
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
@@ -188,12 +233,13 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
 
         // Calculate spawn position
         Vector3 spawnPosition = GetSpawnPosition(player);
+        Quaternion spawnRotation = GetSpawnRotation(player);
 
         // Spawn player with input authority
         NetworkObject playerObject = runner.Spawn(
             playerPrefab,
             spawnPosition,
-            Quaternion.identity,
+            spawnRotation,
             player // Input authority
         );
 
@@ -201,6 +247,9 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             // Track spawned players
             _spawnedPlayers[player] = playerObject;
+            
+            // Note: LoadingScreen.Hide() is called in PlayerNetworkData.Spawned()
+            // to ensure it only hides when local player is fully ready
         }
         else
         {
@@ -228,6 +277,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
 
         _spawnedPlayers.Clear();
         _gameManagerInstance = null;
+        _callbacksAdded = false; // Reset flag để lần sau có thể thêm lại callbacks
 
         if (PlayerNetworkData.Local != null)
         {
@@ -254,7 +304,11 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
-    public void OnConnectedToServer(NetworkRunner runner) { }
+    public void OnConnectedToServer(NetworkRunner runner)
+    {
+        // Client connected - update loading text
+        LoadingScreen.SetText("Loading game data...");
+    }
     public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
     public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
@@ -285,7 +339,11 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
             RespawnAllPlayers();
         }
     }
-    public void OnSceneLoadStart(NetworkRunner runner) { }
+    public void OnSceneLoadStart(NetworkRunner runner)
+    {
+        // Show loading when scene starts loading (minigame transition)
+        LoadingScreen.Show("Loading...");
+    }
     public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
@@ -348,7 +406,54 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         float radius = 3f;
         return new Vector3(Mathf.Cos(angle) * radius, 1f, Mathf.Sin(angle) * radius);
     }
-    #endregion}
+
+    /// <summary>
+    /// Get spawn rotation for a player.
+    /// Priority: MinigameController spawn points > Scene spawn points > BasicSpawner spawn points > Identity
+    /// </summary>
+    private Quaternion GetSpawnRotation(PlayerRef player)
+    {
+        // 1. Try MinigameController spawn points first (for minigame scenes)
+        if (MinigameController.Instance != null)
+        {
+            var mgSpawnRotation = MinigameController.Instance.GetSpawnRotation(player.PlayerId);
+            if (mgSpawnRotation != Quaternion.identity)
+            {
+                return mgSpawnRotation;
+            }
+        }
+
+        // 2. Try to find spawn points tagged "SpawnPoint" in current scene
+        var sceneSpawnPoints = GameObject.FindGameObjectsWithTag("SpawnPoint");
+        if (sceneSpawnPoints != null && sceneSpawnPoints.Length > 0)
+        {
+            int index = player.PlayerId % sceneSpawnPoints.Length;
+            return sceneSpawnPoints[index].transform.rotation;
+        }
+
+        // 3. Use BasicSpawner's configured spawn points
+        if (spawnPoints != null && spawnPoints.Length > 0)
+        {
+            int index = player.PlayerId % spawnPoints.Length;
+            if (spawnPoints[index] != null)
+            {
+                return spawnPoints[index].rotation;
+            }
+
+            // Try to find any valid spawn point
+            for (int i = 0; i < spawnPoints.Length; i++)
+            {
+                if (spawnPoints[i] != null)
+                {
+                    return spawnPoints[i].rotation;
+                }
+            }
+        }
+
+        // 4. Fallback: identity rotation
+        return Quaternion.identity;
+    }
+    #endregion
 
     /// <summary>
     /// Respawn all connected players. Called when loading a new scene.
@@ -381,6 +486,10 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             SpawnPlayerForScene(player);
         }
+
+        // Hide loading after all players spawned
+        yield return null; // Wait one more frame to ensure spawn completes
+        LoadingScreen.Hide();
     }
 
     /// <summary>
@@ -402,11 +511,12 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     Vector3 spawnPosition = GetSpawnPosition(player);
+    Quaternion spawnRotation = GetSpawnRotation(player);
 
     NetworkObject playerObject = _runner.Spawn(
         playerPrefab,
         spawnPosition,
-        Quaternion.identity,
+        spawnRotation,
         player
     );
 

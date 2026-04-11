@@ -3,9 +3,12 @@ using UnityEngine;
 public enum UIPanelType
 {
     Lobby,
-    Voting,
+    Voting,             // Vote chọn minigame (MinigameOnly)
+    RouletteVoting,     // Vote Roulette hoặc Minigame (RouletteOrMinigame)
     Scoreboard,
-    Result
+    Result,
+    MinigameTutorial,   // Tutorial trong minigame scene (mỗi scene khác nhau)
+    MinigameCountdown   // Countdown UI chính (dùng chung, không theo scene)
 }
 
 /// <summary>

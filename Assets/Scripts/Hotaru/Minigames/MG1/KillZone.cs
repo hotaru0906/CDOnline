@@ -11,7 +11,6 @@ public class KillZone : MonoBehaviour
         if (player.TryGetComponent(out PlayerMinigameData minigameData) 
             && minigameData.CanTakeDamage())
         {
-            Debug.Log("[KillZone] Player entered kill zone, triggering respawn");
             minigameData.Die();
         }
     }
