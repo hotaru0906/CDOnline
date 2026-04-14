@@ -9,10 +9,12 @@ public class SeatInteractor : NetworkBehaviour
     public bool IsSitting => CurrentSeatIndex >= 0;
 
     private PlayerController _playerController;
+    private PlayerAnimator _playerAnimator;
 
     public override void Spawned()
     {
         _playerController = GetComponent<PlayerController>();
+        _playerAnimator = GetComponent<PlayerAnimator>();
     }
 
     private void Update()
@@ -80,6 +82,12 @@ public class SeatInteractor : NetworkBehaviour
                     transform.SetPositionAndRotation(standPos, rot);
                 }
             }
+        }
+
+        // Animation
+        if (_playerAnimator != null)
+        {
+            _playerAnimator.TriggerSit();
         }
 
         // Ready state
