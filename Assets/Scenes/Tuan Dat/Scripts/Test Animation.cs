@@ -9,13 +9,20 @@ public class TestAnimation : MonoBehaviour
     private Rigidbody rb;
     private bool isGrounded = true;
 
-    private bool isMoveCrouch = false; // crouch di chuyển
-    private bool isCrouching = false;  // crouch đứng yên
+    private bool isMoveCrouch = false;
+    private bool isCrouching = false;
+
+    [Header("VFX")]
+    public GameObject stunVFX;
 
     void Start()
     {
         animator = GetComponent<Animator>();
         rb = GetComponent<Rigidbody>();
+
+        // Ẩn VFX lúc đầu
+        if (stunVFX != null)
+            stunVFX.SetActive(false);
     }
 
     void Update()
@@ -27,18 +34,30 @@ public class TestAnimation : MonoBehaviour
         bool isMoving = move.magnitude > 0.1f;
         bool isRunning = Input.GetKey(KeyCode.LeftShift);
 
-        // ===== CROUCH DI CHUYỂN (X) =====
+        // ===== HIT + STUN (NHẤN H) =====
+        if (Input.GetKeyDown(KeyCode.H))
+        {
+            animator.SetTrigger("hit");
+
+            // bật VFX stun
+            if (stunVFX != null)
+            {
+                stunVFX.SetActive(true);
+                Invoke(nameof(HideStunVFX), 2f); // tắt sau 1 giây
+            }
+        }
+
+        // ===== CROUCH =====
         if (Input.GetKeyDown(KeyCode.X))
         {
             isMoveCrouch = !isMoveCrouch;
-            isCrouching = false; // không cho trùng trạng thái
+            isCrouching = false;
         }
 
-        // ===== CROUCH NGỒI (CTRL) =====
         if (Input.GetKeyDown(KeyCode.LeftControl))
         {
             isCrouching = !isCrouching;
-            isMoveCrouch = false; // không cho trùng trạng thái
+            isMoveCrouch = false;
         }
 
         // ===== ANIMATOR =====
@@ -48,22 +67,21 @@ public class TestAnimation : MonoBehaviour
         animator.SetFloat("moveX", h);
         animator.SetFloat("moveZ", v);
 
-        // chỉ tính moving khi KHÔNG crouch
         animator.SetBool("isMoving", isMoving && !isMoveCrouch && !isCrouching);
 
-        // ===== DI CHUYỂN =====
+        // ===== MOVE =====
         if (isMoving)
         {
             float currentSpeed;
 
             if (isMoveCrouch)
-                currentSpeed = speed * 0.5f; // đi cúi
+                currentSpeed = speed * 0.5f;
             else if (isRunning && !isCrouching)
-                currentSpeed = speed * 2; // chạy
+                currentSpeed = speed * 2;
             else if (!isCrouching)
-                currentSpeed = speed; // đi thường
+                currentSpeed = speed;
             else
-                currentSpeed = 0; // ngồi thì không di chuyển
+                currentSpeed = 0;
 
             transform.Translate(move * currentSpeed * Time.deltaTime, Space.World);
 
@@ -80,7 +98,7 @@ public class TestAnimation : MonoBehaviour
             animator.SetBool("isJumping", true);
         }
 
-        // ===== ANIMATION NORMAL =====
+        // ===== NORMAL ANIM =====
         animator.SetBool("isRunning", isMoving && isRunning && !isMoveCrouch && !isCrouching);
         animator.SetBool("isWalking", isMoving && !isRunning && !isMoveCrouch && !isCrouching);
 
@@ -104,6 +122,12 @@ public class TestAnimation : MonoBehaviour
         {
             animator.SetTrigger("kick");
         }
+    }
+
+    void HideStunVFX()
+    {
+        if (stunVFX != null)
+            stunVFX.SetActive(false);
     }
 
     private void OnCollisionEnter(Collision collision)
