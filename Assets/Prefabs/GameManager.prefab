@@ -34,6 +34,7 @@ Transform:
   - {fileID: 4492251615145651124}
   - {fileID: 4215866185362398922}
   - {fileID: 5206395206275043171}
+  - {fileID: 7902030850879141136}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8480985857533359269
@@ -101,6 +102,58 @@ MonoBehaviour:
   NetworkedBehaviours:
   - {fileID: 8480985857533359269}
   ForceRemoteRenderTimeframe: 0
+--- !u!1 &1423176649178022131
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7902030850879141136}
+  - component: {fileID: 1192171227506402255}
+  m_Layer: 0
+  m_Name: Scoreboard Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7902030850879141136
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1423176649178022131}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8027664525814779364}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1192171227506402255
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1423176649178022131}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e1996c9b6b34f6c4e8c696413a84ff8e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  columnPrefab: {fileID: 6719246507556828587, guid: a34a892de93b9d74c9aab2e0cda2e7a6, type: 3}
+  columnsContainer: {fileID: 0}
+  maxBarHeight: 350
+  animSpeed: 3
+  testPlayers: []
+  autoRefreshInPlayMode: 1
+  refreshInterval: 0.2
+  useRealPlayerData: 1
 --- !u!1 &1888691848845231222
 GameObject:
   m_ObjectHideFlags: 0

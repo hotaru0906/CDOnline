@@ -104,10 +104,10 @@ public class PlayerAnimator : NetworkBehaviour
         _isAttacking = false;
     }
 
-    public void TriggerSit()
+    public void SetSittingOnChair(bool isSitting)
     {
         if (animator == null) return;
-        animator.SetTrigger(isSittingOnChair);
+        animator.SetBool(isSittingOnChair, isSitting);
     }
 
     /// <summary>

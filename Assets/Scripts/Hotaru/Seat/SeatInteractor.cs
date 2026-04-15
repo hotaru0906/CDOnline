@@ -87,7 +87,7 @@ public class SeatInteractor : NetworkBehaviour
         // Animation
         if (_playerAnimator != null)
         {
-            _playerAnimator.TriggerSit();
+            _playerAnimator.SetSittingOnChair(IsSitting);
         }
 
         // Ready state
