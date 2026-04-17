@@ -2,16 +2,6 @@ using Fusion;
 using UnityEngine;
 using System;
 using System.Collections.Generic;
-
-/// <summary>
-/// Russian Roulette System Manager
-/// - Mỗi 2 MG hoặc 1 nếu vote Roulette > MG sẽ vào Roulette
-/// - Người thắng MG gần nhất bắn đầu, sau đó đến người thắng MG trước đó
-/// - Mỗi lần thắng MG được 1 viên đạn (tối đa 2)
-/// - Mỗi player có đạn riêng: thật hoặc giả (không biết trước)
-/// - Người bị bắn sẽ vào chế độ khán giả
-/// - Lặp lại cho đến khi còn 1 người cuối cùng
-/// </summary>
 public class RouletteManager : NetworkBehaviour
 {
     #region Singleton
@@ -27,118 +17,56 @@ public class RouletteManager : NetworkBehaviour
     #endregion
 
     #region Networked Properties - Player State
-    /// <summary>
-    /// Số đạn mỗi player có (theo slot index)
-    /// </summary>
     [Networked, Capacity(8)]
     private NetworkArray<int> PlayerBullets => default;
-
-    /// <summary>
-    /// Số đạn THẬT mỗi player có (0 đến PlayerBullets)
-    /// Mỗi viên đạn có trạng thái riêng, được quyết định khi nhận đạn
-    /// </summary>
     [Networked, Capacity(8)]
     private NetworkArray<int> PlayerRealBullets => default;
-
-    /// <summary>
-    /// Trạng thái sống/chết của player (true = còn sống)
-    /// </summary>
     [Networked, Capacity(8)]
     private NetworkArray<NetworkBool> PlayerAlive => default;
-
-    /// <summary>
-    /// Mapping: slot index -> PlayerRef (để tránh dùng PlayerId trực tiếp)
-    /// </summary>
     [Networked, Capacity(8)]
     private NetworkArray<PlayerRef> PlayerSlots => default;
-
-    /// <summary>
-    /// Số player đang tham gia
-    /// </summary>
     [Networked]
     public int ActivePlayerCount { get; private set; }
     #endregion
 
     #region Networked Properties - Shooter Queue (synced)
-    /// <summary>
-    /// Queue người bắn - synced across all clients
-    /// </summary>
     [Networked, Capacity(8)]
     private NetworkArray<int> ShooterQueue => default;
-
-    /// <summary>
-    /// Số người trong queue
-    /// </summary>
     [Networked]
     private int ShooterQueueCount { get; set; }
-
-    /// <summary>
-    /// Index hiện tại trong queue
-    /// </summary>
     [Networked]
     private int CurrentQueueIndex { get; set; }
     #endregion
 
     #region Networked Properties - Game State
-    /// <summary>
-    /// Player hiện tại đang bắn (slot index)
-    /// </summary>
     [Networked, OnChangedRender(nameof(OnCurrentShooterChanged))]
     public int CurrentShooterSlot { get; private set; } = INVALID_PLAYER;
 
-    /// <summary>
-    /// Roulette đang active
-    /// </summary>
     [Networked, OnChangedRender(nameof(OnRouletteStateChanged))]
     public NetworkBool IsRouletteActive { get; private set; }
 
-    /// <summary>
-    /// Số minigame đã chơi kể từ lần Roulette cuối
-    /// </summary>
     [Networked]
     public int MinigamesSinceLastRoulette { get; private set; }
 
-    /// <summary>
-    /// Đang chờ người chơi chọn mục tiêu
-    /// </summary>
     [Networked]
     public NetworkBool IsWaitingForShot { get; private set; }
 
-    /// <summary>
-    /// Timer dùng TickTimer thay vì Coroutine
-    /// </summary>
     [Networked]
     private TickTimer ShootTimer { get; set; }
 
-    /// <summary>
-    /// Timer chờ sau khi bắn (hiển thị kết quả)
-    /// </summary>
     [Networked]
     private TickTimer ResultTimer { get; set; }
 
-    /// <summary>
-    /// Đang chờ kết quả bắn
-    /// </summary>
     [Networked]
     private NetworkBool IsWaitingForResult { get; set; }
 
-    /// <summary>
-    /// Thời gian còn lại đã broadcast lần cuối (để tránh spam RPC)
-    /// </summary>
     [Networked]
     private float LastBroadcastedTime { get; set; }
     #endregion
 
     #region Networked Properties - Recent Winners (for vote weight & shoot order)
-    /// <summary>
-    /// Người thắng MG gần nhất (slot index), INVALID_PLAYER nếu không có
-    /// </summary>
     [Networked]
     public int LastMinigameWinnerSlot { get; private set; } = INVALID_PLAYER;
-
-    /// <summary>
-    /// Người thắng MG trước đó (slot index)
-    /// </summary>
     [Networked]
     public int PreviousMinigameWinnerSlot { get; private set; } = INVALID_PLAYER;
     #endregion

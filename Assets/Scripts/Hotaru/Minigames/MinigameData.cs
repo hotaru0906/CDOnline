@@ -47,4 +47,8 @@ public class MinigameData : ScriptableObject
     
     [Tooltip("Cho phép player respawn khi chết. Nếu false, player sẽ bị loại khi chết")]
     public bool allowRespawn = true;
+
+    [Header("Audio Settings")]
+    [Tooltip("BGM riêng cho minigame này. Nếu null sẽ dùng BGM mặc định từ AudioManager")]
+    public AudioClip minigameBGM;
 }

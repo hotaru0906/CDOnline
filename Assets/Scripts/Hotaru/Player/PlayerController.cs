@@ -108,7 +108,7 @@ public class PlayerController : NetworkBehaviour
                         // First Person cho Lobby, Voting, Roulette
                         CameraManager.Instance.SwitchToFirstPersonCamera();
                     }
-                    else if (state == GameState.Playing)
+                    else if (state == GameState.Playing || state == GameState.Tutorial)
                     {
                         // Kiểm tra setting từ MinigameData
                         var minigameData = GameManager.Instance.CurrentMinigameData;
@@ -538,6 +538,13 @@ public class PlayerController : NetworkBehaviour
         if (CameraManager.Instance.CurrentMode == CameraMode.FirstPerson)
         {
             RotateToYaw(CameraManager.Instance.FPYaw);
+            return;
+        }
+
+        // Minigame: KHÔNG tự động xoay player theo camera (xoay do gameplay riêng nếu cần)
+        if (CameraManager.Instance.CurrentMode == CameraMode.Minigame)
+        {
+            // Không xử lý xoay ở đây để tránh lỗi model bị lệch hướng khi dùng shared camera
             return;
         }
 

@@ -1,6 +1,7 @@
 using Fusion;
 using UnityEngine;
 using System;
+using System.Collections;
 
 /// <summary>
 /// Quản lý voting system
@@ -228,10 +229,18 @@ public class VotingManager : NetworkBehaviour
             {
                 GameManager.Instance.OnVotingComplete(chooseRoulette);
 
-                // Nếu chọn minigame, start minigame
+                // Nếu chọn minigame, hiển thị lại Voting UI (MinigameOnly) để vote chọn minigame
+                // KHÔNG start minigame trực tiếp - phải vote minigame trước
                 if (!chooseRoulette)
                 {
-                    GameManager.Instance.StartMinigame(maxMinigameIndex);
+                    Debug.Log("[VotingManager] Continue Minigame won - showing minigame voting UI");
+                    // Chuẩn bị danh sách minigame mới (đã loại bỏ minigame đã chơi)
+                    if (MinigameVotingManager.Instance != null)
+                    {
+                        MinigameVotingManager.Instance.PrepareNextVotingRound();
+                    }
+                    // Delay một chút để đảm bảo UI đã ẩn trước khi hiện voting mới
+                    StartCoroutine(DelayedStartMinigameVoting());
                 }
             }
         }
@@ -253,6 +262,21 @@ public class VotingManager : NetworkBehaviour
             {
                 Debug.LogError("[VotingManager] GameManager.Instance is NULL!");
             }
+        }
+    }
+
+    /// <summary>
+    /// Delay một chút trước khi hiện Minigame Voting UI
+    /// Để đảm bảo RouletteVoting UI đã được ẩn hoàn toàn
+    /// </summary>
+    private IEnumerator DelayedStartMinigameVoting()
+    {
+        yield return new WaitForSeconds(1f);
+
+        if (GameManager.Instance != null)
+        {
+            Debug.Log("[VotingManager] Starting minigame voting after delay");
+            GameManager.Instance.StartVoting(VotingType.MinigameOnly);
         }
     }
     #endregion
