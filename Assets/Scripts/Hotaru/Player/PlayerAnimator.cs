@@ -17,6 +17,8 @@ public class PlayerAnimator : NetworkBehaviour
     [SerializeField] private string jumpTrigger = "Jump";
     [SerializeField] private string attackTrigger = "Attack";
     [SerializeField] private string isSittingParam = "isSitting";
+    [SerializeField] private string isSittingOnChair = "sitOnChair";
+    
 
     private PlayerController _playerController;
     private bool _isAttacking = false;
@@ -26,10 +28,6 @@ public class PlayerAnimator : NetworkBehaviour
         _playerController = GetComponent<PlayerController>();
     }
 
-    /// <summary>
-    /// Cập nhật Animator reference khi đổi model
-    /// Gọi từ PlayerModelSwitcher khi model thay đổi
-    /// </summary>
     public void UpdateAnimatorReference(GameObject activeModel)
     {
         if (activeModel == null)
@@ -104,6 +102,12 @@ public class PlayerAnimator : NetworkBehaviour
     private void EndAttack()
     {
         _isAttacking = false;
+    }
+
+    public void SetSittingOnChair(bool isSitting)
+    {
+        if (animator == null) return;
+        animator.SetBool(isSittingOnChair, isSitting);
     }
 
     /// <summary>

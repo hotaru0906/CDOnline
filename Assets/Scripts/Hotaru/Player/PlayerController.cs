@@ -58,7 +58,7 @@ public class PlayerController : NetworkBehaviour
     [Networked] private float AttackTimer { get; set; }
     [Networked] private NetworkBool IsRunning { get; set; }
     [Networked] private NetworkBool IsCrouching { get; set; }
-    [Networked] private NetworkBool IsMoving { get; set; } // Có input di chuyển không
+    [Networked] private NetworkBool IsMoving { get; set; }
     [Networked] private float GroundedTimer { get; set; } // Timer để buffer ground check
     [Networked] private TickTimer HitCooldownTimer { get; set; } // Timer cho hit cooldown
 

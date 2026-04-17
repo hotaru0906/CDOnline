@@ -13,6 +13,9 @@ public class PlayerNetworkData : NetworkBehaviour
     
     [Networked, OnChangedRender(nameof(OnCharacterIndexChanged))]
     public int CharacterIndex { get; set; }
+    
+    [Networked, OnChangedRender(nameof(OnScoreChanged))]
+    public int Score { get; set; }
 
     public override void Spawned()
     {
@@ -98,6 +101,44 @@ public class PlayerNetworkData : NetworkBehaviour
             modelSwitcher.SetCharacterModel(CharacterIndex);
         }
         Debug.Log($"[PlayerNetworkData] Character index changed to: {CharacterIndex}");
+    }
+
+    private void OnScoreChanged()
+    {
+        Debug.Log($"[PlayerNetworkData] {PlayerName} score changed to: {Score}");
+        
+        // Notify ScoreboardManager to refresh
+        if (ScoreboardManager.Instance != null)
+        {
+            ScoreboardManager.Instance.RefreshFromPlayers();
+        }
+    }
+
+    /// <summary>
+    /// Thêm điểm cho player (Host only)
+    /// </summary>
+    public void AddScore(int amount)
+    {
+        if (!HasStateAuthority) return;
+        Score += amount;
+    }
+
+    /// <summary>
+    /// Set điểm cho player (Host only)
+    /// </summary>
+    public void SetScore(int value)
+    {
+        if (!HasStateAuthority) return;
+        Score = value;
+    }
+
+    /// <summary>
+    /// Reset điểm về 0 (Host only)
+    /// </summary>
+    public void ResetScore()
+    {
+        if (!HasStateAuthority) return;
+        Score = 0;
     }
 
     public void ToggleReady()
