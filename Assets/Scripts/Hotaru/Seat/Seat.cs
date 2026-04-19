@@ -7,6 +7,10 @@ public class Seat : InteractableObject
     [Header("Seat Settings")]
     [SerializeField] private Transform sitPoint;  // Vị trí ngồi
 
+    private BoxCollider _boxCollider;
+    private const float SIT_COLLIDER_CENTER_X = 0.1f;
+    private const float DEFAULT_COLLIDER_CENTER_X = 0.2379256f;
+
     public int SeatIndex { get; private set; } = -1;
     public bool IsAvailable =>
     SeatManager.Instance != null &&
@@ -24,6 +28,8 @@ public class Seat : InteractableObject
         {
             sitPoint = transform;
         }
+
+        _boxCollider = GetComponent<BoxCollider>();
 
         promptText = "Sit";
         interactionKey = KeyCode.E;
@@ -72,6 +78,22 @@ public class Seat : InteractableObject
     {
         SeatIndex = index;
         Debug.Log($"[Seat] Initialized seat {index} at {transform.position}");
+    }
+
+    public void OnSit()
+    {
+        if (_boxCollider == null) return;
+        var center = _boxCollider.center;
+        center.y = SIT_COLLIDER_CENTER_X;
+        _boxCollider.center = center;
+    }
+
+    public void OnStandUp()
+    {
+        if (_boxCollider == null) return;
+        var center = _boxCollider.center;
+        center.y = DEFAULT_COLLIDER_CENTER_X;
+        _boxCollider.center = center;
     }
 
     public void TrySit(PlayerRef playerRef)

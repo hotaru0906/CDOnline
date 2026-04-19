@@ -88,14 +88,6 @@ public class ScoreboardColumn : MonoBehaviour
             Transform t = transform.Find("Name_Text");
             if (t != null) nameText = t.GetComponent<TextMeshProUGUI>();
         }
-
-        // Log
-        Debug.Log($"[{gameObject.name}] References:\n" +
-                  $"  barContainer: {(barContainer != null ? "✅" : "❌ NULL")}\n" +
-                  $"  barImage:     {(barImage     != null ? "✅" : "❌ NULL")}\n" +
-                  $"  iconImage:    {(iconImage    != null ? "✅" : "❌ NULL")}\n" +
-                  $"  scoreText:    {(scoreText    != null ? "✅" : "❌ NULL")}\n" +
-                  $"  nameText:     {(nameText     != null ? "✅" : "❌ NULL")}");
     }
 
     // ==============================

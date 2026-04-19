@@ -36,8 +36,6 @@ public class ScoreboardManager : MonoBehaviour
     
     [Header("=== Auto Find Settings ===")]
     [Tooltip("Tên của GameObject chứa các columns (dùng khi columnsContainer = null)")]
-    [SerializeField] private string containerName = "Columns_Container";
-    [Tooltip("Tag của GameObject chứa các columns (ưu tiên hơn name)")]
     [SerializeField] private string containerTag  = "ScoreboardContainer";
 
     [Header("=== Bar Settings ===")]
@@ -131,30 +129,20 @@ public class ScoreboardManager : MonoBehaviour
     {
         if (columnsContainer != null) return true;
 
-        // Ưu tiên tìm theo tag
+        // Ưu tiên tìm theo tag (bao gồm cả inactive GameObjects)
         if (!string.IsNullOrEmpty(containerTag))
         {
-            GameObject taggedObj = GameObject.FindGameObjectWithTag(containerTag);
-            if (taggedObj != null)
+            var allTransforms = FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var t in allTransforms)
             {
-                columnsContainer = taggedObj.transform;
-                Debug.Log($"[ScoreboardManager] Found container by tag: {containerTag}");
-                return true;
+                if (t.CompareTag(containerTag))
+                {
+                    columnsContainer = t;
+                    Debug.Log($"[ScoreboardManager] Found container by tag: {containerTag}");
+                    return true;
+                }
             }
         }
-
-        // Tìm theo tên
-        if (!string.IsNullOrEmpty(containerName))
-        {
-            GameObject namedObj = GameObject.Find(containerName);
-            if (namedObj != null)
-            {
-                columnsContainer = namedObj.transform;
-                Debug.Log($"[ScoreboardManager] Found container by name: {containerName}");
-                return true;
-            }
-        }
-
         Debug.LogWarning("[ScoreboardManager] Could not find columnsContainer!");
         return false;
     }
@@ -311,7 +299,7 @@ public class ScoreboardManager : MonoBehaviour
         // Sort theo score giảm dần
         _currentPlayers.Sort((a, b) => b.score.CompareTo(a.score));
 
-        Debug.Log($"[ScoreboardManager] Found {_currentPlayers.Count} players");
+        //Debug.Log($"[ScoreboardManager] Found {_currentPlayers.Count} players");
 
         // Build lại scoreboard với data thật
         BuildScoreboardFromList(_currentPlayers);

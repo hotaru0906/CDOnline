@@ -1,11 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
-/// <summary>
-/// Quản lý BGM và Audio Settings.
-/// Singleton độc lập, DontDestroyOnLoad.
-/// Chạy LOCAL - không sync qua network.
-/// </summary>
 public class AudioManager : MonoBehaviour
 {
     public static AudioManager Instance { get; private set; }
@@ -17,17 +13,31 @@ public class AudioManager : MonoBehaviour
     [SerializeField] private AudioClip[] bgmList;
     private int currentBGMIndex = 0;
 
+    [Header("Minigame BGM")]
+    [SerializeField] private AudioClip minigameBGM;
+
+    [Header("Fade Settings")]
+    [SerializeField] private float fadeDuration = 1f;
+
     [Header("Settings")]
     [SerializeField] private bool isBGMOn = true;
     [SerializeField] private bool isSFXOn = true;
     [SerializeField, Range(0f, 1f)] private float bgmVolume = 1f;
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
 
+    // Lưu trạng thái lobby BGM
+    private float savedLobbyBGMTime = 0f;
+    private int savedLobbyBGMIndex = 0;
+    private bool isPlayingMinigameBGM = false;
+    private Coroutine fadeCoroutine;
+
     // Public properties
     public bool IsBGMOn => isBGMOn;
     public bool IsSFXOn => isSFXOn;
     public float BGMVolume => bgmVolume;
     public float SFXVolume => sfxVolume;
+    public bool IsPlayingMinigameBGM => isPlayingMinigameBGM;
+    public float FadeDuration { get => fadeDuration; set => fadeDuration = value; }
 
     void Awake()
     {
@@ -66,8 +76,8 @@ public class AudioManager : MonoBehaviour
 
     void Update()
     {
-        // Auto-play next BGM khi hết bài
-        if (isBGMOn && bgmSource != null && !bgmSource.isPlaying && bgmList != null && bgmList.Length > 0)
+        // Auto-play next BGM khi hết bài (chỉ khi không phải minigame BGM)
+        if (isBGMOn && !isPlayingMinigameBGM && bgmSource != null && !bgmSource.isPlaying && bgmList != null && bgmList.Length > 0)
         {
             PlayNextBGM();
         }
@@ -138,6 +148,145 @@ public class AudioManager : MonoBehaviour
     {
         if (bgmSource != null && !bgmSource.isPlaying)
             bgmSource.UnPause();
+    }
+
+    #endregion
+
+    #region Minigame BGM Controls
+
+    /// <summary>
+    /// Gọi khi bắt đầu loading vào minigame - fade out lobby BGM và lưu vị trí
+    /// </summary>
+    public void OnEnterMinigameLoading()
+    {
+        if (!isBGMOn || bgmSource == null) return;
+
+        // Lưu lại vị trí và index của lobby BGM
+        savedLobbyBGMTime = bgmSource.time;
+        savedLobbyBGMIndex = currentBGMIndex;
+
+        // Fade out lobby BGM
+        FadeOutBGM();
+    }
+
+    /// <summary>
+    /// Gọi khi minigame đã load xong - bật minigame BGM
+    /// </summary>
+    public void OnMinigameStart()
+    {
+        OnMinigameStart(minigameBGM);
+    }
+
+    /// <summary>
+    /// Gọi khi minigame đã load xong với custom BGM
+    /// </summary>
+    public void OnMinigameStart(AudioClip customMinigameBGM)
+    {
+        if (!isBGMOn || bgmSource == null) return;
+
+        isPlayingMinigameBGM = true;
+
+        if (customMinigameBGM != null)
+        {
+            bgmSource.clip = customMinigameBGM;
+            bgmSource.time = 0f;
+            FadeInBGM();
+        }
+    }
+
+    /// <summary>
+    /// Gọi khi kết thúc minigame - fade out minigame BGM và khôi phục lobby BGM
+    /// </summary>
+    public void OnMinigameEnd()
+    {
+        if (!isBGMOn || bgmSource == null) return;
+
+        // Fade out minigame BGM rồi fade in lobby BGM
+        StartCoroutine(TransitionToLobbyBGM());
+    }
+
+    private IEnumerator TransitionToLobbyBGM()
+    {
+        // Fade out minigame BGM
+        yield return StartCoroutine(FadeOutCoroutine());
+
+        // Khôi phục lobby BGM từ vị trí đã lưu
+        isPlayingMinigameBGM = false;
+
+        if (bgmList != null && bgmList.Length > 0)
+        {
+            currentBGMIndex = savedLobbyBGMIndex;
+            bgmSource.clip = bgmList[currentBGMIndex];
+            bgmSource.time = savedLobbyBGMTime;
+
+            // Fade in lobby BGM
+            FadeInBGM();
+        }
+    }
+
+    #endregion
+
+    #region Fade Controls
+
+    /// <summary>
+    /// Fade out BGM hiện tại
+    /// </summary>
+    public void FadeOutBGM(float? customDuration = null)
+    {
+        if (fadeCoroutine != null)
+            StopCoroutine(fadeCoroutine);
+
+        fadeCoroutine = StartCoroutine(FadeOutCoroutine(customDuration ?? fadeDuration));
+    }
+
+    /// <summary>
+    /// Fade in BGM hiện tại
+    /// </summary>
+    public void FadeInBGM(float? customDuration = null)
+    {
+        if (fadeCoroutine != null)
+            StopCoroutine(fadeCoroutine);
+
+        fadeCoroutine = StartCoroutine(FadeInCoroutine(customDuration ?? fadeDuration));
+    }
+
+    private IEnumerator FadeOutCoroutine(float duration = -1f)
+    {
+        if (duration < 0) duration = fadeDuration;
+        if (bgmSource == null) yield break;
+
+        float startVolume = bgmSource.volume;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            bgmSource.volume = Mathf.Lerp(startVolume, 0f, elapsed / duration);
+            yield return null;
+        }
+
+        bgmSource.volume = 0f;
+        bgmSource.Stop();
+    }
+
+    private IEnumerator FadeInCoroutine(float duration = -1f)
+    {
+        if (duration < 0) duration = fadeDuration;
+        if (bgmSource == null) yield break;
+
+        bgmSource.volume = 0f;
+        bgmSource.Play();
+
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            bgmSource.volume = Mathf.Lerp(0f, bgmVolume, elapsed / duration);
+            yield return null;
+        }
+
+        bgmSource.volume = bgmVolume;
     }
 
     #endregion

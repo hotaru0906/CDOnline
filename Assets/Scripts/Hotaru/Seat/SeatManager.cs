@@ -250,6 +250,9 @@ public class SeatManager : NetworkBehaviour
         SeatOccupants.Set(seatIndex, playerSlot);
         SeatedPlayerCount++;
 
+        if (seatIndex < seats.Length && seats[seatIndex] != null)
+            seats[seatIndex].OnSit();
+
         Debug.Log($"[SeatManager] Player {playerSlot} → seat {seatIndex}");
         UpdatePlayerSeatIndex(playerSlot, seatIndex);
 
@@ -265,6 +268,9 @@ public class SeatManager : NetworkBehaviour
 
         SeatOccupants.Set(seatIndex, INVALID_SEAT);
         SeatedPlayerCount--;
+
+        if (seatIndex < seats.Length && seats[seatIndex] != null)
+            seats[seatIndex].OnStandUp();
 
         Debug.Log($"[SeatManager] Player {playerSlot} đứng dậy");
 

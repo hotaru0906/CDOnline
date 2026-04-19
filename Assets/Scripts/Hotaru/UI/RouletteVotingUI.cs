@@ -104,7 +104,7 @@ public class RouletteVotingUI : MonoBehaviour
         
         if (statusText != null)
         {
-            statusText.text = "Vote: Về Roulette hoặc Tiếp tục Minigame?";
+            statusText.text = "Vote: Return to Roulette or Continue the Minigame?";
         }
         
         // Sync with current voting state if active
@@ -145,7 +145,7 @@ public class RouletteVotingUI : MonoBehaviour
 
         if (statusText != null)
         {
-            statusText.text = "Đã vote: Về Roulette!";
+            statusText.text = "Voted: Return to Roulette!";
         }
     }
 
@@ -176,7 +176,7 @@ public class RouletteVotingUI : MonoBehaviour
 
         if (statusText != null)
         {
-            statusText.text = "Đã vote: Tiếp tục Minigame!";
+            statusText.text = "Voted: Continue the Minigame!";
         }
     }
     #endregion
@@ -252,11 +252,11 @@ public class RouletteVotingUI : MonoBehaviour
             
             if (winner == VotingManager.ROULETTE_OPTION_INDEX)
             {
-                statusText.text = "🎰 Bắt đầu Russian Roulette!";
+                statusText.text = "Start Russian Roulette!";
             }
             else
             {
-                statusText.text = "▶ Tiếp tục chơi Minigame!";
+                statusText.text = "Continue the Minigame!";
             }
         }
 

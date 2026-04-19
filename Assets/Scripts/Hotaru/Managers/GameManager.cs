@@ -1163,6 +1163,9 @@ public class GameManager : NetworkBehaviour
         _scoreboardCoroutine = null;
     }
 
+    [Header("Roulette Settings")]
+    [SerializeField] private string rouletteSceneName = "Roulette Test";
+
     protected virtual void HandleRouletteState()
     {
         Debug.Log("[GameManager] Entered Roulette state");
@@ -1194,6 +1197,32 @@ public class GameManager : NetworkBehaviour
         {
             CursorManager.Instance.HideCursor();
         }
+
+        // Host: Load Roulette scene
+        if (HasStateAuthority)
+        {
+            Debug.Log($"[GameManager] Host loading Roulette scene: {rouletteSceneName}");
+            int sceneIndex = GetSceneIndex(rouletteSceneName);
+            var sceneRef = SceneRef.FromIndex(sceneIndex);
+
+            if (sceneRef.IsValid)
+            {
+                Debug.Log($"[GameManager] Loading Roulette scene via Runner.LoadScene...");
+                Runner.LoadScene(sceneRef);
+            }
+            else
+            {
+                Debug.LogError($"[GameManager] Invalid Roulette scene: {rouletteSceneName}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gọi bởi RouletteController sau khi scene load xong để setup và start Roulette
+    /// </summary>
+    public void OnRouletteSceneReady()
+    {
+        Debug.Log("[GameManager] Roulette scene ready, starting roulette gameplay");
 
         // Teleport players đến vị trí Roulette dựa trên seat từ Lobby
         if (RouletteManager.Instance != null)
