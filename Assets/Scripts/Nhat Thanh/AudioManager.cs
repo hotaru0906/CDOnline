@@ -22,7 +22,7 @@ public class AudioManager : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private bool isBGMOn = true;
     [SerializeField] private bool isSFXOn = true;
-    [SerializeField, Range(0f, 1f)] private float bgmVolume = 1f;
+    [SerializeField, Range(0f, 1f)] private float bgmVolume = 0.35f;
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
 
     // Lưu trạng thái lobby BGM
@@ -34,7 +34,7 @@ public class AudioManager : MonoBehaviour
     // Public properties
     public bool IsBGMOn => isBGMOn;
     public bool IsSFXOn => isSFXOn;
-    public float BGMVolume => bgmVolume;
+    //public float BGMVolume => bgmVolume;
     public float SFXVolume => sfxVolume;
     public bool IsPlayingMinigameBGM => isPlayingMinigameBGM;
     public float FadeDuration { get => fadeDuration; set => fadeDuration = value; }
@@ -51,7 +51,7 @@ public class AudioManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
 
         SetupAudioSource();
-        LoadSettings();
+        //LoadSettings();
     }
 
     void Start()
@@ -315,7 +315,7 @@ public class AudioManager : MonoBehaviour
             }
         }
 
-        SaveSettings();
+        //SaveSettings();
     }
 
     public void ToggleSFX()
@@ -326,19 +326,19 @@ public class AudioManager : MonoBehaviour
     public void SetSFX(bool isOn)
     {
         isSFXOn = isOn;
-        SaveSettings();
+        //SaveSettings();
     }
 
     /// <summary>
     /// Set BGM volume (0-1). Dùng cho slider.
     /// </summary>
-    public void SetBGMVolume(float volume)
-    {
-        bgmVolume = Mathf.Clamp01(volume);
-        if (bgmSource != null)
-            bgmSource.volume = bgmVolume;
-        SaveSettings();
-    }
+    // public void SetBGMVolume(float volume)
+    // {
+    //     bgmVolume = Mathf.Clamp01(volume);
+    //     if (bgmSource != null)
+    //         bgmSource.volume = bgmVolume;
+    //     SaveSettings();
+    // }
 
     /// <summary>
     /// Set SFX volume (0-1). Dùng cho slider.
@@ -346,32 +346,32 @@ public class AudioManager : MonoBehaviour
     public void SetSFXVolume(float volume)
     {
         sfxVolume = Mathf.Clamp01(volume);
-        SaveSettings();
+        //SaveSettings();
     }
 
     #endregion
 
     #region Save/Load
 
-    private void SaveSettings()
-    {
-        PlayerPrefs.SetInt("BGM_On", isBGMOn ? 1 : 0);
-        PlayerPrefs.SetInt("SFX_On", isSFXOn ? 1 : 0);
-        PlayerPrefs.SetFloat("BGM_Volume", bgmVolume);
-        PlayerPrefs.SetFloat("SFX_Volume", sfxVolume);
-        PlayerPrefs.Save();
-    }
+    // private void SaveSettings()
+    // {
+    //     PlayerPrefs.SetInt("BGM_On", isBGMOn ? 1 : 0);
+    //     PlayerPrefs.SetInt("SFX_On", isSFXOn ? 1 : 0);
+    //     PlayerPrefs.SetFloat("BGM_Volume", bgmVolume);
+    //     PlayerPrefs.SetFloat("SFX_Volume", sfxVolume);
+    //     PlayerPrefs.Save();
+    // }
 
-    private void LoadSettings()
-    {
-        isBGMOn = PlayerPrefs.GetInt("BGM_On", 1) == 1;
-        isSFXOn = PlayerPrefs.GetInt("SFX_On", 1) == 1;
-        bgmVolume = PlayerPrefs.GetFloat("BGM_Volume", 1f);
-        sfxVolume = PlayerPrefs.GetFloat("SFX_Volume", 1f);
+    // private void LoadSettings()
+    // {
+    //     isBGMOn = PlayerPrefs.GetInt("BGM_On", 1) == 1;
+    //     isSFXOn = PlayerPrefs.GetInt("SFX_On", 1) == 1;
+    //     bgmVolume = PlayerPrefs.GetFloat("BGM_Volume", 1f);
+    //     sfxVolume = PlayerPrefs.GetFloat("SFX_Volume", 1f);
 
-        if (bgmSource != null)
-            bgmSource.volume = bgmVolume;
-    }
+    //     if (bgmSource != null)
+    //         bgmSource.volume = bgmVolume;
+    // }
 
     #endregion
 }

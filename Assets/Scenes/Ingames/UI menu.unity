@@ -11381,10 +11381,12 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 7e1d28df170300140bbbae1134cf782a, type: 3}
   - {fileID: 8300000, guid: affb2188b2d0e8942be88d7c2fc8d2b5, type: 3}
   - {fileID: 8300000, guid: a89907cecb3424946b99b95323dbf8d2, type: 3}
+  minigameBGM: {fileID: 8300000, guid: 5f7af8daf124e1e4d9956374619544d3, type: 3}
+  fadeDuration: 1
   isBGMOn: 1
   isSFXOn: 1
-  bgmVolume: 0.2
-  sfxVolume: 0.5
+  bgmVolume: 0.15
+  sfxVolume: 1
 --- !u!4 &1582504701
 Transform:
   m_ObjectHideFlags: 0
@@ -13615,6 +13617,37 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 832199960881189912, guid: 7dd03d73abbd664469543d4489c76922, type: 3}
   m_PrefabInstance: {fileID: 1928886401}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1945850070
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1945850071}
+  m_Layer: 0
+  m_Name: RegionHandler
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1945850071
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1945850070}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1947336440
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -15281,3 +15314,4 @@ SceneRoots:
   - {fileID: 1739337191}
   - {fileID: 1582504701}
   - {fileID: 1484028089}
+  - {fileID: 1945850071}

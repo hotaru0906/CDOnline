@@ -7,7 +7,9 @@ public class GlassPlatform : MonoBehaviour
     [SerializeField] private GlassBridge bridge;
     [SerializeField] private int rowIndex;
     [SerializeField] private bool isLeft;
-    
+
+    [Header("Effects")]
+    [SerializeField] private AudioClip breakSound;
     private bool isBroken = false;
 
     public int RowIndex => rowIndex;
@@ -30,8 +32,10 @@ public class GlassPlatform : MonoBehaviour
     public void Break()
     {
         if (isBroken) return;
-
         isBroken = true;
+
+        if (breakSound != null)
+            AudioSource.PlayClipAtPoint(breakSound, transform.position);
         gameObject.SetActive(false);
 
         Debug.Log($"[GlassPlatform] Platform BROKEN at row {rowIndex}, isLeft: {isLeft}");
@@ -47,9 +51,9 @@ public class GlassPlatform : MonoBehaviour
     {
         Gizmos.color = isLeft ? Color.cyan : Color.magenta;
         Gizmos.DrawWireCube(transform.position, Vector3.one * 0.3f);
-        
+
         UnityEditor.Handles.Label(
-            transform.position + Vector3.up * 0.5f, 
+            transform.position + Vector3.up * 0.5f,
             $"Row {rowIndex}\n{(isLeft ? "Left" : "Right")}"
         );
     }
