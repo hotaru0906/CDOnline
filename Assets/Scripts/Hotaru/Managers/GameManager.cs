@@ -375,14 +375,20 @@ public class GameManager : NetworkBehaviour
         // Tìm lại UI vì scene mới load
         FindUIReferences();
 
-        // Hiện tutorial UI
+        // Hiện tutorial UI cho tất cả player
         SetActiveUI(minigameTutorialUI, true);
         SetActiveUI(minigameCountdownUI, false);
+
+        // Unlock và show cursor cho tất cả player để có thể nhấn button
+        if (CursorManager.Instance != null)
+        {
+            CursorManager.Instance.SetUIMode();
+        }
 
         // Setup lại button nếu cần
         SetupTutorialStartButton();
 
-        Debug.Log("[GameManager] Showing minigame tutorial UI");
+        Debug.Log("[GameManager] Showing minigame tutorial UI (all players, cursor unlocked)");
     }
 
     /// <summary>
@@ -476,6 +482,8 @@ public class GameManager : NetworkBehaviour
                 break;
             case GameState.Tutorial:
                 HandleTutorialState();
+                // Đảm bảo tutorial luôn hiện cho mọi client khi vào Tutorial state
+                ShowMinigameTutorial();
                 break;
             case GameState.Playing:
                 HandlePlayingState();
@@ -935,11 +943,21 @@ public class GameManager : NetworkBehaviour
         {
             SetActiveUI(votingUI, true);
             Debug.Log("[GameManager] Showing VotingUI (MinigameOnly)");
+            // Chuẩn bị danh sách minigame cho voting thường
+            if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady && HasStateAuthority)
+            {
+                MinigameVotingManager.Instance.PrepareNextVotingRound();
+            }
         }
         else // RouletteOrMinigame
         {
             SetActiveUI(rouletteVotingUI, true);
             Debug.Log("[GameManager] Showing RouletteVotingUI (RouletteOrMinigame)");
+            // Chỉ lấy các minigame chưa chơi cho voting Roulette
+            if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady && HasStateAuthority)
+            {
+                MinigameVotingManager.Instance.PrepareNextVotingRoundForRoulette();
+            }
         }
 
         // Khóa xoay camera khi voting

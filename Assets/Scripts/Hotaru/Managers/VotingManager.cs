@@ -170,11 +170,15 @@ public class VotingManager : NetworkBehaviour
         TotalVotes = 0;
         TotalVoteWeight = 0;
 
-        // Tính tổng vote weight (người thắng MG gần nhất có 2 vote)
+
+        // Tính tổng vote weight (người thắng MG gần nhất có 2 vote, còn lại 1 vote)
         foreach (var player in players)
         {
-            int playerId = player.Object.InputAuthority.PlayerId;
-            int weight = RouletteManager.Instance?.GetPlayerVoteWeight(playerId) ?? 1;
+            int weight = 1;
+            if (RouletteManager.Instance != null)
+            {
+                weight = RouletteManager.Instance.GetPlayerVoteWeightByRef(player.Object.InputAuthority);
+            }
             TotalVoteWeight += weight;
         }
 
@@ -237,7 +241,7 @@ public class VotingManager : NetworkBehaviour
                     // Chuẩn bị danh sách minigame mới (đã loại bỏ minigame đã chơi)
                     if (MinigameVotingManager.Instance != null)
                     {
-                        MinigameVotingManager.Instance.PrepareNextVotingRound();
+                        MinigameVotingManager.Instance.PrepareNextVotingRoundForRoulette();
                     }
                     // Delay một chút để đảm bảo UI đã ẩn trước khi hiện voting mới
                     StartCoroutine(DelayedStartMinigameVoting());

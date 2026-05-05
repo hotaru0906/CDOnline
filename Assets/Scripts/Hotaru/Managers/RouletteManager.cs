@@ -171,7 +171,7 @@ public class RouletteManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
+        // DontDestroyOnLoad removed: Fusion managers should not use this if not root or if managed by NetworkRunner
     }
 
     public override void Spawned()

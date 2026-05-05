@@ -225,8 +225,11 @@ public class MinigameController : NetworkBehaviour
             trapSpawner.enabled = false;
         }
 
-        // Freeze all players
-        RPC_SetPlayersFrozen(true);
+        // Freeze all players (only host can call RPC)
+        if (HasStateAuthority)
+        {
+            RPC_SetPlayersFrozen(true);
+        }
     }
 
     private void HandleScoreboardPhase()

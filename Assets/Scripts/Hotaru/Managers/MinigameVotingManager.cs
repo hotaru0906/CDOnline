@@ -17,6 +17,9 @@ public class MinigameVotingManager : NetworkBehaviour
     [Header("Minigame Configuration")]
     [SerializeField] private List<MinigameData> allMinigames = new List<MinigameData>();
 
+    // Track played minigames by SO reference for easier checking
+    private HashSet<MinigameData> playedMinigameSO = new HashSet<MinigameData>();
+
     [Header("Settings")]
     [SerializeField] private int displayCount = 3; // Số minigame hiển thị để vote mỗi lần
     [SerializeField] private bool shuffleMinigames = true;
@@ -158,15 +161,15 @@ public class MinigameVotingManager : NetworkBehaviour
         }
 
         int actualIndex = AvailableMinigameIndices.Get(availableIndex);
+        if (actualIndex < 0 || actualIndex >= allMinigames.Count)
+            return;
 
-        // Kiểm tra xem đã chơi chưa
-        for (int i = 0; i < PlayedCount; i++)
+        // Kiểm tra đã chơi bằng SO
+        var so = allMinigames[actualIndex];
+        if (playedMinigameSO.Contains(so))
         {
-            if (PlayedMinigameIndices.Get(i) == actualIndex)
-            {
-                Debug.Log($"[MinigameVotingManager] Minigame {actualIndex} already marked as played");
-                return;
-            }
+            Debug.Log($"[MinigameVotingManager] Minigame {so.name} already marked as played");
+            return;
         }
 
         // Thêm vào danh sách đã chơi
@@ -174,7 +177,8 @@ public class MinigameVotingManager : NetworkBehaviour
         {
             PlayedMinigameIndices.Set(PlayedCount, actualIndex);
             PlayedCount++;
-            Debug.Log($"[MinigameVotingManager] Marked minigame {actualIndex} as played. Total played: {PlayedCount}");
+            playedMinigameSO.Add(so);
+            Debug.Log($"[MinigameVotingManager] Marked minigame {so.name} as played. Total played: {PlayedCount}");
         }
     }
 
@@ -188,11 +192,11 @@ public class MinigameVotingManager : NetworkBehaviour
 
         Debug.Log("[MinigameVotingManager] Preparing next voting round...");
 
-        // Lấy danh sách minigame chưa chơi
+        // Lấy danh sách minigame chưa chơi bằng SO
         List<int> unplayedIndices = new List<int>();
         for (int i = 0; i < allMinigames.Count; i++)
         {
-            if (!IsMinigamePlayed(i))
+            if (!playedMinigameSO.Contains(allMinigames[i]))
             {
                 unplayedIndices.Add(i);
             }
@@ -232,6 +236,57 @@ public class MinigameVotingManager : NetworkBehaviour
     }
 
     /// <summary>
+    /// Chuẩn bị danh sách minigame cho voting phase RouletteOrMinigame
+    /// Luôn chỉ lấy các minigame chưa chơi, không reset lại nếu hết (để tránh lặp lại)
+    /// </summary>
+    public void PrepareNextVotingRoundForRoulette()
+    {
+        if (!HasStateAuthority || !IsReady) return;
+
+        Debug.Log("[MinigameVotingManager] Preparing next voting round for RouletteOrMinigame...");
+
+        // Lấy danh sách minigame chưa chơi bằng SO
+        List<int> unplayedIndices = new List<int>();
+        for (int i = 0; i < allMinigames.Count; i++)
+        {
+            if (!playedMinigameSO.Contains(allMinigames[i]))
+            {
+                unplayedIndices.Add(i);
+            }
+        }
+
+        Debug.Log($"[MinigameVotingManager] Unplayed minigames (Roulette): {unplayedIndices.Count}");
+
+        // Nếu không còn minigame nào, không reset, không cho vote lại minigame đã chơi
+        if (unplayedIndices.Count == 0)
+        {
+            Debug.LogWarning("[MinigameVotingManager] No unplayed minigames left for Roulette voting!");
+            AvailableCount = 0;
+            RPC_NotifyMinigameListUpdated();
+            return;
+        }
+
+        // Shuffle nếu cần
+        if (shuffleMinigames)
+        {
+            ShuffleList(unplayedIndices);
+        }
+
+        // Chọn số lượng minigame để hiển thị
+        int count = Mathf.Min(displayCount, unplayedIndices.Count);
+        AvailableCount = count;
+
+        for (int i = 0; i < count; i++)
+        {
+            AvailableMinigameIndices.Set(i, unplayedIndices[i]);
+            Debug.Log($"[MinigameVotingManager] Available slot {i}: Minigame {unplayedIndices[i]}");
+        }
+
+        // Notify clients
+        RPC_NotifyMinigameListUpdated();
+    }
+
+    /// <summary>
     /// Reset danh sách minigame đã chơi (khi về Roulette hoặc new game)
     /// </summary>
     public void ResetPlayedMinigames()
@@ -240,12 +295,20 @@ public class MinigameVotingManager : NetworkBehaviour
 
         Debug.Log("[MinigameVotingManager] Resetting played minigames");
         PlayedCount = 0;
+        playedMinigameSO.Clear();
 
         // Clear array
         for (int i = 0; i < 20; i++)
         {
             PlayedMinigameIndices.Set(i, -1);
         }
+    }
+    /// <summary>
+    /// Lấy danh sách SO minigame đã chơi
+    /// </summary>
+    public List<MinigameData> GetPlayedMinigames()
+    {
+        return new List<MinigameData>(playedMinigameSO);
     }
 
     /// <summary>
