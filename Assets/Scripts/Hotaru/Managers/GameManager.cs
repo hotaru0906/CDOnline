@@ -58,6 +58,9 @@ public class GameManager : NetworkBehaviour
     #region Minigame Data
     [Header("Minigames")]
     [SerializeField] private MinigameData[] availableMinigames;
+
+    [Header("Roulette Scene")]
+    [SerializeField] private string rouletteSceneName = "Roulette Test";
     #endregion
 
     #region Networked Properties
@@ -573,7 +576,25 @@ public class GameManager : NetworkBehaviour
         }
         CurrentVotingType = votingType;
         Debug.Log($"[GameManager] Starting voting phase... Type: {votingType}");
-        ChangeState(GameState.Voting);
+
+        if (CurrentState == GameState.Voting)
+        {
+            // State không thay đổi nên OnChangedRender sẽ không kích hoạt.
+            // Dùng RPC để force re-enter voting state trên tất cả clients.
+            Debug.Log("[GameManager] Already in Voting state, forcing refresh via RPC");
+            RPC_ForceRefreshVotingState();
+        }
+        else
+        {
+            ChangeState(GameState.Voting);
+        }
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ForceRefreshVotingState()
+    {
+        Debug.Log("[GameManager] RPC_ForceRefreshVotingState received");
+        HandleVotingState();
     }
 
     public void StartMinigame(int minigameIndex)
@@ -1234,21 +1255,27 @@ public class GameManager : NetworkBehaviour
             CursorManager.Instance.HideCursor();
         }
 
-        // Teleport players đến vị trí Roulette dựa trên seat từ Lobby
-        if (RouletteManager.Instance != null)
-        {
-            RouletteManager.Instance.TeleportPlayersToRoulettePositions();
-        }
+        // HOST: Load Roulette scene. RouletteSceneController trong scene đó sẽ
+        // gọi OnRouletteSceneReady() để teleport players và bắt đầu roulette.
+        if (!HasStateAuthority) return;
 
-        // Start Roulette (host only)
-        if (HasStateAuthority && RouletteManager.Instance != null)
+        int sceneIndex = GetSceneIndex(rouletteSceneName);
+        var sceneRef = SceneRef.FromIndex(sceneIndex);
+
+        if (sceneRef.IsValid)
         {
-            Debug.Log("[GameManager] Host starting RouletteManager.StartRoulette()");
-            RouletteManager.Instance.StartRoulette();
+            Debug.Log($"[GameManager] Loading Roulette scene: {rouletteSceneName}");
+            Runner.LoadScene(sceneRef);
         }
-        else if (RouletteManager.Instance == null)
+        else
         {
-            Debug.LogError("[GameManager] RouletteManager.Instance is NULL!");
+            Debug.LogError($"[GameManager] Roulette scene '{rouletteSceneName}' not found in Build Settings! Starting roulette directly.");
+            // Fallback nếu scene chưa được add vào Build Settings
+            if (RouletteManager.Instance != null)
+            {
+                RouletteManager.Instance.TeleportPlayersToRoulettePositions();
+                RouletteManager.Instance.StartRoulette();
+            }
         }
     }
 

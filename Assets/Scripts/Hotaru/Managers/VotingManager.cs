@@ -116,6 +116,21 @@ public class VotingManager : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (!IsReady || !IsVotingActive) return;
 
+        // Khi tất cả đã vote, rút ngắn thời gian còn lại
+        if (TotalVoteWeight > 0 && TotalVotes >= TotalVoteWeight)
+        {
+            if (instantEndWhenAllVoted)
+            {
+                EndVoting();
+                return;
+            }
+            if (RemainingTime > quickEndTime)
+            {
+                RemainingTime = quickEndTime;
+                Debug.Log($"[VotingManager] All voted - reducing remaining time to {quickEndTime}s");
+            }
+        }
+
         // Update timer (host only)
         RemainingTime -= Runner.DeltaTime;
 
@@ -209,7 +224,9 @@ public class VotingManager : NetworkBehaviour
             int maxMinigameVotes = 0;
             int maxMinigameIndex = 0;
 
-            for (int i = 0; i < MinigameCount; i++)
+            // Đảm bảo luôn đọc ít nhất index 0 (tất cả vote "Continue Minigame" đều vào index 0)
+            int effectiveMinigameCount = Mathf.Max(1, MinigameCount);
+            for (int i = 0; i < effectiveMinigameCount; i++)
             {
                 int count = VoteCounts.Get(i);
                 totalMinigameVotes += count;
@@ -303,10 +320,14 @@ public class VotingManager : NetworkBehaviour
             return;
         }
 
-        if (minigameIndex < 0 || minigameIndex >= MinigameCount)
+        // Trong RouletteOrMinigame, index 0 luôn hợp lệ (chỉ có 2 lựa chọn: Roulette vs Continue)
+        if (CurrentVotingType != VotingType.RouletteOrMinigame)
         {
-            Debug.LogWarning($"[VotingManager] Invalid minigame index: {minigameIndex}");
-            return;
+            if (minigameIndex < 0 || minigameIndex >= MinigameCount)
+            {
+                Debug.LogWarning($"[VotingManager] Invalid minigame index: {minigameIndex}");
+                return;
+            }
         }
 
         hasVoted = true;
@@ -381,26 +402,11 @@ public class VotingManager : NetworkBehaviour
         // Notify all clients about the vote update
         RPC_BroadcastVoteUpdate(minigameIndex, currentCount + voteWeight);
 
-        // Check if all votes are in (by weight)
+        // Timer reduction + instant end handled in FixedUpdateNetwork
         if (TotalVotes >= TotalVoteWeight)
         {
             Debug.Log("[VotingManager] All players have voted!");
             RPC_NotifyAllVoted();
-
-            if (instantEndWhenAllVoted)
-            {
-                // End voting ngay lập tức
-                EndVoting();
-            }
-            else
-            {
-                // Giảm thời gian còn lại xuống quickEndTime
-                if (RemainingTime > quickEndTime)
-                {
-                    RemainingTime = quickEndTime;
-                    Debug.Log($"[VotingManager] Reducing remaining time to {quickEndTime}s");
-                }
-            }
         }
     }
 
@@ -417,24 +423,11 @@ public class VotingManager : NetworkBehaviour
         // Notify all clients about the roulette vote update
         RPC_BroadcastRouletteVoteUpdate(RouletteVoteCount);
 
-        // Check if all votes are in (by weight)
+        // Timer reduction + instant end handled in FixedUpdateNetwork
         if (TotalVotes >= TotalVoteWeight)
         {
             Debug.Log("[VotingManager] All players have voted!");
             RPC_NotifyAllVoted();
-
-            if (instantEndWhenAllVoted)
-            {
-                EndVoting();
-            }
-            else
-            {
-                if (RemainingTime > quickEndTime)
-                {
-                    RemainingTime = quickEndTime;
-                    Debug.Log($"[VotingManager] Reducing remaining time to {quickEndTime}s");
-                }
-            }
         }
     }
 
