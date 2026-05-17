@@ -939,6 +939,12 @@ public class GameManager : NetworkBehaviour
             CursorManager.Instance.ShowCursor();
         }
 
+        // Khôi phục lobby BGM khi về lobby
+        if (AudioManager.Instance != null && AudioManager.Instance.IsPlayingMinigameBGM)
+        {
+            AudioManager.Instance.OnMinigameEnd();
+        }
+
         // Reset player ready states (host only)
         if (HasStateAuthority)
         {
@@ -1049,6 +1055,12 @@ public class GameManager : NetworkBehaviour
             PlayerInputHandler.Instance.InputEnabled = false;
         }
 
+        // Fade out lobby BGM khi bắt đầu load minigame scene
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.OnEnterMinigameLoading();
+        }
+
         // HOST: Load scene minigame
         if (!HasStateAuthority)
         {
@@ -1125,6 +1137,16 @@ public class GameManager : NetworkBehaviour
         if (CursorManager.Instance != null)
         {
             CursorManager.Instance.HideCursor();
+        }
+
+        // Bật minigame BGM khi bắt đầu chơi
+        if (AudioManager.Instance != null)
+        {
+            var mgData = CurrentMinigameData;
+            if (mgData != null && mgData.minigameBGM != null)
+                AudioManager.Instance.OnMinigameStart(mgData.minigameBGM);
+            else
+                AudioManager.Instance.OnMinigameStart();
         }
 
         // Scene đã được load trong Tutorial state

@@ -165,6 +165,9 @@ public class AudioManager : MonoBehaviour
         savedLobbyBGMTime = bgmSource.time;
         savedLobbyBGMIndex = currentBGMIndex;
 
+        // Đánh dấu đang trong minigame để Update() không tự play next BGM từ bgmList
+        isPlayingMinigameBGM = true;
+
         // Fade out lobby BGM
         FadeOutBGM();
     }
