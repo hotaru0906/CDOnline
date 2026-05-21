@@ -120,6 +120,47 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
+    public async Task StartServer(string sessionName, SceneRef sceneName)
+    {
+        if (_runner == null)
+        {
+            _runner = gameObject.AddComponent<NetworkRunner>();
+        }
+
+        // Server không cần ProvideInput hay PlayerInputHandler
+        _runner.ProvideInput = false;
+
+        if (!_callbacksAdded)
+        {
+            _runner.AddCallbacks(this);
+            _callbacksAdded = true;
+            Debug.Log("[BasicSpawner] Server runner configured (no input)");
+        }
+
+        var sceneManager = GetComponent<NetworkSceneManagerDefault>();
+        if (sceneManager == null)
+        {
+            sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+        }
+
+        var res = await _runner.StartGame(new StartGameArgs()
+        {
+            GameMode = GameMode.Server,
+            SessionName = sessionName,
+            Scene = sceneName,
+            SceneManager = sceneManager
+        });
+
+        if (res.Ok)
+        {
+            Debug.Log($"[BasicSpawner] Dedicated server started. Session: {sessionName}");
+        }
+        else
+        {
+            Debug.LogError($"[BasicSpawner] Failed to start server: {res.ShutdownReason}");
+        }
+    }
+
     public async Task StartClient(string sessionName)
     {
         if (_runner == null)

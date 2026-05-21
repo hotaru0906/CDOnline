@@ -8568,6 +8568,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _BasicSpawner: {fileID: 1496432047}
+  playFlowClientApiKey: pfclient_9a5a41641c9d4511a663a755f6d0768c
+  serverRegion: ap-southeast
+  serverStartTimeoutSeconds: 90
+  useDedicatedServer: 1
 --- !u!4 &1162077729
 Transform:
   m_ObjectHideFlags: 0
@@ -13617,37 +13621,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 832199960881189912, guid: 7dd03d73abbd664469543d4489c76922, type: 3}
   m_PrefabInstance: {fileID: 1928886401}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &1945850070
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1945850071}
-  m_Layer: 0
-  m_Name: RegionHandler
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1945850071
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1945850070}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1947336440
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -13862,6 +13835,52 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1964168964}
   m_CullTransparentMesh: 1
+--- !u!1 &1966192084
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1966192086}
+  - component: {fileID: 1966192085}
+  m_Layer: 0
+  m_Name: ServerEntryPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1966192085
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1966192084}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f454746039a9aa24facc1b401b01e78a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  fallbackSessionName: CDOnlineServer
+  lobbySceneIndex: 1
+--- !u!4 &1966192086
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1966192084}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1967251568
 GameObject:
   m_ObjectHideFlags: 0
@@ -15314,4 +15333,4 @@ SceneRoots:
   - {fileID: 1739337191}
   - {fileID: 1582504701}
   - {fileID: 1484028089}
-  - {fileID: 1945850071}
+  - {fileID: 1966192086}
