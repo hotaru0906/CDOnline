@@ -1,0 +1,432 @@
+================================================================
+BOARD SYSTEM — IMPLEMENTATION PLAN & NOTES
+Project: CDOnline | Branch: BoardHotaru
+Last updated: 2026-05-22
+================================================================
+
+GAME FLOW (confirmed)
+---------------------
+Lobby -> Cutscene -> [Voting -> Tutorial -> Playing -> Scoreboard -> Board] x N -> Roulette -> Result
+N = 5-10 (configurable khi tạo lobby)
+
+INTEGRATION VỚI EXISTING SYSTEM
+---------------------------------
+GameManager.GameState cần thêm:
+  - Cutscene  (intro Timeline)
+  - Board     (board phase)
+
+ProceedFromScoreboard() hiện tại đang đi thẳng sang Voting / Roulette
+-> Cần đổi thành: Scoreboard -> Board
+
+Cần thêm ProceedFromBoard():
+  - Nếu còn round: Board -> Voting
+  - Nếu hết round: Board -> Roulette
+
+Turn order trong Board lấy từ minigame rank:
+-> GameManager cần [Networked] NetworkArray<int> LastMinigameRanking
+-> MinigameController.EndGame() set ranking trước khi gọi EndMinigame()
+-> BoardManager đọc ranking này để set thứ tự tung xúc xắc
+
+Network layer: Fusion (Photon Fusion)
+-> BoardManager, BoardPlayerToken = NetworkBehaviour
+-> BoardNode, BoardDice = MonoBehaviour (không cần sync riêng)
+-> Turn state sync qua [Networked] properties + RPC
+
+================================================================
+PHASE 0 — BOARD FOUNDATION
+================================================================
+Goal: Board chạy được
+
+STATUS: [x] Completed
+
+--- Features ---
+
+1. BoardNode
+   Fields:
+     - int nodeID
+     - Vector3 worldPosition
+     - List<BoardNode> nextNodes   (support nhánh đường sau này)
+     - TileType tileType           (dùng lại ở Phase 1)
+   Notes:
+     - Đặt trong scene bằng cách place GameObject thủ công
+     - BoardNodePath (MonoBehaviour) giữ danh sách tất cả nodes theo thứ tự
+     - Không cần ScriptableObject ở phase này
+
+2. Player Movement
+   Flow:
+     RollDice() -> int steps
+     -> MoveAlongPath(steps) coroutine
+     -> dừng đúng node
+   Notes:
+     - Di chuyển từng node 1 (không skip)
+     - Animation tạm: transform.position lerp
+     - Token = Capsule tạm, dùng màu khác nhau cho 4 player
+     - Movement sync qua RPC_MoveToNode(nodeID)
+
+3. TurnManager (có thể tích hợp vào BoardManager)
+   Fields:
+     - [Networked] int CurrentTurnIndex    (index trong TurnOrder array)
+     - [Networked] NetworkArray<int> TurnOrder  (PlayerRef hoặc PlayerId)
+     - [Networked] bool IsReversed
+     - List<int> SkippedPlayers            (PlayerId bị skip lượt này)
+   Methods:
+     - NextTurn()
+     - SkipPlayer(int playerId)
+     - ReverseOrder()
+   Notes:
+     - TurnOrder được set từ GameManager.LastMinigameRanking khi vào Board
+     - Rank 1 đi trước, rank 4 đi sau
+     - Nếu chưa có ranking (round đầu): random hoặc lobby seat order
+
+4. DiceSystem
+   - Random 1-6
+   - Host roll -> RPC sync result cho tất cả clients
+   - Tạm thời: chỉ local player của mình mới thấy Roll button
+   - Timeout: nếu 10s không roll -> auto roll (tránh AFK block game)
+
+Output: 4 player roll dice -> di chuyển -> lượt tiếp theo -> loop
+
+--- CHECKLIST PHASE 0 ---
+[x] BoardNode component
+[x] BoardNodePath (danh sách nodes trong scene)
+[x] BoardPlayerToken (MonoBehaviour - Phase 0 simplification)
+[x] BoardDice (roll + RPC)
+[x] BoardManager (NetworkBehaviour):
+    [x] TurnOrder init từ LastMinigameRanking (fallback random nếu round đầu)
+    [x] State: WaitingForRoll -> Rolling -> Moving -> ResolvingTile -> NextTurn -> BoardComplete
+    [x] NextTurn() / AdvanceTurn() logic
+    [x] SkipPlayer() stub
+    [x] ReverseOrder() stub
+[x] GameManager:
+    [x] Thêm GameState.Board
+    [x] HandleBoardState() -> load BoardScene
+    [x] ProceedFromBoard() -> Voting hoặc Roulette (dựa vào CurrentRound >= TotalRounds)
+    [x] ProceedFromScoreboard() -> Board (thay vì Voting)
+    [x] MgRank1/2/3/4 networked ints (thay NetworkArray)
+    [x] SetMinigameRanking(int[] rankedIds)
+    [x] GetLastMinigameRanking() -> int[]
+[x] BoardSceneController (tương tự RouletteSceneController)
+
+NOTE: BoardPlayerToken được giữ là MonoBehaviour (không NetworkBehaviour) cho Phase 0.
+Movement sync hoàn toàn qua BoardManager RPC. Upgrade lên NetworkBehaviour ở Phase 7 nếu cần.
+
+NOTE: NetworkArray<int> KHÔNG dùng — thay bằng 4 networked int riêng lẻ (TurnSlot0-3,
+NodeSlot0-3, Skip0-3, MgRank1-4) để tránh Fusion compilation issues.
+
+================================================================
+PHASE 1 — TILE CORE SYSTEM
+================================================================
+Goal: Tile hoạt động thật sự
+
+STATUS: [x] Completed
+
+--- TileType Enum (7 loại) ---
+  Empty     - không có gì
+  Item      - nhận random Roulette item
+  Steal     - cướp item người khác
+  Toss      - mất random item
+  Shuffle   - xáo trộn vị trí player trên bàn
+  Jackpot   - nhận nhiều item cùng lúc
+  Gamble    - đánh cược (win/lose item ngẫu nhiên)
+
+  ĐÃ LOẠI BỎ:
+    Intel  — thông tin thứ tự đạn Roulette không có ý nghĩa ở Board
+             (Roulette chỉ chơi ở cuối game, biết trước cũng vô dụng)
+    Tax    — gắn với currency system (coin) vốn đã optional/không cần thiết
+
+--- Tile Trigger System ---
+  Interface: IBoardTileEffect
+    void OnPlayerLand(PlayerRef player)
+  
+  Mỗi TileType có 1 class implement IBoardTileEffect
+  BoardNode.ResolveTile(PlayerRef player) -> gọi effect tương ứng
+
+--- Tile Resolver Flow ---
+  Land on tile
+  -> BoardManager.OnPlayerLanded(nodeID, playerRef)
+  -> BoardNode.ResolveTile(player)
+  -> Hiện debug UI (Phase 1 tạm)
+  -> Chờ resolve xong
+  -> BoardManager tiếp tục NextTurn()
+
+--- Debug UI ---
+  Chỉ cần 1 Text trên màn hình: "STEAL ITEM" / "GOT ITEM" etc.
+  Dùng Debug.Log ở minimum, Text UI đơn giản
+
+--- CHECKLIST PHASE 1 ---
+[x] TileType enum (7 loại sau khi loại bỏ Intel + Tax) — BoardNode.cs
+[x] IBoardTileEffect interface — IBoardTileEffect.cs
+[x] Tile effect stubs cho từng type — BoardTileEffects.cs (9 classes, chỉ log + message)
+[x] BoardNode.CreateEffect() tạo đúng effect theo TileType
+[x] BoardManager chờ tile resolve xong mới NextTurn() (tileResolveDuration = 1.5s)
+[x] Temporary debug UI — _lastTileMessage hiện trong debug panel (OnGUI)
+
+================================================================
+PHASE FIXING — CODE CHANGES CẦN LÀM TRƯỚC PHASE 2
+================================================================
+Do thay đổi design (loại Intel/Tax, bỏ Board items), các chỗ sau cần fix trong code:
+
+[FIX-1] Xóa TileType.Intel và TileType.Tax khỏi enum
+  File: BoardNode.cs — TileType enum (line ~8-11)
+
+[FIX-2] Xóa IntelTileEffect và TaxTileEffect
+  File: BoardTileEffects.cs
+
+[FIX-3] Xóa cases Intel + Tax trong CreateEffect() và GetTileColor()
+  File: BoardNode.cs
+
+[FIX-4] Xóa cases Intel + Tax trong GetTileDisplayMessage()
+  File: BoardManager.cs
+
+[FIX-5] Kiểm tra BoardScene trong Unity Editor:
+  Nếu có BoardNode nào đang set TileType = Intel hoặc Tax
+  -> Đổi sang loại khác trong Inspector (không làm từ code được)
+
+NOTE: Đây là fix nhỏ, không ảnh hưởng gameplay hiện tại.
+      Làm trước khi bắt đầu Phase 2 để code sạch.
+
+================================================================
+PHASE 2 — INVENTORY & ITEM FOUNDATION
+================================================================
+Goal: Board có progression
+
+STATUS: [x] Completed
+
+--- Inventory ---
+  PlayerItemInventory (NetworkBehaviour):
+    [Networked] NetworkArray<int> HeldItems (max 8 slots, -1 = empty)
+    AddItem(ItemEffect effect)
+    RemoveItem(int slot)
+    GetItemCount()
+
+  Tất cả item đều là Roulette item — chỉ dùng được trong Roulette phase.
+  Không có Board item.
+  Inventory cap: max 8 (có thể chỉnh sau).
+  Nếu đầy: auto discard oldest (Phase 2 tạm, Phase 3+ sẽ có UI chọn).
+
+--- ItemData (ScriptableObject) ---
+  Fields:
+    string itemName
+    Sprite icon
+    ItemEffect effectType
+    string description
+
+  ItemEffect enum (Roulette items):
+    RestoreLife       - +1 mạng trong Roulette
+    DoubleDamage      - viên đạn tiếp theo gây 2 mạng
+    SeeNextBullet     - xem đạn tiếp theo là thật/giả
+    SeeBulletOrder    - xem toàn bộ thứ tự đạn
+    SkipOpponentTurn  - skip lượt 1 người chơi trong Roulette
+    ReverseRoulette   - đảo chiều vòng bắn Roulette
+
+--- Item Reward Flow ---
+  Tile Item:
+    -> Random item từ ItemPool (ScriptableObject list)
+    -> PlayerItemInventory.AddItem()
+    -> Debug: hiện tên item nhận được
+
+  Tile Jackpot:
+    -> Nhận 2 item ngẫu nhiên từ pool (nếu còn slot)
+
+--- CHECKLIST PHASE 2 ---
+[x] ItemEffect enum — ItemEffect.cs
+[x] ItemData ScriptableObject — ItemData.cs (Create > Board > Item Data)
+[x] ItemPool ScriptableObject — ItemPool.cs (Create > Board > Item Pool) + static Current
+[x] PlayerItemInventory NetworkBehaviour — max 8 slots, static registry by PlayerId
+[x] Tile Item effect: random item from pool -> AddItem() vào inventory
+[x] Tile Jackpot effect: 2 items random
+[x] Inventory cap logic: auto discard oldest khi đầy (8 slots)
+[x] Debug panel: hiện inventory từng player trong BoardManager.OnGUI()
+
+SETUP CẦN LÀM TRONG UNITY EDITOR:
+  1. Thêm PlayerItemInventory component vào player prefab (cùng chỗ với PlayerNetworkData)
+  2. Create > Board > Item Data — tạo 6 ItemData assets (1 cho mỗi ItemEffect)
+  3. Create > Board > Item Pool — tạo 1 ItemPool asset, add các ItemData vào entries
+  4. Assign ItemPool asset vào BoardManager Inspector (field "Item Pool")
+
+================================================================
+PHASE 3 — SOCIAL INTERACTION
+================================================================
+Goal: Board bắt đầu vui thật
+
+STATUS: [x] Completed
+  Chọn target (UI: list player còn item)
+  -> Lấy random 1 item từ target
+  -> Thêm vào inventory của mình
+
+--- Toss Tile ---
+  Random 1 item trong inventory của mình -> mất
+
+--- Shuffle Tile (Map Chaos) ---
+  Tất cả player: random discard 1 item
+  Hoặc: xáo trộn vị trí node của tất cả player
+
+--- Reaction FX (tạm) ---
+  Emoji popup: 😱 😡 😂 (sprite/text)
+  Sound: 1 clip per event type
+  Duration: 1-2 giây
+
+--- CHECKLIST PHASE 3 ---
+[x] Steal tile: target selection UI (debug OnGUI button list, 10s timeout auto-select)
+[x] Toss tile: mất random 1 item trong inventory
+[x] Shuffle tile: tất cả player mất 1 item ngẫu nhiên
+[x] Reaction FX (text): (>:D) steal, (T_T) bị steal/toss, (*_*) shuffle
+[ ] Playtest với 4 người sau phase này ← QUAN TRỌNG
+
+================================================================
+PHASE 4 — BOARD ECONOMY & CONTROL
+================================================================
+Goal: Board có strategic layer nhẹ
+
+STATUS: [ ] Not started
+
+--- Currency (optional, quyết định sau playtest) ---
+  [Networked] int Coins per player
+  Coin reward từ tile, minigame rank, special events
+
+--- Shop Tile ---
+  Hiện danh sách item có thể mua bằng coin
+  Mua Roulette item hoặc Board utility
+
+--- Rarity Pool ---
+  ItemData.rarity: Common / Rare / Legendary
+  Weighted random khi spawn item từ tile
+
+--- Inventory Cap (final) ---
+  Roulette items: max 8 (có thể chỉnh sau)
+  (Board items đã loại bỏ khỏi design)
+
+--- CHECKLIST PHASE 4 ---
+[ ] Coin system (nếu quyết định dùng)
+[ ] Shop tile UI + mua item
+[ ] Rarity weight trong ItemPool
+[ ] Enforce inventory cap với UI feedback
+
+================================================================
+PHASE 5 — MAP DESIGN SYSTEM
+================================================================
+Goal: Board reusable & expandable
+
+STATUS: [ ] Not started
+
+--- BoardMapData (ScriptableObject) ---
+  Fields:
+    string mapName
+    List<NodeData> nodes  (nodeID, position, tileType, nextNodeIDs)
+    List<TileSpawnRule> spawnRules
+
+--- NodeData (Serializable) ---
+  int nodeID
+  Vector3 localPosition
+  TileType tileType
+  int[] nextNodeIDs
+
+--- TileSpawnRule ---
+  TileType type
+  int maxCount
+  int minDistanceFromStart
+  (ví dụ: Jackpot không spawn ở 3 node đầu)
+
+--- Branching Path ---
+  BoardNode.nextNodes có thể có 2+ nodes
+  Player chọn đường tại fork tile
+  (Safe path vs Risky path)
+
+--- CHECKLIST PHASE 5 ---
+[ ] BoardMapData ScriptableObject
+[ ] NodeData serializable struct
+[ ] TileSpawnRule system
+[ ] Map loader: đọc từ ScriptableObject -> spawn nodes trong scene
+[ ] Ít nhất 1 map hoàn chỉnh
+[ ] (Optional) Branching path support
+
+================================================================
+PHASE 6 — PACING & BALANCE
+================================================================
+Goal: Game không bị mệt — QUAN TRỌNG NHẤT
+
+STATUS: [ ] Not started
+
+--- Target ---
+  Mỗi board phase: 2-4 phút
+  Số node trên map: ~20-30 nodes (dựa trên playtest)
+  Dice range: 1-6 (cân nhắc 1-4 nếu map nhỏ)
+
+--- Checklist Pacing ---
+[ ] Timer mỗi board phase (track thực tế)
+[ ] Item frequency tuning (xem playtest feedback)
+[ ] Snowball check: người thắng liên tục có quá nhiều item không?
+[ ] Downtime: thời gian chờ lượt có chấp nhận được không?
+[ ] Comeback mechanic (nếu cần): tile bonus cho người ít item
+
+================================================================
+PHASE 7 — POLISH
+================================================================
+Goal: Presentation
+
+STATUS: [ ] Not started
+
+Chỉ làm SAU KHI Phase 3-6 đã stable và playtest tốt.
+
+[ ] Animation di chuyển token đẹp
+[ ] Camera theo dõi token (ThirdPerson / isometric)
+[ ] UI hệ thống đẹp (inventory, dice, turn indicator)
+[ ] VFX tile effects
+[ ] Sound design đầy đủ
+[ ] Cutscene intro (Unity Timeline)
+[ ] Camera mode trong Board: ThirdPerson follow local token
+
+================================================================
+CAMERA PLAN CHO BOARD
+================================================================
+State Board -> CameraManager.SwitchToThirdPersonCamera()
+Token của local player là target của CameraOrbit
+
+Khi không phải lượt mình:
+  Option A: giữ ThirdPerson nhìn token mình (đơn giản)
+  Option B: Fixed isometric nhìn toàn bàn cờ (Phase 7)
+
+Khi vào BoardScene:
+  OnSceneLoaded -> ReinitializeCamera()
+  BoardManager.OnBoardStarted() -> gọi SwitchToThirdPersonCamera()
+  (tương tự cách RouletteScene setup camera)
+
+--- TODO (sửa sau) ---
+
+[TODO - CAMERA] Thay SwitchToThirdPersonCamera() bằng Fixed Overhead Camera (kiểu minigame):
+  - Xóa dòng CameraManager.Instance.SwitchToThirdPersonCamera() trong HandleBoardState()
+  - Đặt 1 Empty GameObject trong BoardScene làm camera anchor (góc nhìn overhead/isometric)
+  - Gắn component MinigameCamera (reuse hoàn toàn) lên GameObject đó với autoSwitchOnStart = true
+  - BoardScene tự xử lý camera khi load xong, không cần GameManager can thiệp
+  - File cần sửa: GameManager.cs -> HandleBoardState()
+
+[TODO - PLAYER MODEL] Ẩn player character (full model) khi vào Board state:
+  - Khi ở Board state, player NetworkObject (PlayerController) vẫn tồn tại nhưng không nên visible
+  - Token (BoardPlayerToken capsule) đã pre-placed trong BoardScene là đủ
+  - Cần ẩn model local player (tương tự cách FirstPerson mode ẩn body)
+  - Hoặc set layer để camera overhead không render player characters
+  - File cần sửa: GameManager.cs -> HandleBoardState() hoặc BoardSceneController.cs
+
+================================================================
+KNOWN ISSUES / RISKS
+================================================================
+1. NetworkArray size phải cố định khi declare (Fusion limitation)
+   -> LastMinigameRanking size = 4 (max player count)
+   -> HeldItems size = 5
+
+2. BoardScene load/unload cần cẩn thận với DontDestroyOnLoad objects
+   (CameraManager, GameManager đều là DDOL)
+   -> BoardManager KHÔNG dùng DontDestroyOnLoad
+   -> BoardManager spawn/despawn theo scene lifecycle
+
+3. Round đầu tiên chưa có ranking từ minigame
+   -> Fallback: random order hoặc seat order từ lobby
+
+4. ProceedFromScoreboard() cần biết đây có phải round cuối không
+   -> GameManager.CurrentRound >= TotalRounds -> Board -> Roulette
+   -> Còn lại -> Board -> Voting
+
+5. TotalRounds hiện là [Networked] int, giá trị mặc định = 3
+   -> Cần UI trong Lobby để set 5-10
+
+================================================================

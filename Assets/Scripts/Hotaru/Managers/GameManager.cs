@@ -6,12 +6,13 @@ using System.Collections;
 public enum GameState
 {
     Lobby,
-    Voting,          // Vote chọn minigame hoặc Roulette
+    Voting,          // Vote chọn minigame
     Tutorial,
     Playing,         // Đang chơi minigame
     Scoreboard,
-    Roulette,        // Đang chơi Cò Quay Nga
-    Result           // Kết quả cuối cùng (còn 1 người)
+    Board,           // Phase bàn cờ sau mỗi minigame
+    Roulette,        // Cò Quay Nga (cuối game)
+    Result           // Kết quả cuối cùng
 }
 
 /// <summary>
@@ -61,6 +62,9 @@ public class GameManager : NetworkBehaviour
 
     [Header("Roulette Scene")]
     [SerializeField] private string rouletteSceneName = "Roulette Test";
+
+    [Header("Board Scene")]
+    [SerializeField] private string boardSceneName = "BoardScene";
     #endregion
 
     #region Networked Properties
@@ -87,6 +91,15 @@ public class GameManager : NetworkBehaviour
     /// </summary>
     [Networked]
     public int FinalWinnerId { get; private set; } = -1;
+
+    /// <summary>
+    /// Xếp hạng minigame vừa kết thúc — PlayerId theo rank 1→4 (-1 = không có)
+    /// BoardManager đọc để xác định thứ tự tung xúc xắc.
+    /// </summary>
+    [Networked] public int MgRank1 { get; private set; } = -1;
+    [Networked] public int MgRank2 { get; private set; } = -1;
+    [Networked] public int MgRank3 { get; private set; } = -1;
+    [Networked] public int MgRank4 { get; private set; } = -1;
 
     #region Synced Minigame Settings (từ MinigameData, sync cho tất cả clients)
     [Networked] public NetworkBool MG_CanMove { get; private set; } = true;
@@ -494,6 +507,9 @@ public class GameManager : NetworkBehaviour
             case GameState.Scoreboard:
                 HandleScoreboardState();
                 break;
+            case GameState.Board:
+                HandleBoardState();
+                break;
             case GameState.Roulette:
                 HandleRouletteState();
                 break;
@@ -738,10 +754,8 @@ public class GameManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Xử lý flow sau khi hiển thị scoreboard
-    /// Flow mới:
-    /// - Nếu đã chơi đủ 2 MG -> Roulette
-    /// - Nếu đã chơi 1 MG -> Vote (Roulette vs Minigame)
+    /// Sau khi Scoreboard — luôn đi đến Board phase.
+    /// Flow mới: Scoreboard -> Board -> (Voting | Roulette)
     /// </summary>
     public void ProceedFromScoreboard()
     {
@@ -751,58 +765,116 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        // Check số player còn sống
-        if (RouletteManager.Instance != null)
+        Debug.Log("[GameManager] Scoreboard done — moving to Board phase");
+        StartBoard();
+    }
+
+    /// <summary>
+    /// Bắt đầu Board phase — load BoardScene.
+    /// </summary>
+    public void StartBoard()
+    {
+        if (!HasStateAuthority)
         {
-            int aliveCount = RouletteManager.Instance.GetAlivePlayerCount();
-            if (aliveCount <= 1)
-            {
-                // Chỉ còn 1 người - kết thúc game
-                var aliveSlots = RouletteManager.Instance.GetAliveSlots();
-                if (aliveSlots.Count > 0)
-                {
-                    // Convert slot to PlayerId
-                    PlayerRef winnerRef = RouletteManager.Instance.GetPlayerRefFromSlot(aliveSlots[0]);
-                    FinalWinnerId = winnerRef != PlayerRef.None ? winnerRef.PlayerId : -1;
-                }
-                else
-                {
-                    FinalWinnerId = -1;
-                }
-                Debug.Log($"[GameManager] Only {aliveCount} player(s) left. Showing final results...");
-                ChangeState(GameState.Result);
-                return;
-            }
+            Debug.LogWarning("[GameManager] Only Host can call StartBoard()");
+            return;
         }
 
-        // Kiểm tra flow Roulette
-        if (RouletteManager.Instance != null)
+        Debug.Log("[GameManager] Starting Board phase...");
+        ChangeState(GameState.Board);
+    }
+
+    /// <summary>
+    /// Gọi bởi BoardSceneController khi BoardScene đã load xong.
+    /// Host teleport players và bắt đầu BoardManager.
+    /// </summary>
+    public void OnBoardSceneReady()
+    {
+        Debug.Log("[GameManager] Board scene ready");
+
+        if (!HasStateAuthority) return;
+
+        if (BoardManager.Instance == null)
         {
-            if (RouletteManager.Instance.ShouldTriggerRoulette())
+            Debug.LogError("[GameManager] BoardManager.Instance is NULL!");
+            return;
+        }
+
+        // Lấy ranking từ minigame vừa xong
+        int[] ranking = GetLastMinigameRanking();
+
+        // Nếu chưa có ranking (round đầu tiên) thì dùng thứ tự ngẫu nhiên
+        if (ranking.Length == 0)
+        {
+            // Dùng Runner.ActivePlayers để lấy tất cả player đang kết nối
+            // (FindObjectsByType<PlayerNetworkData> không hoạt động khi ở scene khác)
+            var playerList = new System.Collections.Generic.List<int>();
+            foreach (var playerRef in Runner.ActivePlayers)
+                playerList.Add(playerRef.PlayerId);
+
+            ranking = playerList.ToArray();
+
+            // Shuffle để random thứ tự lượt đầu
+            for (int i = ranking.Length - 1; i > 0; i--)
             {
-                // Đã chơi đủ 2 MG -> Bắt buộc vào Roulette
-                Debug.Log("[GameManager] 2 minigames completed. Starting Roulette...");
-                StartRoulette();
+                int j = UnityEngine.Random.Range(0, i + 1);
+                (ranking[i], ranking[j]) = (ranking[j], ranking[i]);
             }
-            else if (RouletteManager.Instance.ShouldTriggerVoting())
-            {
-                // Đã chơi 1 MG -> Vote giữa Roulette và Minigame
-                Debug.Log("[GameManager] 1 minigame completed. Starting voting (Roulette vs Minigame)...");
-                StartVoting(VotingType.RouletteOrMinigame);
-            }
-            else
-            {
-                // Chưa chơi MG nào -> Minigame tiếp theo
-                Debug.Log("[GameManager] Starting voting for next minigame...");
-                StartVoting(VotingType.MinigameOnly);
-            }
+            Debug.Log($"[GameManager] No ranking found — random order for first board: [{string.Join(", ", ranking)}]");
+        }
+
+        BoardManager.Instance.StartBoardPhase(ranking);
+    }
+
+    /// <summary>
+    /// Gọi bởi BoardManager khi tất cả players đã đi xong.
+    /// Quyết định next state: Voting (còn round) hoặc Roulette (hết round).
+    /// </summary>
+    public void ProceedFromBoard()
+    {
+        if (!HasStateAuthority) return;
+
+        Debug.Log($"[GameManager] Board done — Round {CurrentRound}/{TotalRounds}");
+
+        if (CurrentRound >= TotalRounds)
+        {
+            Debug.Log("[GameManager] All rounds completed — Starting Roulette!");
+            StartRoulette();
         }
         else
         {
-            // Fallback: voting minigame
-            Debug.LogWarning("[GameManager] RouletteManager not found. Falling back to minigame voting...");
+            Debug.Log("[GameManager] More rounds left — Starting Voting...");
             StartVoting(VotingType.MinigameOnly);
         }
+    }
+
+    /// <summary>
+    /// Lưu xếp hạng minigame — gọi bởi MinigameController trước EndMinigame().
+    /// rankedPlayerIds: PlayerId theo thứ tự rank 1 → rank N.
+    /// </summary>
+    public void SetMinigameRanking(int[] rankedPlayerIds)
+    {
+        if (!HasStateAuthority) return;
+
+        MgRank1 = rankedPlayerIds.Length > 0 ? rankedPlayerIds[0] : -1;
+        MgRank2 = rankedPlayerIds.Length > 1 ? rankedPlayerIds[1] : -1;
+        MgRank3 = rankedPlayerIds.Length > 2 ? rankedPlayerIds[2] : -1;
+        MgRank4 = rankedPlayerIds.Length > 3 ? rankedPlayerIds[3] : -1;
+
+        Debug.Log($"[GameManager] Minigame ranking set: {string.Join(", ", rankedPlayerIds)}");
+    }
+
+    /// <summary>
+    /// Trả về mảng PlayerId theo rank (bỏ qua slot -1).
+    /// </summary>
+    public int[] GetLastMinigameRanking()
+    {
+        var list = new System.Collections.Generic.List<int>();
+        if (MgRank1 >= 0) list.Add(MgRank1);
+        if (MgRank2 >= 0) list.Add(MgRank2);
+        if (MgRank3 >= 0) list.Add(MgRank3);
+        if (MgRank4 >= 0) list.Add(MgRank4);
+        return list.ToArray();
     }
 
     /// <summary>
@@ -1243,6 +1315,50 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[GameManager] Auto-proceeding from scoreboard...");
         ProceedFromScoreboard();
         _scoreboardCoroutine = null;
+    }
+
+    protected virtual void HandleBoardState()
+    {
+        Debug.Log("[GameManager] Entered Board state");
+
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(rouletteVotingUI, false);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, false);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
+
+        // Lock cursor — board dùng click UI để tung xúc xắc
+        if (CursorManager.Instance != null)
+            CursorManager.Instance.ShowCursor();
+
+        // Camera: ThirdPerson follow token của local player
+        if (CameraManager.Instance != null)
+        {
+            CameraManager.Instance.SwitchToThirdPersonCamera();
+            CameraManager.Instance.SetCameraRotationLocked(false);
+        }
+
+        // Disable player input (không di chuyển character khi ở board)
+        if (PlayerInputHandler.Instance != null)
+            PlayerInputHandler.Instance.InputEnabled = false;
+
+        // HOST: load BoardScene
+        if (!HasStateAuthority) return;
+
+        int sceneIndex = GetSceneIndex(boardSceneName);
+        var sceneRef   = SceneRef.FromIndex(sceneIndex);
+
+        if (sceneRef.IsValid)
+        {
+            Debug.Log($"[GameManager] Loading BoardScene: {boardSceneName}");
+            Runner.LoadScene(sceneRef);
+        }
+        else
+        {
+            Debug.LogError($"[GameManager] BoardScene '{boardSceneName}' không tìm thấy trong Build Settings!");
+        }
     }
 
     protected virtual void HandleRouletteState()
