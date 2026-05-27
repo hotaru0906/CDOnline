@@ -79,10 +79,11 @@ STATUS: [x] Completed
      - Nếu chưa có ranking (round đầu): random hoặc lobby seat order
 
 4. DiceSystem
-   - Random 1-6
+   - 2 xúc xắc, mỗi cái Random 1-6 → tổng bước = 2-12  (map 64 ô)
    - Host roll -> RPC sync result cho tất cả clients
    - Tạm thời: chỉ local player của mình mới thấy Roll button
    - Timeout: nếu 10s không roll -> auto roll (tránh AFK block game)
+   - TODO: BoardDice.RollDice() đổi từ Random.Range(1,7) sang Random.Range(1,7) + Random.Range(1,7)
 
 Output: 4 player roll dice -> di chuyển -> lượt tiếp theo -> loop
 
@@ -125,7 +126,7 @@ STATUS: [x] Completed
   Item      - nhận random Roulette item
   Steal     - cướp item người khác
   Toss      - mất random item
-  Shuffle   - xáo trộn vị trí player trên bàn
+  Shuffle   - xáo trộn vị trí player trên bàn  ← [TODO: XÓA - xem ghi chú bên dưới]
   Jackpot   - nhận nhiều item cùng lúc
   Gamble    - đánh cược (win/lose item ngẫu nhiên)
 
@@ -149,6 +150,23 @@ STATUS: [x] Completed
   -> Chờ resolve xong
   -> BoardManager tiếp tục NextTurn()
 
+--- FIRST-OCCUPANT RULE (TODO: implement) ---
+  Áp dụng cho tile: Item, Jackpot  (tile mang LỢI ÍCH)
+  KHÔNG áp dụng cho: Steal, Toss, Gamble (tile tương tác / rủi ro vẫn kích hoạt bình thường)
+
+  Quy tắc:
+    - Tile chỉ kích hoạt đầy đủ cho player ĐẦU TIÊN đứng lên đó
+    - Nếu player khác đến tile mà ĐÃ có người đứng sẵn → nhận NOTHING (bỏ lượt hiệu ứng)
+    - Tile "reset" (trống) khi player đó rời đi (di chuyển sang ô khác)
+    - Kiểm tra bằng: BoardManager theo dõi nodeID của từng player,
+      trước khi resolve tile check xem có player nào khác đang ở cùng nodeID không
+
+  Implementation cần làm:
+    [ ] BoardManager: thêm helper IsNodeOccupiedByOther(nodeID, excludePlayerId) -> bool
+    [ ] FinishTurn(): với TileType.Item và TileType.Jackpot,
+        nếu IsNodeOccupiedByOther() == true → skip effect, log "Tile occupied"
+    [ ] Debug UI: hiện "[OCCUPIED] No reward" khi bị block
+
 --- Debug UI ---
   Chỉ cần 1 Text trên màn hình: "STEAL ITEM" / "GOT ITEM" etc.
   Dùng Debug.Log ở minimum, Text UI đơn giản
@@ -160,6 +178,39 @@ STATUS: [x] Completed
 [x] BoardNode.CreateEffect() tạo đúng effect theo TileType
 [x] BoardManager chờ tile resolve xong mới NextTurn() (tileResolveDuration = 1.5s)
 [x] Temporary debug UI — _lastTileMessage hiện trong debug panel (OnGUI)
+
+--- TODO: XÓA SHUFFLE TILE ---
+  Shuffle tile sẽ bị loại bỏ khỏi game.
+  Các việc cần làm khi xóa:
+    [ ] Xóa TileType.Shuffle khỏi enum — BoardNode.cs
+    [ ] Xóa ShuffleTileEffect class — BoardTileEffects.cs
+    [ ] Xóa case Shuffle trong CreateEffect() — BoardNode.cs
+    [ ] Xóa case Shuffle trong GetTileColor() — BoardNode.cs
+    [ ] Xóa case TileType.Shuffle trong FinishTurn() — BoardManager.cs
+    [ ] Xóa ResolveShuffle() method — BoardManager.cs
+    [ ] Kiểm tra BoardScene: đổi bất kỳ node nào đang set Shuffle sang loại khác
+
+--- DEAD-END BOUNCE-BACK MECHANIC ---
+  ĐÃ IMPLEMENT (BoardNodePath.cs + BoardNode.cs)
+
+  Cách hoạt động:
+    - Nhánh cụt: dãy node tách khỏi đường chính, kết thúc tại 1 terminal node
+    - Terminal node đó phải tick checkbox "Is Dead End" trong Inspector
+    - Nếu player đổ xúc xắc VỪA ĐỦ để đến dead-end → dừng đó, nhận hiệu ứng bình thường
+    - Nếu player đổ DƯ bước → đến dead-end, rồi BOUNCE BACK số bước còn dư
+      Player sẽ KHÔNG nhận hiệu ứng ô dead-end, chỉ nhận hiệu ứng ô cuối cùng dừng lại
+
+  Ví dụ (từ node 8, đổ 5, dead-end tại node 11):
+    nodes: 8 → 9 → 10 → 11(dead-end, Jackpot)
+    Path đi: 9 → 10 → 11 → 10 → 9
+    Kết quả: dừng node 9, nhận hiệu ứng node 9 (KHÔNG nhận Jackpot)
+
+  Setup trong Unity Editor:
+    1. Đặt các node của nhánh cụt trong scene
+    2. Kết nối nextNodes như bình thường (8→9→10→11)
+    3. Tick "Is Dead End" trên node cuối (node 11)
+    4. Node 11 KHÔNG cần nextNodes (để trống)
+    5. Dead-end node hiển thị vòng tròn đen ngoài trong Scene view
 
 ================================================================
 PHASE FIXING — CODE CHANGES CẦN LÀM TRƯỚC PHASE 2
@@ -349,8 +400,8 @@ STATUS: [ ] Not started
 
 --- Target ---
   Mỗi board phase: 2-4 phút
-  Số node trên map: ~20-30 nodes (dựa trên playtest)
-  Dice range: 1-6 (cân nhắc 1-4 nếu map nhỏ)
+  Số node trên map: 64 nodes (đã xác nhận)
+  Dice: 2d6 → range 2-12  (phù hợp map 64 ô)
 
 --- Checklist Pacing ---
 [ ] Timer mỗi board phase (track thực tế)

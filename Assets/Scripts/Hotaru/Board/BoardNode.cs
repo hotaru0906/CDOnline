@@ -26,6 +26,13 @@ public class BoardNode : MonoBehaviour
     [Tooltip("Ô tiếp theo (1 = linear, 2+ = nhánh - Phase 5)")]
     public List<BoardNode> nextNodes = new List<BoardNode>();
 
+    [Tooltip("Tick nếu đây là ô CUỐI của một nhánh cụt (dead-end branch).\n" +
+             "Khi player tung xúc xắc QUÁ số bước cần để đến đây,\n" +
+             "token sẽ đi ĐẾN ô này rồi BOUNCE BACK số bước còn dư.\n" +
+             "Player sẽ KHÔNG nhận hiệu ứng của ô này khi overshoot.\n" +
+             "Chỉ nhận hiệu ứng khi đứng ĐÚNG ô này (không dư bước).")]
+    public bool isDeadEnd = false;
+
     public Vector3 WorldPosition => transform.position;
 
     /// <summary>
@@ -51,6 +58,13 @@ public class BoardNode : MonoBehaviour
     {
         Gizmos.color = GetTileColor();
         Gizmos.DrawSphere(transform.position, 0.35f);
+
+        // Vẽ vòng tròn ngoài màu đen nếu là dead-end
+        if (isDeadEnd)
+        {
+            Gizmos.color = Color.black;
+            Gizmos.DrawWireSphere(transform.position, 0.5f);
+        }
 
         Gizmos.color = Color.white;
         foreach (var next in nextNodes)
