@@ -1,27 +1,23 @@
 using Fusion;
 using UnityEngine;
 
-/// <summary>
-/// Quản lý animation cho Player dựa trên PlayerState
-/// Dùng SetBool/SetTrigger giống PlayerMovement1
-/// </summary>
 [RequireComponent(typeof(PlayerController))]
 public class PlayerAnimator : NetworkBehaviour
 {
     [Header("References")]
     [SerializeField] private Animator animator;
 
-    [Header("Animation Parameters (giống PlayerMovement1)")]
+    [Header("Animation Parameters")]
     [SerializeField] private string isWalkingParam = "IsWalking";
     [SerializeField] private string isRunningParam = "IsRunning";
     [SerializeField] private string jumpTrigger = "Jump";
     [SerializeField] private string attackTrigger = "Attack";
     [SerializeField] private string isSittingParam = "isSitting";
-    [SerializeField] private string isSittingOnChair = "sitOnChair";
-    
 
     private PlayerController _playerController;
+
     private bool _isAttacking = false;
+    private bool _wasJumping = false;
 
     private void Awake()
     {
@@ -38,6 +34,7 @@ public class PlayerAnimator : NetworkBehaviour
         }
 
         animator = activeModel.GetComponent<Animator>();
+
         if (animator == null)
         {
             animator = activeModel.GetComponentInChildren<Animator>();
@@ -55,7 +52,8 @@ public class PlayerAnimator : NetworkBehaviour
 
     public override void Render()
     {
-        if (animator == null) return;
+        if (animator == null || _playerController == null)
+            return;
 
         UpdateAnimationState();
     }
@@ -63,61 +61,60 @@ public class PlayerAnimator : NetworkBehaviour
     private void UpdateAnimationState()
     {
         var state = _playerController.CurrentState;
-        float speed = _playerController.GetHorizontalSpeed();
-        bool isMoving = speed > 0.1f;
 
-        // Giống PlayerMovement1: SetBool cho Walking và Running
         bool isWalking = state == PlayerState.Walking;
         bool isRunning = state == PlayerState.Running;
         bool isCrouching = state == PlayerState.Crouching;
+        bool isJumping = state == PlayerState.Jumping;
+        bool isAttacking = state == PlayerState.Attacking;
 
-        animator.SetBool(isWalkingParam, isWalking && !_isAttacking);
-        animator.SetBool(isRunningParam, isRunning && !_isAttacking);
+        // WALK / RUN / CROUCH
+        animator.SetBool(isWalkingParam, isWalking && !isAttacking);
+        animator.SetBool(isRunningParam, isRunning && !isAttacking);
         animator.SetBool(isSittingParam, isCrouching);
+
+        // JUMP
+        if (isJumping && !_wasJumping)
+        {
+            _wasJumping = true;
+
+            animator.ResetTrigger(jumpTrigger);
+            animator.SetTrigger(jumpTrigger);
+        }
+        else if (!isJumping)
+        {
+            _wasJumping = false;
+        }
+
+        // ATTACK
+        if (isAttacking && !_isAttacking)
+        {
+            _isAttacking = true;
+
+            animator.ResetTrigger(attackTrigger);
+            animator.SetTrigger(attackTrigger);
+        }
+        else if (!isAttacking)
+        {
+            _isAttacking = false;
+        }
     }
 
-    /// <summary>
-    /// Trigger jump animation
-    /// </summary>
-    public void TriggerJump()
-    {
-        if (animator == null) return;
-        animator.SetTrigger(jumpTrigger);
-    }
-
-    /// <summary>
-    /// Trigger attack animation
-    /// </summary>
-    public void TriggerAttack()
-    {
-        if (animator == null) return;
-
-        _isAttacking = true;
-        animator.SetTrigger(attackTrigger);
-
-        // Reset sau 0.7s giống PlayerMovement1
-        Invoke(nameof(EndAttack), 0.7f);
-    }
-
-    private void EndAttack()
-    {
-        _isAttacking = false;
-    }
-
-    public void SetSittingOnChair(bool isSitting)
-    {
-        if (animator == null) return;
-        animator.SetBool(isSittingOnChair, isSitting);
-    }
-
-    /// <summary>
-    /// Reset animator về trạng thái ban đầu
-    /// </summary>
     public void ResetAnimator()
     {
         if (animator == null) return;
+
         _isAttacking = false;
+        _wasJumping = false;
+
         animator.Rebind();
         animator.Update(0f);
+    }
+
+    public void SetSittingOnChair(bool sitting)
+    {
+        if (animator == null) return;
+
+        animator.SetBool("sitOnChair", sitting);
     }
 }
