@@ -267,6 +267,7 @@ public class PlayerController : NetworkBehaviour
             AttackTimer = attackDuration;
 
             Debug.Log("[PlayerController] ATTACK!");
+            CheckAttackHit();
         }
     }
 
@@ -578,6 +579,54 @@ public class PlayerController : NetworkBehaviour
         };
     }
 
+    private void CheckAttackHit()
+    {
+        Collider[] hits = Physics.OverlapSphere(
+            transform.position + transform.forward * 1.5f,
+            1f
+        );
+
+        foreach (Collider hit in hits)
+        {
+            // bỏ qua chính mình
+            if (hit.gameObject == gameObject)
+                continue;
+
+            PlayerController other =
+                hit.GetComponent<PlayerController>();
+
+            if (other == null)
+                continue;
+
+            // tạo lực đẩy
+            Vector3 knockback =
+                transform.forward * 8f +
+                Vector3.up * 2f;
+
+            bool success =
+                other.TryApplyHit(knockback);
+
+            if (success)
+            {
+                other.ForceIdle();
+
+                Debug.Log(
+                    $"[FUSION HIT] {Object.InputAuthority} hit {other.Object.InputAuthority}"
+                );
+            }
+        }
+    }
+
+    public void ForceIdle()
+    {
+        if (!HasStateAuthority)
+            return;
+
+        CurrentState = PlayerState.Idle;
+
+        AttackTimer = 0;
+    }
+
     private void OnDrawGizmosSelected()
     {
         bool grounded =
@@ -595,6 +644,13 @@ public class PlayerController : NetworkBehaviour
         Gizmos.DrawWireSphere(
             origin + Vector3.down * 0.1f,
             0.3f
+        );
+
+        Gizmos.color = Color.red;
+
+        Gizmos.DrawWireSphere(
+            transform.position + transform.forward * 1.5f,
+            1f
         );
     }
 
