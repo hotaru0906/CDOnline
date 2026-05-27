@@ -357,9 +357,9 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     private Vector3 GetSpawnPosition(PlayerRef player)
     {
         // 1. Try MinigameController spawn points first (for minigame scenes)
-        if (MinigameController.Instance != null)
+        if (BaseMinigameController.Instance != null)
         {
-            var mgSpawnPoint = MinigameController.Instance.GetSpawnPoint(player.PlayerId);
+            var mgSpawnPoint = BaseMinigameController.Instance.GetSpawnPoint(player.PlayerId);
             if (mgSpawnPoint != Vector3.zero)
             {
                 Debug.Log($"[BasicSpawner] Using MinigameController spawn point for player {player}");
@@ -414,9 +414,9 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     private Quaternion GetSpawnRotation(PlayerRef player)
     {
         // 1. Try MinigameController spawn points first (for minigame scenes)
-        if (MinigameController.Instance != null)
+        if (BaseMinigameController.Instance != null)
         {
-            var mgSpawnRotation = MinigameController.Instance.GetSpawnRotation(player.PlayerId);
+            var mgSpawnRotation = BaseMinigameController.Instance.GetSpawnRotation(player.PlayerId);
             if (mgSpawnRotation != Quaternion.identity)
             {
                 return mgSpawnRotation;

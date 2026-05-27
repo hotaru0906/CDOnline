@@ -300,9 +300,9 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(minigameCountdownUI, true);
 
         // Báo MinigameController chuyển phase
-        if (MinigameController.Instance != null)
+        if (BaseMinigameController.Instance != null)
         {
-            MinigameController.Instance.OnCountdownStarted();
+            BaseMinigameController.Instance.OnCountdownStarted();
         }
 
         // Host chạy countdown coroutine
@@ -362,9 +362,9 @@ public class GameManager : NetworkBehaviour
         }
 
         // Báo MinigameController bắt đầu game
-        if (MinigameController.Instance != null)
+        if (BaseMinigameController.Instance != null)
         {
-            MinigameController.Instance.OnCountdownComplete();
+            BaseMinigameController.Instance.OnCountdownComplete();
         }
     }
 

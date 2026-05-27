@@ -28,12 +28,39 @@ public class PlayerMinigameData : NetworkBehaviour
 
     [Networked]
     public NetworkBool IsDead { get; private set; }
-    
+
     /// <summary>
     /// Player đã bị loại khỏi minigame (không được respawn)
     /// </summary>
     [Networked]
     public NetworkBool IsEliminated { get; private set; }
+
+    // ----------------------------------------------------------------
+    //  Ranking fields — dùng cho Racing và các mode có thứ hạng
+    // ----------------------------------------------------------------
+
+    /// <summary>Thứ hạng về đích: 1 = nhất, 2 = nhì... 0 = chưa về đích.</summary>
+    [Networked]
+    public int FinishRank { get; private set; }
+
+    /// <summary>Đã về đích chưa.</summary>
+    [Networked]
+    public NetworkBool HasFinished { get; private set; }
+
+    /// <summary>Thời điểm về đích (giây kể từ khi game bắt đầu). 0 nếu chưa về.</summary>
+    [Networked]
+    public float FinishTime { get; private set; }
+
+    /// <summary>
+    /// Tiến độ khi chưa về đích — dùng để tính rank khi timeout.
+    /// Gán từ MG2RacingController: checkpointIndex * 1000 + worldPos.
+    /// </summary>
+    [Networked]
+    public float DistanceProgress { get; private set; }
+
+    /// <summary>Điểm số — dùng cho Score mode sau này.</summary>
+    [Networked]
+    public int Score { get; private set; }
 
     // Dùng TickTimer thay vì Coroutine
     [Networked]
@@ -102,25 +129,62 @@ public class PlayerMinigameData : NetworkBehaviour
     }
 
     /// <summary>
-    /// Reset checkpoint - GỌI TỪ MinigameController SAU KHI TELEPORT XONG
+    /// Reset checkpoint - GỌI TỪ BaseMinigameController SAU KHI TELEPORT XONG
     /// </summary>
     public void ResetCheckpoint(Vector3 spawnPosition)
     {
-        if (HasStateAuthority)
-        {
-            CurrentCheckpointIndex = 0;
-            CurrentRespawnPosition = spawnPosition;
-            IsDead = false;
-            IsInvincible = false;
-            IsEliminated = false;
-            
-            if (playerController != null)
-            {
-                playerController.SetFrozen(false);
-            }
-            
-            Debug.Log($"[PlayerMinigameData] Checkpoint reset to position {spawnPosition}");
-        }
+        if (!HasStateAuthority) return;
+
+        CurrentCheckpointIndex = 0;
+        CurrentRespawnPosition = spawnPosition;
+        IsDead = false;
+        IsInvincible = false;
+        IsEliminated = false;
+
+        // Reset ranking fields
+        FinishRank = 0;
+        HasFinished = false;
+        FinishTime = 0f;
+        DistanceProgress = 0f;
+        Score = 0;
+
+        if (playerController != null)
+            playerController.SetFrozen(false);
+
+        Debug.Log($"[PlayerMinigameData] Checkpoint reset to position {spawnPosition}");
+    }
+
+    /// <summary>
+    /// Ghi nhận player đã về đích với thứ hạng và thời gian.
+    /// Gọi từ BaseMinigameController.PlayerFinished().
+    /// </summary>
+    public void SetFinished(int rank, float finishTime)
+    {
+        if (!HasStateAuthority) return;
+        if (HasFinished) return;
+
+        FinishRank = rank;
+        HasFinished = true;
+        FinishTime = finishTime;
+
+        Debug.Log($"[PlayerMinigameData] Player finished — Rank: {rank}, Time: {finishTime:F2}s");
+    }
+
+    /// <summary>
+    /// Cập nhật DistanceProgress — gọi định kỳ từ MG2RacingController.
+    /// progress = checkpointIndex * 1000 + worldPositionAlongRaceAxis
+    /// </summary>
+    public void UpdateDistanceProgress(float progress)
+    {
+        if (!HasStateAuthority) return;
+        DistanceProgress = progress;
+    }
+
+    /// <summary>Cộng điểm — dùng cho Score mode.</summary>
+    public void AddScore(int amount)
+    {
+        if (!HasStateAuthority) return;
+        Score += amount;
     }
 
     /// <summary>
@@ -329,15 +393,18 @@ public class PlayerMinigameData : NetworkBehaviour
     public void ResetForNewRound()
     {
         if (!HasStateAuthority) return;
-        
+
         IsDead = false;
         IsEliminated = false;
         IsInvincible = false;
         CurrentCheckpointIndex = 0;
-        
+        FinishRank = 0;
+        HasFinished = false;
+        FinishTime = 0f;
+        DistanceProgress = 0f;
+        Score = 0;
+
         if (playerController != null)
-        {
             playerController.SetFrozen(false);
-        }
     }
 }

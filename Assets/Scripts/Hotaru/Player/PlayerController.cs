@@ -64,8 +64,17 @@ public class PlayerController : NetworkBehaviour
     [Networked] private float GroundedTimer { get; set; }
     [Networked] private TickTimer HitCooldownTimer { get; set; }
 
+    /// <summary>
+    /// Đếm ngược thời gian knockback. Khi > 0, player không tự điều khiển được.
+    /// Set bởi ApplyExternalForce(force, duration, overrideInput: true).
+    /// </summary>
+    [Networked] private float KnockbackTimer { get; set; }
+
     public bool IsInHitCooldown =>
         HitCooldownTimer.ExpiredOrNotRunning(Runner) == false;
+
+    /// <summary>true khi player đang bị knockback (không thể input).</summary>
+    public bool IsKnockbacked => KnockbackTimer > 0f;
 
     public Vector3 Velocity =>
         _networkCC != null ? _networkCC.Velocity : Vector3.zero;
@@ -155,6 +164,12 @@ public class PlayerController : NetworkBehaviour
         // External force decay
         UpdateExternalVelocity();
 
+        // Knockback timer countdown
+        if (HasStateAuthority && KnockbackTimer > 0f)
+        {
+            KnockbackTimer = Mathf.Max(0f, KnockbackTimer - Runner.DeltaTime);
+        }
+
         // Input
         if (GetInput(out PlayerInputData input))
         {
@@ -183,7 +198,8 @@ public class PlayerController : NetworkBehaviour
 
         bool canMove = CanPerformAction(MinigameAction.Move);
 
-        Vector3 moveDirection = canMove
+        // Knockback: player không tự di chuyển được, nhưng ExternalVelocity vẫn tác động
+        Vector3 moveDirection = (canMove && !IsKnockbacked)
             ? CalculateMoveDirection(input.MoveDirection, input.CameraForward)
             : Vector3.zero;
 
@@ -233,6 +249,8 @@ public class PlayerController : NetworkBehaviour
         if (!CanPerformAction(MinigameAction.Jump))
             return;
 
+        if (IsKnockbacked) return;
+
         bool canJump =
             _networkCC.Grounded ||
             GroundedTimer > 0;
@@ -251,6 +269,8 @@ public class PlayerController : NetworkBehaviour
     {
         if (!CanPerformAction(MinigameAction.Attack))
             return;
+
+        if (IsKnockbacked) return;
 
         // Không spam attack
         if (CurrentState == PlayerState.Attacking)
@@ -487,12 +507,21 @@ public class PlayerController : NetworkBehaviour
         );
     }
 
-    public void ApplyExternalForce(Vector3 force)
+    /// <param name="force">Hướng và độ mạnh của lực.</param>
+    /// <param name="duration">Thời gian block input (giây). 0 = không block.</param>
+    /// <param name="overrideInput">Nếu true + duration > 0: block toàn bộ input trong thời gian duration.</param>
+    public void ApplyExternalForce(Vector3 force, float duration = 0f, bool overrideInput = false)
     {
         if (!HasStateAuthority)
             return;
 
         ExternalVelocity += force;
+
+        if (overrideInput && duration > 0f)
+        {
+            // Lấy giá trị lớn hơn để không cắt ngắn knockback đang chạy
+            KnockbackTimer = Mathf.Max(KnockbackTimer, duration);
+        }
     }
 
     public bool TryApplyHit(Vector3 knockbackForce)

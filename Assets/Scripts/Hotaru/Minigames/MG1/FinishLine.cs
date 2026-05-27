@@ -1,8 +1,7 @@
 using Fusion;
 using UnityEngine;
 
-[RequireComponent(typeof(Collider))]
-public class MinigameFinishLine : NetworkBehaviour
+public class MinigameFinishLine : BaseFinishLine
 {
     [Header("Visual")]
     [SerializeField] private ParticleSystem winEffect;
@@ -11,17 +10,7 @@ public class MinigameFinishLine : NetworkBehaviour
     [Networked]
     private NetworkBool HasWinner { get; set; }
 
-    private void OnTriggerEnter(Collider other)
-    {
-        if (!Runner.IsServer) return;
-        if (HasWinner) return;
-
-        if (!other.TryGetComponent(out PlayerController player)) return;
-
-        ProcessFinish(player);
-    }
-
-    private void ProcessFinish(PlayerController player)
+    protected override void HandlePlayerReachedFinish(PlayerController player)
     {
         if (HasWinner) return;
 
@@ -38,10 +27,10 @@ public class MinigameFinishLine : NetworkBehaviour
 
         Debug.Log($"[FinishLine] WINNER: {player.Object.InputAuthority}");
 
-        // 🔥 Host quyết định winner
+        // Host quyết định winner
         MinigameController.Instance.PlayerFinished(player.Object.InputAuthority);
 
-        // 🔥 Gửi effect xuống client
+        // Gửi effect xuống client
         RPC_PlayWinEffects();
     }
 
