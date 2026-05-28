@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// C3 — Bẫy gai popup (Popup Spike Trap).
-/// Chu kỳ: Ẩn → Cảnh báo (nhấp nháy) → Hiện ra (damage zone) → Ẩn lại.
+/// Chu kỳ: Ẩn → Hiện ra (damage zone) → Ẩn lại.
 /// Khi player chạm vào: player die → respawn tại checkpoint.
 ///
 /// Setup prefab:
@@ -24,15 +24,13 @@ public class PopupSpikeTrap : BaseObstacle
     [Header("Timing")]
     [SerializeField] private float activeDuration = 1.5f;
     [SerializeField] private float cooldownDuration = 2.5f;
-    [SerializeField] private float warningDuration = 0.5f;
 
-    [Header("Warning Visual")]
+    [Header("Visual")]
     [SerializeField] private Renderer spikeRenderer;
-    [SerializeField] private Color warningColor = Color.yellow;
     [SerializeField] private Color activeColor = Color.red;
     [SerializeField] private Color hiddenColor = Color.gray;
 
-    private enum TrapState { Hidden, Warning, Rising, Active, Retracting }
+    private enum TrapState { Hidden, Rising, Active, Retracting }
     private TrapState _state = TrapState.Hidden;
     private float _stateTimer;
 
@@ -56,19 +54,6 @@ public class PopupSpikeTrap : BaseObstacle
         switch (_state)
         {
             case TrapState.Hidden:
-                if (_stateTimer <= 0f)
-                {
-                    _state = TrapState.Warning;
-                    _stateTimer = warningDuration;
-                    Debug.Log("[PopupSpike] WARNING");
-                }
-                break;
-
-            case TrapState.Warning:
-                // Nhấp nháy vàng
-                float t = Mathf.PingPong(Time.time * 8f, 1f);
-                SetSpikeColor(Color.Lerp(hiddenColor, warningColor, t));
-
                 if (_stateTimer <= 0f)
                 {
                     _state = TrapState.Rising;
@@ -121,9 +106,6 @@ public class PopupSpikeTrap : BaseObstacle
         }
     }
 
-    // spikeCollider ở child spikePart → cần ObstacleTriggerRelay trên spikePart
-    //   hoặc đặt Collider ngay trên root để BaseObstacle.OnTriggerEnter hoạt động.
-
     protected override void HandleHit(PlayerController player)
     {
         // Chỉ hit khi active
@@ -147,3 +129,4 @@ public class PopupSpikeTrap : BaseObstacle
             spikeRenderer.material.color = color;
     }
 }
+

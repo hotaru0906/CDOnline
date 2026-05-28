@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -17,12 +18,11 @@ public class RollingSpikeBall : MonoBehaviour
     [SerializeField] private float lifetime = 6f;       // destroy sau bao lâu
     [SerializeField] private float destroyBelowY = -10f; // destroy nếu rơi khỏi map
 
-    [Header("Knockback")]
-    [SerializeField] private float knockbackForce = 14f;
-    [SerializeField] private float upForce = 5f;
-    [SerializeField] private float knockbackDuration = 0.5f;
+    [Header("Hit")]
+    [SerializeField] private float hitCooldown = 0.5f;
 
     private float _timer;
+    private readonly Dictionary<int, float> _hitTimes = new();
 
     private void Update()
     {
@@ -56,6 +56,11 @@ public class RollingSpikeBall : MonoBehaviour
         if (!other.TryGetComponent(out PlayerController player)) return;
         if (!player.HasStateAuthority) return; // chỉ host xử lý
 
+        // Per-player cooldown — tránh multi-trigger trong cùng một lần tiếp xúc
+        int pid = player.Object.InputAuthority.PlayerId;
+        if (_hitTimes.TryGetValue(pid, out float next) && Time.time < next) return;
+        _hitTimes[pid] = Time.time + hitCooldown;
+
         // Check minigame đang chạy
         if (BaseMinigameController.Instance != null)
         {
@@ -63,12 +68,9 @@ public class RollingSpikeBall : MonoBehaviour
             if (BaseMinigameController.Instance.IsGameEnded) return;
         }
 
-        Vector3 toPlayer = (player.transform.position - transform.position).normalized;
-        toPlayer.y = 0f;
-
-        Vector3 force = toPlayer * knockbackForce + Vector3.up * upForce;
-        player.ApplyExternalForce(force, knockbackDuration, overrideInput: true);
-
-        Debug.Log($"[RollingSpikeBall] Hit {player.Object.InputAuthority}");
+        var mgData = player.GetComponent<PlayerMinigameData>();
+        if (mgData != null && mgData.CanTakeDamage())
+            mgData.Die();
+        Debug.Log($"[RollingSpikeBall] Killed {player.Object.InputAuthority}");
     }
 }

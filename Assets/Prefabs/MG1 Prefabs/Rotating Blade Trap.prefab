@@ -128,11 +128,9 @@ MonoBehaviour:
   isActive: 1
   hitEffect: {fileID: 0}
   hitSound: {fileID: 0}
+  hitCooldown: 0.5
   spikePart: {fileID: 7562792916275382207}
   rotationSpeed: 180
-  knockbackForce: 10
-  upForce: 4
-  knockbackDuration: 0.35
 --- !u!114 &6927031785198493178
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -164,6 +162,7 @@ GameObject:
   - component: {fileID: 6979967486623244091}
   - component: {fileID: 6650683137475420058}
   - component: {fileID: 3183779916014911950}
+  - component: {fileID: 474317848259629161}
   m_Layer: 0
   m_Name: Blade
   m_TagString: Untagged
@@ -263,3 +262,16 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2.4448266, y: 0.22537549, z: 0.63699985}
   m_Center: {x: 0.95828295, y: 0, z: -0.013031453}
+--- !u!114 &474317848259629161
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8521446642022235660}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53df23d039df8974390f62494440a105, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  obstacle: {fileID: 5886757376914964008}

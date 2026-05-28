@@ -4,8 +4,7 @@ using Fusion;
 /// <summary>
 /// C10 — Máy ép (Crushing Press).
 /// Tường A đứng yên, tường B di chuyển về phía A để ép player.
-/// Có cảnh báo âm thanh 1s trước khi ép.
-/// Khi player chạm wallB: teleport về checkpoint gần nhất.
+/// Khi player chạm wallB đang đóng/đã đóng: Die() → respawn tại checkpoint.
 ///
 /// Setup prefab:
 ///   - Object gốc: trung tâm + NetworkObject
@@ -27,19 +26,8 @@ public class CrushingPress : BaseObstacle
     [Header("Timing")]
     [SerializeField] private float openDuration = 3f;       // thời gian ở trạng thái mở
     [SerializeField] private float closeDuration = 1.5f;    // thời gian ở trạng thái đóng
-    [SerializeField] private float warningDuration = 1f;    // cảnh báo trước khi ép
 
-    [Header("Crush Effect")]
-    [SerializeField] private float knockbackForce = 5f;
-    [SerializeField] private float knockbackDuration = 0.2f;
-
-    [Header("Warning Visual")]
-    [SerializeField] private Renderer wallBRenderer;
-    [SerializeField] private Color warningColor = Color.yellow;
-    [SerializeField] private Color normalColor = Color.white;
-    [SerializeField] private Color crushingColor = Color.red;
-
-    private enum PressState { Open, Warning, Closing, Closed, Opening }
+    private enum PressState { Open, Closing, Closed, Opening }
     private PressState _state = PressState.Open;
     private float _stateTimer;
 
@@ -47,7 +35,6 @@ public class CrushingPress : BaseObstacle
     {
         _stateTimer = openDuration;
         if (wallB != null) wallB.localPosition = openLocalPos;
-        SetWallColor(normalColor);
     }
 
     private void Update()
@@ -57,14 +44,6 @@ public class CrushingPress : BaseObstacle
         switch (_state)
         {
             case PressState.Open:
-                if (_stateTimer <= 0f)
-                    EnterWarning();
-                break;
-
-            case PressState.Warning:
-                float t = Mathf.PingPong(Time.time * 5f, 1f);
-                SetWallColor(Color.Lerp(normalColor, warningColor, t));
-
                 if (_stateTimer <= 0f)
                     EnterClosing();
                 break;
@@ -104,17 +83,9 @@ public class CrushingPress : BaseObstacle
         }
     }
 
-    private void EnterWarning()
-    {
-        _state = PressState.Warning;
-        _stateTimer = warningDuration;
-        Debug.Log("[CrushingPress] WARNING!");
-    }
-
     private void EnterClosing()
     {
         _state = PressState.Closing;
-        SetWallColor(crushingColor);
         Debug.Log("[CrushingPress] CLOSING");
     }
 
@@ -128,7 +99,6 @@ public class CrushingPress : BaseObstacle
     private void EnterOpening()
     {
         _state = PressState.Opening;
-        SetWallColor(normalColor);
     }
 
     private void EnterOpen()
@@ -146,42 +116,11 @@ public class CrushingPress : BaseObstacle
 
     protected override void ApplyEffect(PlayerController player)
     {
-        // Teleport player về checkpoint gần nhất
-        TeleportToLastCheckpoint(player);
-
-        // Knockback nhỏ ra khỏi tường để tránh bị kẹt
-        Vector3 escape = (player.transform.position - wallB.position).normalized;
-        escape.y = 0f;
-        player.ApplyExternalForce(escape * knockbackForce, knockbackDuration);
-
-        Debug.Log($"[CrushingPress] CRUSHED {player.Object.InputAuthority} → teleported to checkpoint");
-    }
-
-    private void TeleportToLastCheckpoint(PlayerController player)
-    {
         var mgData = GetMinigameData(player);
-        if (mgData == null) return;
+        if (mgData != null && mgData.CanTakeDamage())
+            mgData.Die();
 
-        // Dùng vị trí checkpoint đã lưu trong PlayerMinigameData
-        if (player.HasStateAuthority)
-        {
-            var cc = player.GetComponent<CharacterController>();
-            if (cc != null)
-            {
-                cc.enabled = false;
-                player.transform.position = mgData.CurrentRespawnPosition;
-                cc.enabled = true;
-            }
-            else
-            {
-                player.transform.position = mgData.CurrentRespawnPosition;
-            }
-        }
-    }
-
-    private void SetWallColor(Color color)
-    {
-        if (wallBRenderer != null)
-            wallBRenderer.material.color = color;
+        Debug.Log($"[CrushingPress] CRUSHED {player.Object.InputAuthority}");
     }
 }
+

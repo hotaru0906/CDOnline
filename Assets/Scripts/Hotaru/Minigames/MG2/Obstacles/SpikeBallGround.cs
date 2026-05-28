@@ -11,11 +11,6 @@ using UnityEngine;
 /// </summary>
 public class SpikeBallGround : BaseObstacle
 {
-    [Header("SpikeBall — Knockback")]
-    [SerializeField] private float upForce = 8f;
-    [SerializeField] private float backForce = 6f;
-    [SerializeField] private float knockbackDuration = 0.4f;
-
     [Header("SpikeBall — Rotation")]
     [SerializeField] private float rotationSpeed = 120f; // độ/giây
 
@@ -27,14 +22,9 @@ public class SpikeBallGround : BaseObstacle
 
     protected override void ApplyEffect(PlayerController player)
     {
-        // Hướng văng: lên + lùi ra xa tính từ bóng → player
-        Vector3 toPlayer = (player.transform.position - transform.position).normalized;
-        toPlayer.y = 0f;
-
-        Vector3 force = toPlayer * backForce + Vector3.up * upForce;
-
-        player.ApplyExternalForce(force, knockbackDuration, overrideInput: true);
-
-        Debug.Log($"[SpikeBallGround] Knocked {player.Object.InputAuthority} — force: {force}");
+        var mgData = GetMinigameData(player);
+        if (mgData != null && mgData.CanTakeDamage())
+            mgData.Die();
+        Debug.Log($"[SpikeBallGround] Killed {player.Object.InputAuthority}");
     }
 }

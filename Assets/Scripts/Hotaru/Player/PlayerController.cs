@@ -242,6 +242,11 @@ public class PlayerController : NetworkBehaviour
         _networkCC.Move(finalMovement);
 
         _targetMoveDirection = moveDirection;
+
+        // Luôn giữ player thẳng đứng — tránh NetworkCC / knockback làm nghiêng trục X/Z
+        Vector3 euler = transform.eulerAngles;
+        if (euler.x != 0f || euler.z != 0f)
+            transform.rotation = Quaternion.Euler(0f, euler.y, 0f);
     }
 
     private void HandleJump(PlayerInputData input)
@@ -522,6 +527,17 @@ public class PlayerController : NetworkBehaviour
             // Lấy giá trị lớn hơn để không cắt ngắn knockback đang chạy
             KnockbackTimer = Mathf.Max(KnockbackTimer, duration);
         }
+    }
+
+    /// <summary>
+    /// Dùng cho JumpPad — phóng player lên cao với tốc độ Y tùy chỉnh.
+    /// Dùng trực tiếp Velocity của NetworkCC thay vì ExternalVelocity để đảm bảo quỹ đạo tự nhiên.
+    /// </summary>
+    public void LaunchPad(float verticalSpeed)
+    {
+        if (!HasStateAuthority) return;
+        var v = _networkCC.Velocity;
+        _networkCC.Velocity = new Vector3(v.x, verticalSpeed, v.z);
     }
 
     public bool TryApplyHit(Vector3 knockbackForce)

@@ -14,7 +14,6 @@ GameObject:
   - component: {fileID: 1041405082006773769}
   - component: {fileID: 1543001565421416851}
   - component: {fileID: 3616598610626957217}
-  - component: {fileID: 187109406924856042}
   m_Layer: 0
   m_Name: Floating Obstacle
   m_TagString: Untagged
@@ -106,6 +105,7 @@ MonoBehaviour:
   isActive: 1
   hitEffect: {fileID: 0}
   hitSound: {fileID: 0}
+  axis: 1
   floatSpeed: 1.5
   floatAmplitude: 1.5
   phaseOffset: 0
@@ -151,25 +151,4 @@ BoxCollider:
   m_Enabled: 1
   serializedVersion: 3
   m_Size: {x: 2, y: 0.22647041, z: 2}
-  m_Center: {x: 0, y: 0, z: 0}
---- !u!65 &187109406924856042
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 492392559241320604}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 1
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 2.2, y: 0.35, z: 2.2}
   m_Center: {x: 0, y: 0, z: 0}

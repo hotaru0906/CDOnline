@@ -107,11 +107,9 @@ MonoBehaviour:
   isActive: 1
   hitEffect: {fileID: 0}
   hitSound: {fileID: 0}
+  hitCooldown: 0.5
   spikePart: {fileID: 4827416815778074736}
   rotationSpeed: -90
-  knockbackForce: 10
-  upForce: 4
-  knockbackDuration: 0.35
 --- !u!114 &4161318733584773719
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -163,8 +161,8 @@ GameObject:
   - component: {fileID: 4827416815778074736}
   - component: {fileID: 2152251068909178207}
   - component: {fileID: 2050994546480360386}
-  - component: {fileID: 913952034328872439}
   - component: {fileID: 4859458622682929097}
+  - component: {fileID: 892568036567670260}
   m_Layer: 0
   m_Name: Spike Part
   m_TagString: Untagged
@@ -243,27 +241,6 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!65 &913952034328872439
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3056290176139197864}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 0.5, y: 0.72525144, z: 4.627401}
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!65 &4859458622682929097
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -285,3 +262,16 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.7695269, y: 0.72525144, z: 4.627401}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &892568036567670260
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3056290176139197864}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53df23d039df8974390f62494440a105, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  obstacle: {fileID: 6879975923878152768}

@@ -13,10 +13,8 @@ using UnityEngine;
 /// </summary>
 public class JumpPad : BaseObstacle
 {
-    [Header("Jump Pad — Force")]
-    [SerializeField] private float jumpForce = 18f;
-    [SerializeField] private float forwardForce = 8f;
-    [SerializeField] private float knockbackDuration = 0.6f;
+    [Header("Jump Pad — Launch")]
+    [SerializeField] private float launchSpeed = 20f;   // tốc độ Y khi phóng lên (m/s)
 
     [Header("Jump Pad — Spring Animation")]
     [SerializeField] private Transform springPart;
@@ -82,15 +80,7 @@ public class JumpPad : BaseObstacle
 
     protected override void ApplyEffect(PlayerController player)
     {
-        // Phóng về hướng player đang đứng + lên cao
-        Vector3 forward = player.transform.forward;
-        forward.y = 0f;
-        forward.Normalize();
-
-        Vector3 force = forward * forwardForce + Vector3.up * jumpForce;
-
-        player.ApplyExternalForce(force, knockbackDuration, overrideInput: true);
-
-        Debug.Log($"[JumpPad] Launched {player.Object.InputAuthority} — force: {force}");
+        player.LaunchPad(launchSpeed);
+        Debug.Log($"[JumpPad] Launched {player.Object.InputAuthority} — speed: {launchSpeed}");
     }
 }

@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 2437225599104055606}
   - component: {fileID: 7150254949540461194}
   - component: {fileID: 517161579014702637}
-  - component: {fileID: 7304486723535211506}
+  - component: {fileID: 3965552172884167262}
   m_Layer: 0
   m_Name: Spring Part
   m_TagString: Untagged
@@ -27,7 +27,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3086703344342247188}
   serializedVersion: 2
-  m_LocalRotation: {x: 6.870091e-17, y: 0.9914449, z: -6.870091e-17, w: 0.13052619}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -1.1823431e-13, y: -2.07, z: 2.2737366e-14}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -91,8 +91,8 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!135 &7304486723535211506
-SphereCollider:
+--- !u!65 &3965552172884167262
+BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -110,8 +110,8 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 1.4454308
-  m_Center: {x: -7.974244e-24, y: 1.76, z: 1.5948488e-23}
+  m_Size: {x: 2.8908615, y: 2.4513595, z: 2.8908615}
+  m_Center: {x: -7.974244e-24, y: 1.2050337, z: 1.5948488e-23}
 --- !u!1 &8075121280820826526
 GameObject:
   m_ObjectHideFlags: 0
@@ -219,9 +219,8 @@ MonoBehaviour:
   isActive: 1
   hitEffect: {fileID: 0}
   hitSound: {fileID: 0}
-  jumpForce: 18
-  forwardForce: 8
-  knockbackDuration: 0.6
+  hitCooldown: 0.5
+  launchSpeed: 20
   springPart: {fileID: 2437225599104055606}
   compressY: -0.3
   compressSpeed: 20
@@ -261,10 +260,10 @@ MeshCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 5
-  m_Convex: 0
+  m_Convex: 1
   m_CookingOptions: 30
   m_Mesh: {fileID: 3729085003051603586, guid: 32812f864ffc68f45aa97b19014b7867, type: 3}

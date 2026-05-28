@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Fusion;
 using UnityEngine;
 
@@ -23,6 +24,12 @@ public abstract class BaseObstacle : NetworkBehaviour
     [Header("Effects")]
     [SerializeField] protected ParticleSystem hitEffect;
     [SerializeField] protected AudioSource hitSound;
+
+    [Header("Hit Cooldown")]
+    [SerializeField] private float hitCooldown = 0.5f; // giây giữa 2 lần hit cùng player
+
+    // Server-only: track thời điểm hit tiếp theo được phép cho từng player
+    private readonly Dictionary<PlayerRef, float> _hitCooldowns = new();
 
     // ----------------------------------------------------------------
     //  Trigger — entry point dùng chung
@@ -64,10 +71,18 @@ public abstract class BaseObstacle : NetworkBehaviour
 
     /// <summary>
     /// Host xử lý hit: apply effect lên player + broadcast FX xuống client.
-    /// Override nếu cần logic phức tạp hơn (ví dụ: cooldown per-player).
+    /// Có per-player cooldown để tránh multi-trigger trong cùng 1 frame (Fusion resimulation).
     /// </summary>
     protected virtual void HandleHit(PlayerController player)
     {
+        var playerRef = player.Object.InputAuthority;
+        float now = Runner.SimulationTime;
+
+        if (_hitCooldowns.TryGetValue(playerRef, out float nextAllowed) && now < nextAllowed)
+            return;
+
+        _hitCooldowns[playerRef] = now + hitCooldown;
+
         ApplyEffect(player);
         RPC_PlayHitEffects();
     }

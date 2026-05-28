@@ -18,10 +18,7 @@ public class SpikedWheel : BaseObstacle
     [SerializeField] private float moveRange = 3f;      // nửa khoảng di chuyển (m) theo trục Z local
     [SerializeField] private float wheelRadius = 0.5f;  // bán kính bánh xe (để tính vòng quay)
 
-    [Header("Knockback")]
-    [SerializeField] private float knockbackForce = 18f;
-    [SerializeField] private float upForce = 6f;
-    [SerializeField] private float knockbackDuration = 0.6f;
+
 
     private float _localZ;
     private int _direction = 1;
@@ -57,13 +54,9 @@ public class SpikedWheel : BaseObstacle
 
     protected override void ApplyEffect(PlayerController player)
     {
-        Vector3 toPlayer = (player.transform.position - transform.position).normalized;
-        toPlayer.y = 0f;
-
-        Vector3 force = toPlayer * knockbackForce + Vector3.up * upForce;
-
-        player.ApplyExternalForce(force, knockbackDuration, overrideInput: true);
-
-        Debug.Log($"[SpikedWheel] Knocked {player.Object.InputAuthority}");
+        var mgData = GetMinigameData(player);
+        if (mgData != null && mgData.CanTakeDamage())
+            mgData.Die();
+        Debug.Log($"[SpikedWheel] Killed {player.Object.InputAuthority}");
     }
 }

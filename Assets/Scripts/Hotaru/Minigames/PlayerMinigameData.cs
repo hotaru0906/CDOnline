@@ -211,9 +211,14 @@ public class PlayerMinigameData : NetworkBehaviour
         // Check ngay từ đầu để tránh spam
         if (!CanTakeDamage()) return;
 
-        if (Object.HasInputAuthority)
+        if (HasStateAuthority)
         {
-            // Local player gọi RPC để thông báo host
+            // HOST gọi trực tiếp (ví dụ: từ obstacle) — có StateAuthority → xử lý ngay
+            ExecuteDeath();
+        }
+        else if (Object.HasInputAuthority)
+        {
+            // Client gọi trên chính player của mình — gửi RPC lên host
             RPC_RequestDeath();
         }
     }
@@ -221,8 +226,16 @@ public class PlayerMinigameData : NetworkBehaviour
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     private void RPC_RequestDeath()
     {
+        ExecuteDeath();
+    }
+
+    /// <summary>
+    /// Logic death thực sự — chỉ chạy trên StateAuthority (host).
+    /// </summary>
+    private void ExecuteDeath()
+    {
         if (!CanTakeDamage()) return;
-        
+
         // Đọc allowRespawn từ synced Networked property (thay vì lookup MinigameData)
         bool canRespawn = true;
         

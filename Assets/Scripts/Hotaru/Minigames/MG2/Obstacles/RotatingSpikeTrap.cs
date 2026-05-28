@@ -3,7 +3,7 @@ using UnityEngine;
 /// <summary>
 /// C5 — Bẫy xoay gai (Rotating Spike Trap).
 /// Phần gai xoay quanh trục Y liên tục.
-/// Khi player chạm: knockback theo hướng văng ra ngoài.
+/// Khi player chạm: knockback theo chiều xoay hiện tại (tiếp tuyến) + hướng ra ngoài.
 ///
 /// Setup prefab:
 ///   - Object gốc: đế đứng yên
@@ -14,12 +14,9 @@ public class RotatingSpikeTrap : BaseObstacle
 {
     [Header("Rotation")]
     [SerializeField] private Transform spikePart;   // phần xoay — gắn Collider trigger ở đây
-    [SerializeField] private float rotationSpeed = 90f; // độ/giây
+    [SerializeField] private float rotationSpeed = 90f; // độ/giây, dương = theo chiều kim đồng hồ (từ trên nhìn xuống)
 
-    [Header("Knockback")]
-    [SerializeField] private float knockbackForce = 10f;
-    [SerializeField] private float upForce = 4f;
-    [SerializeField] private float knockbackDuration = 0.35f;
+
 
     private void Update()
     {
@@ -29,13 +26,9 @@ public class RotatingSpikeTrap : BaseObstacle
 
     protected override void ApplyEffect(PlayerController player)
     {
-        Vector3 toPlayer = (player.transform.position - transform.position).normalized;
-        toPlayer.y = 0f;
-
-        Vector3 force = toPlayer * knockbackForce + Vector3.up * upForce;
-
-        player.ApplyExternalForce(force, knockbackDuration, overrideInput: true);
-
-        Debug.Log($"[RotatingSpikeTrap] Knocked {player.Object.InputAuthority}");
+        var mgData = GetMinigameData(player);
+        if (mgData != null && mgData.CanTakeDamage())
+            mgData.Die();
+        Debug.Log($"[RotatingSpikeTrap] Killed {player.Object.InputAuthority}");
     }
 }
