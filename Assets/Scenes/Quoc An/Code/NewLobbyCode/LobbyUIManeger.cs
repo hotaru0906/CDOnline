@@ -3,16 +3,10 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 
-// ============================================================
-// LobbyUIManager
-// Xử lý: Quit Room, Settings, PlayerList display
-//
-// OFFLINE  : Log ra Console, test trong Inspector
-// ONLINE   : Uncomment phần Photon/Mirror khi sẵn sàng
-// ============================================================
-
 public class LobbyUIManager : MonoBehaviour
 {
+    public static LobbyUIManager Instance;
+
     // ========================================================
     // INSPECTOR REFERENCES
     // ========================================================
@@ -24,24 +18,10 @@ public class LobbyUIManager : MonoBehaviour
     [Tooltip("Kéo SettingsButton vào đây")]
     public Button settingsButton;
 
-    [Header("--- SCENE NAVIGATION ---")]
-    [Tooltip("Tên scene sẽ load khi Quit Room (VD: 'MainMenu')")]
-    public string quitToSceneName = "MainMenu";
+    [Header("--- ROOM INFO ---")]
+    [Tooltip("Kéo Text hiển thị tên phòng vào đây")]
+    public TextMeshProUGUI roomNameTitle;
 
-    [Tooltip("Tên scene sẽ load khi vào Settings (VD: 'Settings')")]
-    public string settingsSceneName = "Settings";
-
-    [Tooltip("Nếu TRUE: dùng Canvas thay vì load Scene mới")]
-    public bool useCanvasInsteadOfScene = false;
-
-    [Tooltip("Kéo Canvas MainMenu vào đây nếu useCanvasInsteadOfScene = TRUE")]
-    public GameObject mainMenuCanvas;
-
-    [Tooltip("Kéo Canvas Settings vào đây nếu useCanvasInsteadOfScene = TRUE")]
-    public GameObject settingsCanvas;
-
-    [Tooltip("Kéo LobbyCanvas vào đây để ẩn khi chuyển canvas")]
-    public GameObject lobbyCanvas;
 
     [Header("--- PLAYER LIST ---")]
     [Tooltip("Kéo object Content (trong PlayerScrollView/Viewport/Content) vào đây")]
@@ -57,7 +37,7 @@ public class LobbyUIManager : MonoBehaviour
     public int maxPlayers = 4;
 
     [Header("--- DEBUG / OFFLINE TEST ---")]
-    [Tooltip("Danh sách player giả để test offline — thêm/xóa trong Inspector")]
+    [Tooltip("Danh sách player giả để test offline")]
     public List<DebugPlayerData> debugPlayers = new List<DebugPlayerData>()
     {
         new DebugPlayerData { playerName = "HostPlayer", isReady = true,  isHost = true  },
@@ -72,12 +52,36 @@ public class LobbyUIManager : MonoBehaviour
     // ========================================================
     // UNITY LIFECYCLE
     // ========================================================
+    void Awake()
+    {
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
+    }
+
     void Start()
     {
         SetupButtons();
         RefreshPlayerList_Debug();
-
         Debug.Log("[LobbyUI] LobbyUIManager initialized.");
+    }
+
+    // ========================================================
+    // NHẬN DỮ LIỆU TỪ CREATE ROOM
+    // ========================================================
+    public void SetupLobby(string roomName, int playerMax, string miniGame)
+    {
+        // Hiển thị tên phòng
+        if (roomNameTitle != null)
+            roomNameTitle.text = roomName;
+        else
+            Debug.LogWarning("[LobbyUI] roomNameTitle chưa được gán!");
+
+
+        // Cập nhật maxPlayers cho player count
+        maxPlayers = playerMax;
+        UpdatePlayerCount(debugPlayers.Count, maxPlayers);
+
+        Debug.Log($"[LobbyUI] Setup — Room: {roomName}, Max: {playerMax}, Game: {miniGame}");
     }
 
     // ========================================================
@@ -97,105 +101,33 @@ public class LobbyUIManager : MonoBehaviour
     }
 
     // ========================================================
-    // QUIT ROOM
+    // QUIT ROOM → Về PlayOnline qua UIManager
     // ========================================================
     void OnQuitRoomClicked()
     {
-        Debug.Log($"[LobbyUI] Quit Room clicked. Target: '{quitToSceneName}'");
+        Debug.Log("[LobbyUI] Quit Room clicked.");
 
-        if (useCanvasInsteadOfScene)
-        {
-            SwitchToCanvas(mainMenuCanvas);
-            return;
-        }
+        // --- ONLINE (Photon PUN2) --- uncomment khi tích hợp
+        // PhotonNetwork.LeaveRoom();
 
-        // Load scene nếu tên scene đã được điền
-        if (!string.IsNullOrEmpty(quitToSceneName))
-        {
-            // Kiểm tra scene có trong Build Settings không
-            bool sceneExists = false;
-            for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCountInBuildSettings; i++)
-            {
-                string path = UnityEngine.SceneManagement.SceneUtility.GetScenePathByBuildIndex(i);
-                if (path.Contains(quitToSceneName))
-                {
-                    sceneExists = true;
-                    break;
-                }
-            }
-
-            if (sceneExists)
-            {
-                // --- ONLINE (Photon PUN2) --- uncomment khi tích hợp
-                // PhotonNetwork.LeaveRoom();
-                // PhotonNetwork.LoadLevel(quitToSceneName);
-
-                UnityEngine.SceneManagement.SceneManager.LoadScene(quitToSceneName);
-            }
-            else
-            {
-                Debug.LogWarning($"[LobbyUI] Scene '{quitToSceneName}' không tìm thấy trong Build Settings. " +
-                                 $"Vào File > Build Settings > Add Open Scenes để thêm scene.");
-            }
-        }
+        // Dùng UIManager để về PlayOnline
+        if (UIManager.Instance != null)
+            UIManager.Instance.QuitToPlayOnline();
         else
-        {
-            Debug.LogWarning("[LobbyUI] quitToSceneName chưa được điền. " +
-                             "Điền tên scene vào Inspector hoặc bật useCanvasInsteadOfScene.");
-        }
+            Debug.LogWarning("[LobbyUI] UIManager.Instance là null!");
     }
 
     // ========================================================
-    // SETTINGS
+    // SETTINGS → Dùng UIManager Navigate
     // ========================================================
     void OnSettingsClicked()
     {
-        Debug.Log($"[LobbyUI] Settings clicked. Target: '{settingsSceneName}'");
+        Debug.Log("[LobbyUI] Settings clicked.");
 
-        if (useCanvasInsteadOfScene)
-        {
-            SwitchToCanvas(settingsCanvas);
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(settingsSceneName))
-        {
-            bool sceneExists = false;
-            for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCountInBuildSettings; i++)
-            {
-                string path = UnityEngine.SceneManagement.SceneUtility.GetScenePathByBuildIndex(i);
-                if (path.Contains(settingsSceneName))
-                {
-                    sceneExists = true;
-                    break;
-                }
-            }
-
-            if (sceneExists)
-                UnityEngine.SceneManagement.SceneManager.LoadScene(settingsSceneName);
-            else
-                Debug.LogWarning($"[LobbyUI] Scene '{settingsSceneName}' không tìm thấy trong Build Settings.");
-        }
+        if (UIManager.Instance != null)
+            UIManager.Instance.NavigateTo(UIManager.Instance.UISetting);
         else
-        {
-            Debug.LogWarning("[LobbyUI] settingsSceneName chưa được điền.");
-        }
-    }
-
-    // ========================================================
-    // CANVAS SWITCHING (thay thế Scene nếu cần)
-    // ========================================================
-    void SwitchToCanvas(GameObject targetCanvas)
-    {
-        if (targetCanvas == null)
-        {
-            Debug.LogWarning("[LobbyUI] targetCanvas chưa được gán trong Inspector!");
-            return;
-        }
-
-        if (lobbyCanvas != null) lobbyCanvas.SetActive(false);
-        targetCanvas.SetActive(true);
-        Debug.Log($"[LobbyUI] Switched to canvas: {targetCanvas.name}");
+            Debug.LogWarning("[LobbyUI] UIManager.Instance là null!");
     }
 
     // ========================================================
@@ -203,18 +135,14 @@ public class LobbyUIManager : MonoBehaviour
     // ========================================================
     public void RefreshPlayerList_Debug()
     {
-        // Xóa các row cũ
         foreach (var row in playerRowObjects)
             if (row != null) Destroy(row);
         playerRowObjects.Clear();
 
-        // Spawn row cho mỗi debug player
         foreach (var playerData in debugPlayers)
             SpawnPlayerRow(playerData.playerName, playerData.isReady, playerData.isHost);
 
-        // Cập nhật player count text
         UpdatePlayerCount(debugPlayers.Count, maxPlayers);
-
         Debug.Log($"[LobbyUI] Player list refreshed. {debugPlayers.Count}/{maxPlayers} players.");
     }
 
@@ -232,36 +160,31 @@ public class LobbyUIManager : MonoBehaviour
         GameObject row = Instantiate(playerRowPrefab, playerListContainer);
         playerRowObjects.Add(row);
 
-        // Tìm các component con trong row
         TextMeshProUGUI nameText   = row.transform.Find("PlayerNameText")?.GetComponent<TextMeshProUGUI>();
         TextMeshProUGUI statusText = row.transform.Find("StatusText")?.GetComponent<TextMeshProUGUI>();
         Toggle readyToggle         = row.transform.Find("ReadyToggle")?.GetComponent<Toggle>();
         Image avatarImage          = row.transform.Find("Avatar")?.GetComponent<Image>();
         GameObject hostBadge       = row.transform.Find("HostBadge")?.gameObject;
 
-        // --- Tên người chơi ---
         if (nameText != null)
             nameText.text = playerName;
         else
-            Debug.LogWarning($"[LobbyUI] Không tìm thấy 'PlayerNameText' trong PlayerRow prefab.");
+            Debug.LogWarning("[LobbyUI] Không tìm thấy 'PlayerNameText' trong PlayerRow prefab.");
 
-        // --- Trạng thái Ready ---
         if (statusText != null)
         {
             statusText.text  = isReady ? "Ready" : "Not Ready";
             statusText.color = isReady
-                ? new Color(74f/255f, 222f/255f, 128f/255f)   // xanh lá
-                : new Color(248f/255f, 113f/255f, 113f/255f);  // đỏ nhạt
+                ? new Color(74f/255f,  222f/255f, 128f/255f)
+                : new Color(248f/255f, 113f/255f, 113f/255f);
         }
 
         if (readyToggle != null)
             readyToggle.isOn = isReady;
 
-        // --- Avatar màu theo tên ---
         if (avatarImage != null)
             avatarImage.color = GetAvatarColor(playerName);
 
-        // --- Host badge ---
         if (hostBadge != null)
             hostBadge.SetActive(isHost);
 
@@ -269,7 +192,7 @@ public class LobbyUIManager : MonoBehaviour
     }
 
     // ========================================================
-    // CẬP NHẬT PLAYER COUNT TEXT
+    // CẬP NHẬT PLAYER COUNT
     // ========================================================
     void UpdatePlayerCount(int current, int max)
     {
@@ -283,11 +206,11 @@ public class LobbyUIManager : MonoBehaviour
     Color GetAvatarColor(string playerName)
     {
         Color[] colors = {
-            new Color(59f/255f,  130f/255f, 246f/255f), // xanh dương
-            new Color(139f/255f, 92f/255f,  246f/255f), // tím
-            new Color(34f/255f,  197f/255f, 94f/255f),  // xanh lá
-            new Color(249f/255f, 115f/255f, 22f/255f),  // cam
-            new Color(236f/255f, 72f/255f,  153f/255f), // hồng
+            new Color(59f/255f,  130f/255f, 246f/255f),
+            new Color(139f/255f, 92f/255f,  246f/255f),
+            new Color(34f/255f,  197f/255f, 94f/255f),
+            new Color(249f/255f, 115f/255f, 22f/255f),
+            new Color(236f/255f, 72f/255f,  153f/255f),
         };
         int index = Mathf.Abs(playerName.GetHashCode()) % colors.Length;
         return colors[index];
@@ -296,37 +219,12 @@ public class LobbyUIManager : MonoBehaviour
     // ========================================================
     // ONLINE — uncomment khi tích hợp Photon PUN2
     // ========================================================
-    // public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer)
-    // {
-    //     Debug.Log($"[LobbyUI] {newPlayer.NickName} joined.");
-    //     RefreshPlayerList_Online();
-    // }
-    //
-    // public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer)
-    // {
-    //     Debug.Log($"[LobbyUI] {otherPlayer.NickName} left.");
-    //     RefreshPlayerList_Online();
-    // }
-    //
-    // void RefreshPlayerList_Online()
-    // {
-    //     foreach (var row in playerRowObjects) Destroy(row);
-    //     playerRowObjects.Clear();
-    //
-    //     foreach (var player in PhotonNetwork.PlayerList)
-    //     {
-    //         bool ready = player.CustomProperties.ContainsKey("IsReady")
-    //                      && (bool)player.CustomProperties["IsReady"];
-    //         bool host  = player.IsMasterClient;
-    //         SpawnPlayerRow(player.NickName, ready, host);
-    //     }
-    //     UpdatePlayerCount(PhotonNetwork.PlayerList.Length, PhotonNetwork.CurrentRoom.MaxPlayers);
-    // }
+    // public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer) { ... }
+    // public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer) { ... }
 }
 
 // ============================================================
 // Data class cho debug player list
-// Hiển thị đẹp trong Inspector nhờ [System.Serializable]
 // ============================================================
 [System.Serializable]
 public class DebugPlayerData

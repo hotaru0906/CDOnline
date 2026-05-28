@@ -1,15 +1,38 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 public class FindLobbyUI : MonoBehaviour
 {
-    public void OnClick_Back()
+    [Header("--- BUTTONS ---")]
+    public Button createGameButton;
+    public Button backButton;
+
+    void Start()
     {
-        UIManager.Instance.NavigateBack(); // Về PlayOnline
+        if (createGameButton != null)
+            createGameButton.onClick.AddListener(OnClick_CreateGame);
+        else
+            Debug.LogWarning("[FindLobby] createGameButton chưa được gán!");
+
+        if (backButton != null)
+            backButton.onClick.AddListener(OnClick_Back);
+        else
+            Debug.LogWarning("[FindLobby] backButton chưa được gán!");
     }
 
-    // --- Code tìm phòng cũ của bạn ---
-    public void OnClick_Refresh()
+    void OnClick_CreateGame()
     {
-        // code cũ...
+        Debug.Log("[FindLobby] Chuyển sang CreateRoom.");
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.NavigateTo(UIManager.Instance.UICreateRoom);
+        else
+            Debug.LogWarning("[FindLobby] UIManager.Instance là null!");
+    }
+
+    void OnClick_Back()
+    {
+        if (UIManager.Instance != null)
+            UIManager.Instance.NavigateBack();
     }
 }

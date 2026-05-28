@@ -11,8 +11,8 @@ public class UIManager : MonoBehaviour
     public CanvasGroup UIPlayOnline;
     public CanvasGroup UICreateRoom;
     public CanvasGroup UIFindLobby;
+    public CanvasGroup UILobby; // Thêm vào Inspector
 
-    // Theo dõi panel hiện tại trực tiếp - KHÔNG dùng GetCurrentPanel() nữa
     private CanvasGroup currentPanel;
     private Stack<CanvasGroup> history = new Stack<CanvasGroup>();
 
@@ -25,49 +25,51 @@ public class UIManager : MonoBehaviour
     void Start()
     {
         HideAll();
-        // Mở Menu, đặt currentPanel = Menu
         ShowPanel(UIMenu);
         currentPanel = UIMenu;
     }
 
-    // =====================
-    // HÀM ĐIỀU HƯỚNG CHÍNH
-    // =====================
-
     public void NavigateTo(CanvasGroup nextPanel)
     {
         if (nextPanel == null) return;
-        if (nextPanel == currentPanel) return; // Tránh navigate tới chính nó
+        if (nextPanel == currentPanel) return;
 
-        // Lưu panel hiện tại vào history
         if (currentPanel != null)
         {
             history.Push(currentPanel);
             HidePanel(currentPanel);
         }
 
-        // Hiện panel mới
         ShowPanel(nextPanel);
-        currentPanel = nextPanel; // Cập nhật panel hiện tại
+        currentPanel = nextPanel;
     }
 
     public void NavigateBack()
     {
         if (history.Count == 0) return;
 
-        // Ẩn panel hiện tại
         if (currentPanel != null)
             HidePanel(currentPanel);
 
-        // Lấy panel trước
         CanvasGroup previous = history.Pop();
         ShowPanel(previous);
-        currentPanel = previous; // Cập nhật panel hiện tại
+        currentPanel = previous;
     }
 
-    // =====================
-    // HÀM TIỆN ÍCH
-    // =====================
+    // Quit Room → thẳng về PlayOnline, xóa history
+    public void QuitToPlayOnline()
+    {
+        if (currentPanel != null)
+            HidePanel(currentPanel);
+
+        history.Clear();
+
+        ShowPanel(UIPlayOnline);
+        currentPanel = UIPlayOnline;
+
+        // Giữ Menu trong history để Back từ PlayOnline về Menu
+        history.Push(UIMenu);
+    }
 
     void ShowPanel(CanvasGroup cg)
     {
@@ -92,5 +94,6 @@ public class UIManager : MonoBehaviour
         HidePanel(UIPlayOnline);
         HidePanel(UICreateRoom);
         HidePanel(UIFindLobby);
+        HidePanel(UILobby);
     }
 }
