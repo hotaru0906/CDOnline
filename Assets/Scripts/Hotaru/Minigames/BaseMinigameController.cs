@@ -57,7 +57,28 @@ public abstract class BaseMinigameController : NetworkBehaviour
     [Networked]
     public int AlivePlayerCount { get; protected set; }
 
+    /// <summary>
+    /// Kết quả cuối game — tự replicate xuống tất cả client sau EndGame().
+    /// UI đọc mảng này khi OnScoreboardReady fires.
+    /// </summary>
+    [Networked, Capacity(8)]
+    public NetworkArray<MinigameResultData> ScoreboardResults { get; }
+
+    /// <summary>Timer chuyển từ GameOver → Scoreboard phase sau 2.5s.</summary>
+    [Networked]
+    private TickTimer ScoreboardTransitionTimer { get; set; }
+
     #endregion
+
+    // ----------------------------------------------------------------
+    //  Scoreboard Event — UI hook
+    // ----------------------------------------------------------------
+
+    /// <summary>
+    /// Fires trên tất cả client khi Scoreboard phase bắt đầu.
+    /// UI subscribe để đọc ScoreboardResults và hiển thị bảng xếp hạng.
+    /// </summary>
+    public static event System.Action OnScoreboardReady;
 
     protected MinigameData _minigameData;
 
@@ -215,6 +236,9 @@ public abstract class BaseMinigameController : NetworkBehaviour
     {
         Debug.Log($"[{GetType().Name}] Scoreboard phase");
 
+        // Notify UI trên tất cả client — UI đọc ScoreboardResults và render bảng xếp hạng
+        OnScoreboardReady?.Invoke();
+
         if (GameManager.Instance != null)
             GameManager.Instance.ShowMinigameScoreboard();
 
@@ -229,6 +253,13 @@ public abstract class BaseMinigameController : NetworkBehaviour
 
     /// <summary>Log kết quả ra console. Override trong derived class.</summary>
     protected virtual void LogScoreboardInfo() { }
+
+    /// <summary>
+    /// Populate ScoreboardResults NetworkArray với kết quả cuối game.
+    /// Gọi từ EndGame() trên host, trước khi chuyển sang GameOver phase.
+    /// Override trong derived class.
+    /// </summary>
+    protected virtual void BuildScoreboardResults() { }
 
     // ----------------------------------------------------------------
     //  Countdown — managed by GameManager
@@ -271,6 +302,13 @@ public abstract class BaseMinigameController : NetworkBehaviour
         {
             Debug.Log($"[{GetType().Name}] GameManager → Playing!");
             CurrentPhase = MinigamePhase.Playing;
+        }
+
+        // GameOver → Scoreboard transition (2.5s sau EndGame)
+        if (CurrentPhase == MinigamePhase.GameOver && ScoreboardTransitionTimer.Expired(Runner))
+        {
+            ScoreboardTransitionTimer = default;
+            CurrentPhase = MinigamePhase.Scoreboard;
         }
 
         if (CurrentPhase != MinigamePhase.Playing || IsGameEnded) return;
@@ -347,10 +385,14 @@ public abstract class BaseMinigameController : NetworkBehaviour
         IsGameEnded = true;
         CurrentPhase = MinigamePhase.GameOver;
 
-        if (HasStateAuthority && GameManager.Instance != null)
+        if (HasStateAuthority)
         {
-            GameManager.Instance.ShowMinigameScoreboard();
-            GameManager.Instance.EndMinigame(winner.PlayerId);
+            // Build kết quả trước khi chuyển phase (data replicate cùng lúc với phase change)
+            BuildScoreboardResults();
+            ScoreboardTransitionTimer = TickTimer.CreateFromSeconds(Runner, 2.5f);
+
+            if (GameManager.Instance != null)
+                GameManager.Instance.EndMinigame(winner.PlayerId);
         }
     }
 

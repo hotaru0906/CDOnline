@@ -3,24 +3,27 @@ using UnityEngine;
 /// <summary>
 /// C9 — Sàn nghiêng (Tilting Platform).
 /// Tính số player đứng bên trái và phải, nghiêng về bên nhiều người hơn.
-/// Hai trigger zone (trái/phải) đếm số player vào/ra.
+/// Càng nhiều player cùng 1 bên → sàn nghiêng nhanh hơn.
 ///
 /// Setup prefab:
-///   - Object gốc: bệ đỡ (pivot điểm giữa)
+///   - Object gốc: bệ đỡ (pivot điểm giữa) — gắn component này ở đây
 ///   - platformMesh: con của object gốc, mesh sàn (sẽ xoay)
-///   - leftZone: Collider trigger bên trái (gọi NotifyPlayerEntered/Exited với side = -1)
-///   - rightZone: Collider trigger bên phải (gọi NotifyPlayerEntered/Exited với side = +1)
-///   - Gắn component này lên object GỐC
-///
-/// Lưu ý: Trigger zone trái/phải cần relay component TiltZoneRelay để gọi lên đây.
+///   - leftZoneRelay:  child GameObject có BoxCollider (Is Trigger ✓) + TiltZoneRelay (side = -1)
+///   - rightZoneRelay: child GameObject có BoxCollider (Is Trigger ✓) + TiltZoneRelay (side = +1)
+///   → TiltZoneRelay tự tìm TiltingPlatform ở parent nếu không gán tay.
 /// </summary>
 public class TiltingPlatform : MonoBehaviour
 {
     [Header("Platform")]
-    [SerializeField] private Transform platformMesh;   // phần sàn sẽ xoay
-    [SerializeField] private float maxTiltAngle = 30f; // góc nghiêng tối đa (độ)
-    [SerializeField] private float tiltSpeed = 2f;     // tốc độ nghiêng (độ/giây)
+    [SerializeField] private Transform platformMesh;         // phần sàn sẽ xoay
+    [SerializeField] private float maxTiltAngle = 30f;       // góc nghiêng tối đa (độ)
+    [SerializeField] private float tiltSpeed = 2f;           // tốc độ nghiêng cơ bản (độ/giây)
+    [SerializeField] private float tiltSpeedPerPlayer = 1.5f;// tốc độ cộng thêm mỗi player cùng bên
     [SerializeField] private Vector3 tiltAxis = Vector3.forward; // trục nghiêng (thường là Z)
+
+    [Header("Trigger Zones (assign child TiltZoneRelay objects)")]
+    [SerializeField] private TiltZoneRelay leftZoneRelay;    // child bên trái  (side = -1)
+    [SerializeField] private TiltZoneRelay rightZoneRelay;   // child bên phải (side = +1)
 
     [Header("Knockback — khi sàn nghiêng đẩy player")]
     [SerializeField] private float slideForce = 4f;
@@ -33,18 +36,19 @@ public class TiltingPlatform : MonoBehaviour
 
     private void Update()
     {
-        // Tính góc mục tiêu dựa trên chênh lệch số player
-        int diff = _playersRight - _playersLeft; // >0 → nghiêng phải; <0 → nghiêng trái
+        // Góc mục tiêu theo chênh lệch số player (>0 → nghiêng phải, <0 → nghiêng trái)
+        int diff = _playersRight - _playersLeft;
         _targetTiltAngle = Mathf.Clamp(diff * (maxTiltAngle / 2f), -maxTiltAngle, maxTiltAngle);
 
-        // Lerp về góc mục tiêu
+        // Tốc độ tỷ lệ với số player ở bên đông hơn
+        int heavySide = Mathf.Max(_playersLeft, _playersRight);
+        float effectiveSpeed = tiltSpeed + heavySide * tiltSpeedPerPlayer;
+
         _currentTiltAngle = Mathf.MoveTowards(
-            _currentTiltAngle, _targetTiltAngle, tiltSpeed * Time.deltaTime);
+            _currentTiltAngle, _targetTiltAngle, effectiveSpeed * Time.deltaTime);
 
         if (platformMesh != null)
-        {
             platformMesh.localRotation = Quaternion.AngleAxis(_currentTiltAngle, tiltAxis);
-        }
     }
 
     // Gọi bởi TiltZoneRelay
@@ -75,26 +79,4 @@ public class TiltingPlatform : MonoBehaviour
     }
 }
 
-/// <summary>
-/// Helper relay: gắn lên Collider trigger trái/phải của TiltingPlatform.
-/// Gọi ngược về TiltingPlatform khi player vào/ra.
-/// </summary>
-public class TiltZoneRelay : MonoBehaviour
-{
-    [SerializeField] private TiltingPlatform platform;
-    [SerializeField] private int side = -1; // -1 = trái, +1 = phải
 
-    private void OnTriggerEnter(Collider other)
-    {
-        if (platform == null) return;
-        if (!other.TryGetComponent(out PlayerController _)) return;
-        platform.NotifyPlayerEntered(side);
-    }
-
-    private void OnTriggerExit(Collider other)
-    {
-        if (platform == null) return;
-        if (!other.TryGetComponent(out PlayerController _)) return;
-        platform.NotifyPlayerExited(side);
-    }
-}

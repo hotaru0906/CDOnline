@@ -351,53 +351,93 @@ NOTE KIẾN TRÚC TRƯỚC KHI LÀM
       - Gợi ý: Physics Material friction thấp khi nghiêng nhiều
 
 ================================================================
-  PHASE 6 — NETWORKING / FUSION RULES
+  PHASE 6 — NETWORKING / FUSION RULES  [DONE ✓]
 ================================================================
 
   RULE CỰC QUAN TRỌNG:
     - CHỈ HOST xử lý: trap hit, checkpoint, finish line, ranking
     - Client CHỈ: animation, VFX, UI
 
-  [ ] Tạo RPC riêng cho từng loại event:
-      RPC_PlayTrapFX(trapId)     - hiệu ứng bẫy
-      RPC_ShowRank(playerRef, rank)  - hiện "1st!" "2nd!"
-      RPC_OnRespawn(playerRef)   - hiệu ứng respawn
+  [✓] RPC_PlayTrapFX      → BaseObstacle.RPC_PlayHitEffects()
+                             Gọi PlayFX() + PlaySFX() trên tất cả client khi obstacle hit.
+
+  [✓] RPC_ShowRank        → MG2RacingController.RPC_OnPlayerRanked(playerRef, rank)
+                             Hiện log "1st / 2nd / 3rd..." trên tất cả client.
+                             TODO Phase 8 (UI): hookup badge UI cho player tương ứng.
+
+  [✓] RPC_OnRespawn       → PlayerMinigameData.RPC_OnRespawn(playerRef)
+                             Broadcast khi player respawn. Body trống chờ VFX (Phase 8).
 
 ================================================================
-  PHASE 7 — SCOREBOARD SYSTEM MỚI
+  PHASE 7 — SCOREBOARD SYSTEM MỚI  [DONE ✓]
 ================================================================
 
-  THAY Winner/Loser bằng bảng xếp hạng:
-    Rank | Player | Time
-    1st  |   A    | 01:12
-    2nd  |   B    | 01:14
+  [✓] MinigameResultData.cs (INetworkStruct)
+        Assets/Scripts/Hotaru/Minigames/MinigameResultData.cs
+        Fields: PlayerRef Player, int Rank, float FinishTime, int Score, NetworkBool IsValid
 
-  [ ] Tạo struct kết quả:
-      public struct MinigameResultData
-      {
-          public PlayerRef Player;
-          public int   Rank;
-          public float FinishTime;
-          public int   Score;
-      }
+  [✓] BaseMinigameController — thêm:
+        NetworkArray<MinigameResultData> ScoreboardResults [Networked, Capacity(8)]
+          → tự replicate xuống tất cả client ngay khi EndGame()
+        TickTimer ScoreboardTransitionTimer
+          → GameOver phase → 2.5s delay → Scoreboard phase (tự động)
+        static event Action OnScoreboardReady
+          → fires trên tất cả client trong HandleScoreboardPhase()
+          → UI subscribe event này để render bảng xếp hạng
+        virtual BuildScoreboardResults()
+          → gọi trong EndGame() trước khi chuyển phase
+
+  [✓] MG2RacingController — override BuildScoreboardResults():
+        Sort PlayerMinigameData theo FinishRank → populate ScoreboardResults array
+
+  FLOW CUỐI GAME:
+    EndGame(winner)
+        → BuildScoreboardResults()        [host, data replicate ngay]
+        → CurrentPhase = GameOver         [freeze players]
+        → ScoreboardTransitionTimer 2.5s
+        → CurrentPhase = Scoreboard       [OnChangedRender fires trên tất cả client]
+        → HandleScoreboardPhase()
+            → OnScoreboardReady.Invoke()  [UI hook]
+            → GameManager.ShowMinigameScoreboard()
+            → LogScoreboardInfo()         [console log]
+
+  TODO Phase 8 (UI hookup):
+  [ ] Tạo ScoreboardUI.cs — subscribe OnScoreboardReady, đọc ScoreboardResults,
+      render bảng Rank | PlayerName | Time
 
 ================================================================
   PHASE 8 — TESTING PIPELINE
 ================================================================
 
+  ⚠️  VFX HOOKUP CẦN LÀM TRƯỚC KHI TEST VISUAL:
+  ─────────────────────────────────────────────────────────────
+  [ ] BaseObstacle.PlayFX()       — gắn ParticleSystem vào hitEffect slot trên mỗi obstacle prefab
+  [ ] BaseObstacle.PlaySFX()      — gắn AudioSource vào hitSound slot
+  [ ] MG2RacingController
+        RPC_OnPlayerRanked()      — hookup badge UI "1st / 2nd / 3rd" cho đúng player
+  [ ] PlayerMinigameData
+        RPC_OnRespawn()           — hookup particle / flash / sound khi respawn
+  [ ] MG2RacingFinishLine
+        RPC_PlayFinishEffect()    — gắn finishEffect + finishSound vào prefab finish line
+  ─────────────────────────────────────────────────────────────
+
   Test theo thứ tự:
   [ ] 1. Single Player:
-         - Về đích bình thường
-         - Timeout
-         - Respawn tại checkpoint
+         - Về đích bình thường → rank = 1, log scoreboard đúng
+         - Timeout → FinalizeRanks() gán rank theo DistanceProgress
+         - Chạm obstacle → Die() → respawn tại checkpoint → invincible ~2s
+         - Rơi vào KillZone → respawn đúng checkpoint
 
   [ ] 2. 2 Players:
-         - Cùng finish gần nhau
-         - 1 người disconnect giữa chừng
-         - Finish cùng tick
+         - Cùng finish gần nhau → rank 1 / rank 2 đúng thứ tự
+         - 1 người disconnect giữa chừng → game không crash
+         - Obstacle chạm player non-host → Die() broadcast đúng
+         - JumpPad cho cả 2 players → launchSpeed nhất quán
 
   [ ] 3. Full Lobby:
-         - Ranking đúng thứ tự
+         - Ranking đúng thứ tự khi tất cả về đích
+         - Timeout: player còn lại sort đúng theo DistanceProgress
+         - Scoreboard log đúng tên + thời gian
          - Obstacle với latency cao
          - Spam obstacle liên tục
 

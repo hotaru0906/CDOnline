@@ -300,7 +300,21 @@ public class PlayerMinigameData : NetworkBehaviour
         IsInvincible = true;
         InvincibilityTimer = TickTimer.CreateFromSeconds(Runner, invincibilityTime);
 
+        // Broadcast respawn FX xuống tất cả client
+        RPC_OnRespawn(Object.InputAuthority);
+
         Debug.Log("[PlayerMinigameData] Respawn complete!");
+    }
+
+    /// <summary>
+    /// Broadcast khi player respawn — client dùng để play VFX / animation.
+    /// Body để trống cho đến khi có VFX asset (Phase 8).
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnRespawn(PlayerRef playerRef)
+    {
+        // TODO Phase 8: play respawn particle / flash / sound ở đây
+        Debug.Log($"[PlayerMinigameData] RPC_OnRespawn → Player {playerRef}");
     }
     
     /// <summary>

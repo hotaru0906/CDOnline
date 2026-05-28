@@ -140,6 +140,40 @@ public class MG2RacingController : BaseMinigameController
     //  Scoreboard
     // ----------------------------------------------------------------
 
+    protected override void BuildScoreboardResults()
+    {
+        var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        var sorted = new List<PlayerMinigameData>(players);
+
+        sorted.Sort((a, b) =>
+        {
+            if (a.FinishRank == 0 && b.FinishRank == 0)
+                return b.DistanceProgress.CompareTo(a.DistanceProgress);
+            if (a.FinishRank == 0) return 1;
+            if (b.FinishRank == 0) return -1;
+            return a.FinishRank.CompareTo(b.FinishRank);
+        });
+
+        // Clear toàn bộ array trước
+        for (int i = 0; i < ScoreboardResults.Length; i++)
+            ScoreboardResults.Set(i, default);
+
+        for (int i = 0; i < sorted.Count && i < ScoreboardResults.Length; i++)
+        {
+            var p = sorted[i];
+            ScoreboardResults.Set(i, new MinigameResultData
+            {
+                Player      = p.Object.InputAuthority,
+                Rank        = p.FinishRank > 0 ? p.FinishRank : (i + 1),
+                FinishTime  = p.FinishTime,
+                Score       = p.Score,
+                IsValid     = true
+            });
+        }
+
+        Debug.Log($"[MG2RacingController] ScoreboardResults built — {sorted.Count} entries.");
+    }
+
     protected override void LogScoreboardInfo()
     {
         Debug.Log("========== SCOREBOARD (MG2 Racing) ==========");
