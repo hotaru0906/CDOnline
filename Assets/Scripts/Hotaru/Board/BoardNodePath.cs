@@ -127,6 +127,32 @@ public class BoardNodePath : MonoBehaviour
         return traveled[tIdx];
     }
 
+    /// <summary>
+    /// Tính đường đi LÙI 'steps' bước từ currentNode, dựa theo thứ tự trong nodes list.
+    /// Dùng cho PushBack Board item — di chuyển target về phía sau.
+    /// Nếu currentNode không có trong list (ví dụ dead-end branch), trả về currentNode.
+    /// </summary>
+    public BoardNode GetNodeBeforeSteps(BoardNode current, int steps, out int[] visitedNodeIDs)
+    {
+        var path = new List<int>();
+        int idx = nodes.IndexOf(current);
+
+        if (idx < 0)
+        {
+            visitedNodeIDs = path.ToArray();
+            return current;
+        }
+
+        for (int i = 0; i < steps; i++)
+        {
+            idx = Mathf.Max(0, idx - 1);
+            path.Add(nodes[idx].nodeID);
+        }
+
+        visitedNodeIDs = path.ToArray();
+        return nodes[idx];
+    }
+
     private void OnDrawGizmos()
     {
 #if UNITY_EDITOR

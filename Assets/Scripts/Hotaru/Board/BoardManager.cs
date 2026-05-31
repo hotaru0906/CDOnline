@@ -10,6 +10,7 @@ public enum BoardPhaseState
     Moving,
     ResolvingTile,
     WaitingForTargetSelect,
+    WaitingForItemTarget,
     NextTurn,
     BoardComplete
 }
@@ -37,8 +38,10 @@ public class BoardManager : NetworkBehaviour
 
     [Header("References")]
     [SerializeField] private BoardDice dice;
-    [Tooltip("ScriptableObject chứa danh sách items cho Item/Jackpot tiles")]
-    [SerializeField] private ItemPool itemPool;
+    [Tooltip("ScriptableObject chứa danh sách Board items cho Item/Jackpot tiles")]
+    [SerializeField] private BoardItemPool boardItemPool;
+    [Tooltip("ScriptableObject chứa danh sách Roulette items để phân phối Board Race reward")]
+    [SerializeField] private ItemPool rouletteItemPool;
 
     [Header("Tokens — pre-place 4 token trong BoardScene, set playerSlotIndex 0-3")]
     [SerializeField] private BoardPlayerToken[] tokens = new BoardPlayerToken[4];
@@ -83,6 +86,9 @@ public class BoardManager : NetworkBehaviour
     // Steal phase — PlayerId của người đang steal (-1 = không ai)
     [Networked] public int StealerPlayerId { get; private set; } = -1;
 
+    // Item use phase — PlayerId của người đang dùng PushBack (-1 = không ai)
+    [Networked] public int ItemUserPlayerId { get; private set; } = -1;
+
     // =====================================================================
     // LOCAL STATE (chỉ có nghĩa trên host)
     // =====================================================================
@@ -94,6 +100,16 @@ public class BoardManager : NetworkBehaviour
 
     // Steal coordination — chỉ có nghĩa trên host
     private int  _stealPendingTargetId = -1;
+
+    // Item use — chỉ có nghĩa trên host
+    private int  _itemTargetPendingId  = -1;
+    private bool[] _forceEvenDice = new bool[4];  // per slot, set khi EvenDice item dùng
+    private int[]  _bonusSteps    = new int[4];   // per slot, set khi RushForward item dùng
+
+    // Item use coordination — local client
+    private bool _itemUsedThisTurn        = false;
+    private bool _waitingForMyItemTarget  = false;
+    private System.Collections.Generic.List<int> _eligibleItemTargets = new();
 
     // Steal target selection UI — local client (chỉ stealer thấy)
     private bool _waitingForMyStealTarget = false;
@@ -325,7 +341,9 @@ public class BoardManager : NetworkBehaviour
         _waitingForMyRoll = false;
         if (Runner != null && Runner.LocalPlayer.PlayerId == playerId)
         {
-            _waitingForMyRoll = true;
+            _waitingForMyRoll    = true;
+            _itemUsedThisTurn    = false;
+            _waitingForMyItemTarget = false;
             Debug.Log("[BoardManager] IT'S MY TURN — Roll button enabled");
         }
     }
@@ -352,6 +370,23 @@ public class BoardManager : NetworkBehaviour
         RPC_SubmitRollRequest(myId);
     }
 
+    /// <summary>
+    /// Local player dùng Board item TRƯỚC khi roll (max 1 lần/lượt).
+    /// itemSlot: slot index trong BoardItems của player đó.
+    /// effect: loại item (để validate phía host).
+    /// </summary>
+    public void RequestUseItem(int itemSlot, BoardItemEffect effect)
+    {
+        if (!_waitingForMyRoll)                          return;
+        if (_itemUsedThisTurn)                           return;
+        if (BoardState != BoardPhaseState.WaitingForRoll) return;
+
+        int myId = Runner?.LocalPlayer.PlayerId ?? -1;
+        if (myId < 0) return;
+
+        RPC_SubmitItemUseRequest(myId, itemSlot, (int)effect);
+    }
+
     // RpcSources.All: bất kỳ client nào cũng có thể gọi
     // RpcTargets.StateAuthority: chỉ host nhận và xử lý
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -367,12 +402,169 @@ public class BoardManager : NetworkBehaviour
         }
 
         BoardState = BoardPhaseState.Rolling;
+        int slot   = CurrentSlot;
         int result = dice != null ? dice.Roll() : Random.Range(1, 7);
+
+        // Apply EvenDice — nếu flag bật, đảm bảo kết quả là số chẵn
+        if (_forceEvenDice[slot])
+        {
+            if (result % 2 != 0)
+                result = (result + 1 <= 6) ? result + 1 : result - 1;
+            _forceEvenDice[slot] = false;
+        }
+
+        // Apply RushForward bonus
+        result += _bonusSteps[slot];
+        _bonusSteps[slot] = 0;
 
         Debug.Log($"[BoardManager] Player {requestingPlayerId} rolled {result}");
         RPC_ShowDiceResult(requestingPlayerId, result);
 
-        StartCoroutine(ExecuteMovement(CurrentSlot, requestingPlayerId, result));
+        StartCoroutine(ExecuteMovement(slot, requestingPlayerId, result));
+    }
+
+    // =====================================================================
+    // ITEM USE
+    // =====================================================================
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_SubmitItemUseRequest(int userId, int itemSlot, int effectId)
+    {
+        if (!HasStateAuthority) return;
+        if (BoardState != BoardPhaseState.WaitingForRoll) return;
+        if (userId != CurrentPlayerID) return;
+
+        var inv = PlayerItemInventory.GetForPlayer(userId);
+        if (inv == null) return;
+
+        // Validate: slot đúng không?
+        if (itemSlot < 0 || inv.BoardItems.Get(itemSlot) != effectId) return;
+
+        inv.RemoveBoardItem(itemSlot);
+
+        var effect = (BoardItemEffect)effectId;
+        int slot   = CurrentSlot;
+
+        if (effect == BoardItemEffect.RushForward)
+        {
+            _bonusSteps[slot] = 2;
+            RPC_ItemUsed(userId, effectId);
+        }
+        else if (effect == BoardItemEffect.EvenDice)
+        {
+            _forceEvenDice[slot] = true;
+            RPC_ItemUsed(userId, effectId);
+        }
+        else if (effect == BoardItemEffect.PushBack)
+        {
+            BoardState        = BoardPhaseState.WaitingForItemTarget;
+            ItemUserPlayerId  = userId;
+            _itemTargetPendingId = -1;
+
+            var eligibles = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < ActivePlayerCount; i++)
+            {
+                int pid = GetPlayerIDAtSlot(i);
+                if (pid >= 0 && pid != userId) eligibles.Add(pid);
+            }
+
+            RPC_BeginItemTargetSelect(userId, eligibles.ToArray());
+            StartCoroutine(WaitForItemTargetSelect(slot, userId));
+        }
+    }
+
+    private System.Collections.IEnumerator WaitForItemTargetSelect(int userSlot, int userId)
+    {
+        float elapsed = 0f;
+        while (_itemTargetPendingId == -1 && elapsed < 10f)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        // Timeout: tự chọn player đầu tiên không phải mình
+        if (_itemTargetPendingId == -1)
+        {
+            for (int i = 0; i < ActivePlayerCount; i++)
+            {
+                int pid = GetPlayerIDAtSlot(i);
+                if (pid >= 0 && pid != userId) { _itemTargetPendingId = pid; break; }
+            }
+        }
+
+        if (_itemTargetPendingId == -1)
+        {
+            // Không có target (edge case: chỉ 1 player) — bỏ qua
+            BoardState       = BoardPhaseState.WaitingForRoll;
+            ItemUserPlayerId = -1;
+            RPC_ItemUsed(userId, (int)BoardItemEffect.PushBack);
+            yield break;
+        }
+
+        // Thực hiện PushBack: di chuyển target lùi 2 ô
+        int targetId   = _itemTargetPendingId;
+        int targetSlot = -1;
+        for (int i = 0; i < ActivePlayerCount; i++)
+            if (GetPlayerIDAtSlot(i) == targetId) { targetSlot = i; break; }
+
+        if (targetSlot >= 0)
+        {
+            var pathObj     = BoardNodePath.Instance;
+            var currentNode = pathObj?.GetNodeByID(GetNodeIDAtSlot(targetSlot));
+            if (pathObj != null && currentNode != null)
+            {
+                var dest = pathObj.GetNodeBeforeSteps(currentNode, 2, out int[] pathIDs);
+                SetNodeIDAtSlot(targetSlot, dest.nodeID);
+                if (pathIDs.Length > 0)
+                {
+                    RPC_AnimateMovement(targetSlot, pathIDs);
+                    float wait = pathIDs.Length * (1f / 4f) + 0.4f;
+                    yield return new WaitForSeconds(wait);
+                }
+            }
+        }
+
+        BoardState       = BoardPhaseState.WaitingForRoll;
+        ItemUserPlayerId = -1;
+        RPC_ItemUsed(userId, (int)BoardItemEffect.PushBack);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_BeginItemTargetSelect(int userId, int[] eligibles)
+    {
+        if (Runner != null && Runner.LocalPlayer.PlayerId == userId)
+        {
+            _waitingForMyItemTarget = true;
+            _eligibleItemTargets    = new System.Collections.Generic.List<int>(eligibles);
+        }
+        Debug.Log($"[BoardManager] P{userId} đang chọn target cho PushBack...");
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_SubmitItemTargetSelect(int userId, int targetId)
+    {
+        if (!HasStateAuthority) return;
+        if (BoardState != BoardPhaseState.WaitingForItemTarget) return;
+        if (userId != ItemUserPlayerId) return;
+        _itemTargetPendingId = targetId;
+        Debug.Log($"[BoardManager] P{userId} chọn P{targetId} cho PushBack");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ItemUsed(int userId, int effectId)
+    {
+        var effect     = (BoardItemEffect)effectId;
+        string effName = BoardItemPool.Current?.GetByEffect(effect)?.itemName ?? effect.ToString();
+        _lastTileMessage      = $"P{userId} dùng: {effName}!";
+        _lastTileMessageTimer = tileResolveDuration;
+
+        if (Runner != null && Runner.LocalPlayer.PlayerId == userId)
+        {
+            _itemUsedThisTurn       = true;
+            _waitingForMyItemTarget = false;
+        }
+
+        Debug.Log($"[BoardManager] {_lastTileMessage}");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -443,17 +635,12 @@ public class BoardManager : NetworkBehaviour
             ResolveToss(playerId);
             yield return new WaitForSeconds(tileResolveDuration);
         }
-        else if (tileType == TileType.Shuffle)
-        {
-            ResolveShuffle(playerId);
-            yield return new WaitForSeconds(tileResolveDuration);
-        }
         else
         {
             // Item, Jackpot, Gamble, Empty — generic effect via BoardNode
             var node = BoardNodePath.Instance?.GetNodeByID(finalNodeID);
             if (node != null)
-                node.CreateEffect(itemPool).Resolve(playerId);
+                node.CreateEffect(boardItemPool).Resolve(playerId);
             RPC_PlayerLanded(playerId, finalNodeID, tileType);
             yield return new WaitForSeconds(tileResolveDuration);
         }
@@ -472,14 +659,14 @@ public class BoardManager : NetworkBehaviour
 
     private IEnumerator HandleStealTile(int stealerId, int nodeID)
     {
-        // Tìm targets eligible: có item, không phải stealer
+        // Tìm targets eligible: có Board item, không phải stealer
         var eligibles = new System.Collections.Generic.List<int>();
         for (int i = 0; i < ActivePlayerCount; i++)
         {
             int pid = GetPlayerIDAtSlot(i);
             if (pid < 0 || pid == stealerId) continue;
             var inv = PlayerItemInventory.GetForPlayer(pid);
-            if (inv != null && inv.GetItemCount() > 0)
+            if (inv != null && inv.GetBoardItemCount() > 0)
                 eligibles.Add(pid);
         }
 
@@ -516,21 +703,14 @@ public class BoardManager : NetworkBehaviour
         var targetInv  = PlayerItemInventory.GetForPlayer(targetId);
         int stolenEffect = -1;
 
-        if (stealerInv != null && targetInv != null && targetInv.GetItemCount() > 0)
+        if (stealerInv != null && targetInv != null && targetInv.GetBoardItemCount() > 0)
         {
-            var items  = targetInv.GetItems();
+            var items  = targetInv.GetBoardItemsWithSlots();
             var chosen = items[Random.Range(0, items.Count)];
-            stolenEffect = (int)chosen;
+            stolenEffect = (int)chosen.effect;
 
-            for (int s = 0; s < 8; s++)
-            {
-                if (targetInv.HeldItems.Get(s) == stolenEffect)
-                {
-                    targetInv.RemoveItem(s);
-                    break;
-                }
-            }
-            stealerInv.AddItem(chosen);
+            targetInv.RemoveBoardItem(chosen.slot);
+            stealerInv.AddBoardItem(chosen.effect);
         }
 
         BoardState      = BoardPhaseState.ResolvingTile;
@@ -544,50 +724,15 @@ public class BoardManager : NetworkBehaviour
         var inv = PlayerItemInventory.GetForPlayer(playerId);
         int lostEffect = -1;
 
-        if (inv != null && inv.GetItemCount() > 0)
+        if (inv != null && inv.GetBoardItemCount() > 0)
         {
-            var items  = inv.GetItems();
+            var items  = inv.GetBoardItemsWithSlots();
             var chosen = items[Random.Range(0, items.Count)];
-            lostEffect = (int)chosen;
-
-            for (int s = 0; s < 8; s++)
-            {
-                if (inv.HeldItems.Get(s) == lostEffect)
-                {
-                    inv.RemoveItem(s);
-                    break;
-                }
-            }
+            lostEffect = (int)chosen.effect;
+            inv.RemoveBoardItem(chosen.slot);
         }
 
         RPC_TossResult(playerId, lostEffect);
-    }
-
-    private void ResolveShuffle(int triggerPlayerId)
-    {
-        int victims = 0;
-        for (int i = 0; i < ActivePlayerCount; i++)
-        {
-            int pid = GetPlayerIDAtSlot(i);
-            if (pid < 0) continue;
-            var inv = PlayerItemInventory.GetForPlayer(pid);
-            if (inv == null || inv.GetItemCount() == 0) continue;
-
-            var items  = inv.GetItems();
-            var chosen = items[Random.Range(0, items.Count)];
-
-            for (int s = 0; s < 8; s++)
-            {
-                if (inv.HeldItems.Get(s) == (int)chosen)
-                {
-                    inv.RemoveItem(s);
-                    break;
-                }
-            }
-            victims++;
-        }
-
-        RPC_ShuffleResult(triggerPlayerId, victims);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -625,7 +770,7 @@ public class BoardManager : NetworkBehaviour
     private void RPC_StealResult(int stealerId, int targetId, int itemEffect)
     {
         string itemName = itemEffect >= 0
-            ? (ItemPool.Current?.GetByEffect((ItemEffect)itemEffect)?.itemName ?? ((ItemEffect)itemEffect).ToString())
+            ? (BoardItemPool.Current?.GetByEffect((BoardItemEffect)itemEffect)?.itemName ?? ((BoardItemEffect)itemEffect).ToString())
             : "???";
 
         _lastTileMessage = itemEffect >= 0
@@ -647,7 +792,7 @@ public class BoardManager : NetworkBehaviour
     private void RPC_TossResult(int playerId, int itemEffect)
     {
         string itemName = itemEffect >= 0
-            ? (ItemPool.Current?.GetByEffect((ItemEffect)itemEffect)?.itemName ?? ((ItemEffect)itemEffect).ToString())
+            ? (BoardItemPool.Current?.GetByEffect((BoardItemEffect)itemEffect)?.itemName ?? ((BoardItemEffect)itemEffect).ToString())
             : "nothing";
 
         _lastTileMessage = itemEffect >= 0
@@ -661,25 +806,12 @@ public class BoardManager : NetworkBehaviour
         Debug.Log($"[BoardManager] {_lastTileMessage}");
     }
 
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_ShuffleResult(int triggerPlayerId, int victimCount)
-    {
-        _lastTileMessage = victimCount > 0
-            ? $"SHUFFLE! {victimCount} player(s) lost items!"
-            : "SHUFFLE! (no items to lose)";
-        _lastTileMessageTimer = tileResolveDuration;
-        _reactionLine  = "(*_*) CHAOS!";
-        _reactionTimer = 2f;
-        Debug.Log($"[BoardManager] {_lastTileMessage}");
-    }
-
     private static string GetTileDisplayMessage(TileType type) => type switch
     {
         TileType.Empty   => "",
         TileType.Item    => "GOT ITEM!",
         TileType.Steal   => "STEAL!",
         TileType.Toss    => "TOSS ITEM!",
-        TileType.Shuffle => "SHUFFLE!",
         TileType.Jackpot => "JACKPOT!",
         TileType.Gamble  => "GAMBLE!",
         _                => ""
@@ -711,6 +843,10 @@ public class BoardManager : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         Debug.Log("[BoardManager] Board phase complete!");
+
+        // Phân phối Roulette items theo thứ hạng vị trí trên bàn cờ
+        DistributeRouletteRewards();
+
         BoardState = BoardPhaseState.BoardComplete;
 
         RPC_BoardComplete();
@@ -718,6 +854,61 @@ public class BoardManager : NetworkBehaviour
         // Thông báo GameManager để chuyển sang state tiếp theo
         if (GameManager.Instance != null)
             GameManager.Instance.ProceedFromBoard();
+    }
+
+    /// <summary>
+    /// Xếp hạng player theo vị trí (nodeID lớn hơn = đi xa hơn = rank cao hơn).
+    /// 1st nhận N Roulette items, 2nd nhận N-1, ..., last nhận 1.
+    /// Gọi trên host trước khi BoardComplete.
+    /// </summary>
+    private void DistributeRouletteRewards()
+    {
+        if (rouletteItemPool == null)
+        {
+            Debug.LogWarning("[BoardManager] RouletteItemPool chưa assign — bỏ qua Board Race reward.");
+            return;
+        }
+
+        // Xây dựng bảng xếp hạng theo nodeID (cao hơn = xa hơn)
+        var ranking = new System.Collections.Generic.List<(int playerId, int nodeID)>();
+        for (int i = 0; i < ActivePlayerCount; i++)
+        {
+            int pid = GetPlayerIDAtSlot(i);
+            if (pid >= 0) ranking.Add((pid, GetNodeIDAtSlot(i)));
+        }
+        ranking.Sort((a, b) => b.nodeID.CompareTo(a.nodeID));
+
+        int count     = ranking.Count;
+        int[] pidArr  = new int[count];
+        int[] rewArr  = new int[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            int rewardCount = count - i; // 1st gets count items, last gets 1
+            pidArr[i] = ranking[i].playerId;
+            rewArr[i] = rewardCount;
+
+            var inv = PlayerItemInventory.GetForPlayer(ranking[i].playerId);
+            if (inv == null) continue;
+            for (int k = 0; k < rewardCount; k++)
+            {
+                var item = rouletteItemPool.GetRandom();
+                if (item != null) inv.AddRouletteItem(item.effectType);
+            }
+        }
+
+        RPC_RouletteRewardsDistributed(pidArr, rewArr);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_RouletteRewardsDistributed(int[] playerIds, int[] rewardCounts)
+    {
+        var sb = new System.Text.StringBuilder("BOARD RACE REWARD: ");
+        for (int i = 0; i < playerIds.Length; i++)
+            sb.Append($"P{playerIds[i]}+{rewardCounts[i]}rlt ");
+        _lastTileMessage      = sb.ToString().TrimEnd();
+        _lastTileMessageTimer = 4f;
+        Debug.Log($"[BoardManager] {_lastTileMessage}");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -805,11 +996,12 @@ public class BoardManager : NetworkBehaviour
                 GUILayout.Label($"  P{pid}: (no inventory)");
                 continue;
             }
-            var items = inv.GetItems();
-            string invStr = items.Count > 0
-                ? string.Join(", ", items)
-                : "(empty)";
-            GUILayout.Label($"  P{pid} [{items.Count}/8]: {invStr}");
+            var boardItems    = inv.GetBoardItems();
+            var rouletteItems = inv.GetRouletteItems();
+            string bStr = boardItems.Count    > 0 ? string.Join(",", boardItems)    : "-";
+            string rStr = rouletteItems.Count > 0 ? string.Join(",", rouletteItems) : "-";
+            GUILayout.Label($"  P{pid} Board[{boardItems.Count}/4]:{bStr}");
+            GUILayout.Label($"       Rlt[{rouletteItems.Count}/8]:{rStr}");
         }
 
         // Tile message
@@ -828,6 +1020,25 @@ public class BoardManager : NetworkBehaviour
             GUI.color = Color.cyan;
             GUILayout.Label($"  {_reactionLine}");
             GUI.color = rc;
+        }
+
+        // Item target selection — PushBack (chỉ item user thấy)
+        if (_waitingForMyItemTarget && BoardState == BoardPhaseState.WaitingForItemTarget)
+        {
+            GUILayout.Space(4);
+            var ic = GUI.color;
+            GUI.color = Color.magenta;
+            GUILayout.Label("PUSH BACK — Chọn target:");
+            GUI.color = ic;
+            foreach (int tid in _eligibleItemTargets)
+            {
+                if (GUILayout.Button($"> Push P{tid} back 2"))
+                {
+                    _waitingForMyItemTarget = false;
+                    _eligibleItemTargets.Clear();
+                    RPC_SubmitItemTargetSelect(ItemUserPlayerId, tid);
+                }
+            }
         }
 
         // Steal target selection (chỉ stealer thấy)
@@ -850,10 +1061,10 @@ public class BoardManager : NetworkBehaviour
         }
 
         // Debug: fill inventories for testing
-        if (HasStateAuthority && itemPool != null)
+        if (HasStateAuthority && boardItemPool != null)
         {
             GUILayout.Space(4);
-            if (GUILayout.Button("[DEBUG] Give All 3 Items"))
+            if (GUILayout.Button("[DEBUG] Give All 2 Board Items"))
             {
                 for (int i = 0; i < ActivePlayerCount; i++)
                 {
@@ -861,10 +1072,10 @@ public class BoardManager : NetworkBehaviour
                     if (pid < 0) continue;
                     var inv = PlayerItemInventory.GetForPlayer(pid);
                     if (inv == null) continue;
-                    for (int k = 0; k < 3; k++)
+                    for (int k = 0; k < 2; k++)
                     {
-                        var item = itemPool.GetRandom();
-                        if (item != null) inv.AddItem(item.effectType);
+                        var item = boardItemPool.GetRandom();
+                        if (item != null) inv.AddBoardItem(item.effectType);
                     }
                 }
             }
@@ -873,6 +1084,29 @@ public class BoardManager : NetworkBehaviour
         GUILayout.Space(6);
         if (_waitingForMyRoll && BoardState == BoardPhaseState.WaitingForRoll)
         {
+            // Board item buttons (trước khi roll, tối đa 1 lần/lượt)
+            if (!_itemUsedThisTurn)
+            {
+                int myId  = Runner?.LocalPlayer.PlayerId ?? -1;
+                var myInv = myId >= 0 ? PlayerItemInventory.GetForPlayer(myId) : null;
+                if (myInv != null)
+                {
+                    var slots = myInv.GetBoardItemsWithSlots();
+                    if (slots.Count > 0)
+                    {
+                        var bc = GUI.color;
+                        GUI.color = Color.green;
+                        GUILayout.Label("USE ITEM (optional):");
+                        GUI.color = bc;
+                        foreach (var (slot, effect) in slots)
+                        {
+                            if (GUILayout.Button($"▶ {effect}"))
+                                RequestUseItem(slot, effect);
+                        }
+                    }
+                }
+            }
+
             var oldColor = GUI.color;
             GUI.color = Color.yellow;
             if (GUILayout.Button("►  ROLL DICE  ◄"))

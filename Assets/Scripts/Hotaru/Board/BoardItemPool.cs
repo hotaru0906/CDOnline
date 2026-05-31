@@ -2,25 +2,25 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Danh sách Roulette items phân phối sau Board Race.
-/// Tạo bằng Create > Board > Item Pool trong Project window.
-/// Assign vào BoardManager Inspector để board dùng được.
+/// Pool Board items có thể xuất hiện từ tile Item/Jackpot trên bàn cờ.
+/// Tạo bằng Create > Board > Board Item Pool trong Project window.
+/// Assign vào BoardManager Inspector (field "Board Item Pool").
 /// Weight tự động tính từ item.rarity: Common=6, Rare=3, Legendary=1.
 /// </summary>
-[CreateAssetMenu(menuName = "Board/Item Pool")]
-public class ItemPool : ScriptableObject
+[CreateAssetMenu(menuName = "Board/Board Item Pool")]
+public class BoardItemPool : ScriptableObject
 {
     [System.Serializable]
     public class Entry
     {
-        public ItemData item;
+        public BoardItemData item;
     }
 
-    [Header("Items")]
+    [Header("Board Items")]
     public List<Entry> entries = new List<Entry>();
 
-    // Static reference — set khi Unity load SO vào memory (OnEnable).
-    public static ItemPool Current { get; private set; }
+    // Static reference — set khi Unity load SO vào memory.
+    public static BoardItemPool Current { get; private set; }
 
     private void OnEnable()  { Current = this; }
     private void OnDisable() { if (Current == this) Current = null; }
@@ -38,11 +38,11 @@ public class ItemPool : ScriptableObject
     /// Random 1 item theo rarity weight. Trả về null nếu pool rỗng.
     /// Chỉ gọi trên host.
     /// </summary>
-    public ItemData GetRandom()
+    public BoardItemData GetRandom()
     {
         if (entries == null || entries.Count == 0)
         {
-            Debug.LogWarning("[ItemPool] Pool is empty!");
+            Debug.LogWarning("[BoardItemPool] Pool is empty!");
             return null;
         }
 
@@ -62,7 +62,7 @@ public class ItemPool : ScriptableObject
             if (roll < acc) return e.item;
         }
 
-        // Fallback — lấy entry hợp lệ cuối cùng
+        // Fallback
         for (int i = entries.Count - 1; i >= 0; i--)
             if (entries[i].item != null) return entries[i].item;
 
@@ -71,9 +71,10 @@ public class ItemPool : ScriptableObject
 
     /// <summary>
     /// Random 1 item có rarity >= minRarity.
-    /// Trả về null nếu không có item nào đủ điều kiện (fallback GetRandom()).
+    /// Dùng cho Jackpot tile (đảm bảo ít nhất Rare).
+    /// Trả về null nếu không có item nào đủ điều kiện.
     /// </summary>
-    public ItemData GetRandom(ItemRarity minRarity)
+    public BoardItemData GetRandom(ItemRarity minRarity)
     {
         if (entries == null || entries.Count == 0) return null;
 
@@ -84,7 +85,7 @@ public class ItemPool : ScriptableObject
 
         if (totalWeight == 0)
         {
-            Debug.LogWarning($"[ItemPool] Không có item nào rarity >= {minRarity}, fallback GetRandom().");
+            Debug.LogWarning($"[BoardItemPool] Không có item nào rarity >= {minRarity}, fallback GetRandom().");
             return GetRandom();
         }
 
@@ -102,10 +103,10 @@ public class ItemPool : ScriptableObject
     }
 
     /// <summary>
-    /// Tìm ItemData đầu tiên khớp effectType.
-    /// Dùng để clients hiển thị tên item từ ItemEffect enum (không cần string qua RPC).
+    /// Tìm BoardItemData đầu tiên khớp effectType.
+    /// Dùng để hiển thị tên item từ enum mà không cần truyền string qua RPC.
     /// </summary>
-    public ItemData GetByEffect(ItemEffect effect)
+    public BoardItemData GetByEffect(BoardItemEffect effect)
     {
         if (entries == null) return null;
         foreach (var e in entries)
