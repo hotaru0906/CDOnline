@@ -11,7 +11,11 @@ public class UIManager : MonoBehaviour
     public CanvasGroup UIPlayOnline;
     public CanvasGroup UICreateRoom;
     public CanvasGroup UIFindLobby;
-    public CanvasGroup UILobby; // Thêm vào Inspector
+    public CanvasGroup UILobby;
+    public CanvasGroup UIMiniGame; // ← Thêm mới
+
+    public CanvasGroup UIBoardGame;
+
 
     private CanvasGroup currentPanel;
     private Stack<CanvasGroup> history = new Stack<CanvasGroup>();
@@ -56,18 +60,14 @@ public class UIManager : MonoBehaviour
         currentPanel = previous;
     }
 
-    // Quit Room → thẳng về PlayOnline, xóa history
     public void QuitToPlayOnline()
     {
         if (currentPanel != null)
             HidePanel(currentPanel);
 
         history.Clear();
-
         ShowPanel(UIPlayOnline);
         currentPanel = UIPlayOnline;
-
-        // Giữ Menu trong history để Back từ PlayOnline về Menu
         history.Push(UIMenu);
     }
 
@@ -95,5 +95,7 @@ public class UIManager : MonoBehaviour
         HidePanel(UICreateRoom);
         HidePanel(UIFindLobby);
         HidePanel(UILobby);
+        HidePanel(UIMiniGame); // ← Thêm
+        HidePanel(UIBoardGame); // ← Thêm
     }
 }
