@@ -15,7 +15,6 @@ public class VotingManager : NetworkBehaviour
     #endregion
 
     #region Constants
-    public const int ROULETTE_OPTION_INDEX = 99; // Index đặc biệt cho option Roulette
     #endregion
 
     #region Networked Properties
@@ -168,12 +167,11 @@ public class VotingManager : NetworkBehaviour
 
         Debug.Log($"[VotingManager] Starting voting... Type: {CurrentVotingType}, MinigameCount: {MinigameCount}");
 
-        // Reset ALL votes (cả trong NetworkArray)
+        // Reset ALL votes
         for (int i = 0; i < VoteCounts.Length; i++)
         {
             VoteCounts.Set(i, 0);
         }
-        RouletteVoteCount = 0;
 
         // Reset local vote state trên Host
         hasVoted = false;
@@ -216,90 +214,24 @@ public class VotingManager : NetworkBehaviour
 
         IsVotingActive = false;
 
-        // Xử lý tùy theo loại voting
-        if (CurrentVotingType == VotingType.RouletteOrMinigame)
-        {
-            // So sánh vote Roulette vs tổng vote Minigame
-            int totalMinigameVotes = 0;
-            int maxMinigameVotes = 0;
-            int maxMinigameIndex = 0;
+        WinnerIndex = CalculateWinner();
+        Debug.Log($"[VotingManager] Winner: Minigame #{WinnerIndex}");
 
-            // Đảm bảo luôn đọc ít nhất index 0 (tất cả vote "Continue Minigame" đều vào index 0)
-            int effectiveMinigameCount = Mathf.Max(1, MinigameCount);
-            for (int i = 0; i < effectiveMinigameCount; i++)
-            {
-                int count = VoteCounts.Get(i);
-                totalMinigameVotes += count;
-                if (count > maxMinigameVotes)
-                {
-                    maxMinigameVotes = count;
-                    maxMinigameIndex = i;
-                }
-            }
+        // Notify all clients
+        RPC_OnVotingEnded(WinnerIndex);
 
-            bool chooseRoulette = RouletteVoteCount > totalMinigameVotes;
-            WinnerIndex = chooseRoulette ? ROULETTE_OPTION_INDEX : maxMinigameIndex;
-
-            Debug.Log($"[VotingManager] RouletteOrMinigame result - Roulette: {RouletteVoteCount}, Minigame: {totalMinigameVotes}, Choose Roulette: {chooseRoulette}");
-
-            // Notify all clients
-            RPC_OnVotingEnded(WinnerIndex);
-
-            // Notify GameManager
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnVotingComplete(chooseRoulette);
-
-                // Nếu chọn minigame, hiển thị lại Voting UI (MinigameOnly) để vote chọn minigame
-                // KHÔNG start minigame trực tiếp - phải vote minigame trước
-                if (!chooseRoulette)
-                {
-                    Debug.Log("[VotingManager] Continue Minigame won - showing minigame voting UI");
-                    // Chuẩn bị danh sách minigame mới (đã loại bỏ minigame đã chơi)
-                    if (MinigameVotingManager.Instance != null)
-                    {
-                        MinigameVotingManager.Instance.PrepareNextVotingRoundForRoulette();
-                    }
-                    // Delay một chút để đảm bảo UI đã ẩn trước khi hiện voting mới
-                    StartCoroutine(DelayedStartMinigameVoting());
-                }
-            }
-        }
-        else // MinigameOnly
-        {
-            WinnerIndex = CalculateWinner();
-            Debug.Log($"[VotingManager] Winner: Minigame #{WinnerIndex}");
-
-            // Notify all clients
-            RPC_OnVotingEnded(WinnerIndex);
-
-            // Start the winning minigame
-            if (GameManager.Instance != null)
-            {
-                Debug.Log($"[VotingManager] Calling GameManager.StartMinigame({WinnerIndex})");
-                GameManager.Instance.StartMinigame(WinnerIndex);
-            }
-            else
-            {
-                Debug.LogError("[VotingManager] GameManager.Instance is NULL!");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Delay một chút trước khi hiện Minigame Voting UI
-    /// Để đảm bảo RouletteVoting UI đã được ẩn hoàn toàn
-    /// </summary>
-    private IEnumerator DelayedStartMinigameVoting()
-    {
-        yield return new WaitForSeconds(1f);
-
+        // Start the winning minigame
         if (GameManager.Instance != null)
         {
-            Debug.Log("[VotingManager] Starting minigame voting after delay");
-            GameManager.Instance.StartVoting(VotingType.MinigameOnly);
+            Debug.Log($"[VotingManager] Calling GameManager.StartMinigame({WinnerIndex})");
+            GameManager.Instance.StartMinigame(WinnerIndex);
+        }
+        else
+        {
+            Debug.LogError("[VotingManager] GameManager.Instance is NULL!");
         }
     }
+
     #endregion
 
     #region Vote Submission
@@ -320,14 +252,10 @@ public class VotingManager : NetworkBehaviour
             return;
         }
 
-        // Trong RouletteOrMinigame, index 0 luôn hợp lệ (chỉ có 2 lựa chọn: Roulette vs Continue)
-        if (CurrentVotingType != VotingType.RouletteOrMinigame)
+        if (minigameIndex < 0 || minigameIndex >= MinigameCount)
         {
-            if (minigameIndex < 0 || minigameIndex >= MinigameCount)
-            {
-                Debug.LogWarning($"[VotingManager] Invalid minigame index: {minigameIndex}");
-                return;
-            }
+            Debug.LogWarning($"[VotingManager] Invalid minigame index: {minigameIndex}");
+            return;
         }
 
         hasVoted = true;
@@ -343,44 +271,6 @@ public class VotingManager : NetworkBehaviour
 
         Debug.Log($"[VotingManager] Submitting vote for minigame #{minigameIndex} with weight {voteWeight}");
         RPC_SubmitVote(minigameIndex, voteWeight);
-    }
-
-    /// <summary>
-    /// Submit vote cho Roulette (chỉ dùng khi VotingType = RouletteOrMinigame)
-    /// </summary>
-    public void SubmitRouletteVote()
-    {
-        if (!IsVotingActive)
-        {
-            Debug.LogWarning("[VotingManager] Voting is not active");
-            return;
-        }
-
-        if (hasVoted)
-        {
-            Debug.LogWarning("[VotingManager] Already voted");
-            return;
-        }
-
-        if (CurrentVotingType != VotingType.RouletteOrMinigame)
-        {
-            Debug.LogWarning("[VotingManager] Roulette vote only available in RouletteOrMinigame voting");
-            return;
-        }
-
-        hasVoted = true;
-        localVoteIndex = ROULETTE_OPTION_INDEX;
-
-        // Lấy vote weight của player local
-        int voteWeight = 1;
-        if (RouletteManager.Instance != null && PlayerNetworkData.Local != null)
-        {
-            int playerId = PlayerNetworkData.Local.Object.InputAuthority.PlayerId;
-            voteWeight = RouletteManager.Instance.GetPlayerVoteWeight(playerId);
-        }
-
-        Debug.Log($"[VotingManager] Submitting Roulette vote with weight {voteWeight}");
-        RPC_SubmitRouletteVote(voteWeight);
     }
 
     public bool HasVoted => hasVoted;
@@ -408,34 +298,6 @@ public class VotingManager : NetworkBehaviour
             Debug.Log("[VotingManager] All players have voted!");
             RPC_NotifyAllVoted();
         }
-    }
-
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_SubmitRouletteVote(int voteWeight)
-    {
-        if (!IsVotingActive) return;
-
-        RouletteVoteCount += voteWeight;
-        TotalVotes += voteWeight;
-
-        Debug.Log($"[VotingManager] Roulette vote received (weight: {voteWeight}). Roulette count: {RouletteVoteCount}. Total votes: {TotalVotes}/{TotalVoteWeight}");
-
-        // Notify all clients about the roulette vote update
-        RPC_BroadcastRouletteVoteUpdate(RouletteVoteCount);
-
-        // Timer reduction + instant end handled in FixedUpdateNetwork
-        if (TotalVotes >= TotalVoteWeight)
-        {
-            Debug.Log("[VotingManager] All players have voted!");
-            RPC_NotifyAllVoted();
-        }
-    }
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_BroadcastRouletteVoteUpdate(int newCount)
-    {
-        // UI có thể subscribe event này để update hiển thị
-        OnVoteCountChanged?.Invoke(ROULETTE_OPTION_INDEX, newCount);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -513,16 +375,11 @@ public class VotingManager : NetworkBehaviour
     /// <summary>
     /// Lấy số vote của một option
     /// </summary>
-    /// <param name="index">Index minigame hoặc ROULETTE_OPTION_INDEX</param>
+    /// <param name="index">Index minigame (0..MinigameCount-1)</param>
     public int GetVoteCount(int index)
     {
         // Kiểm tra đã spawn chưa
         if (!IsReady) return 0;
-
-        if (index == ROULETTE_OPTION_INDEX)
-        {
-            return RouletteVoteCount;
-        }
 
         if (index < 0 || index >= MinigameCount)
             return 0;

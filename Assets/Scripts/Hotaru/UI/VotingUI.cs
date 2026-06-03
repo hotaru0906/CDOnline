@@ -7,7 +7,6 @@ using TMPro;
 /// UI quản lý việc vote chọn minigame
 /// - Hiển thị các minigame card để vote
 /// - Tích hợp với MinigameVotingManager để lọc minigame đã chơi
-/// - Roulette voting được xử lý bởi RouletteVotingUI riêng
 /// </summary>
 public class VotingUI : MonoBehaviour
 {
@@ -223,13 +222,6 @@ public class VotingUI : MonoBehaviour
 
     private void UpdateVoteCount(int minigameIndex, int newCount)
     {
-        // Bỏ qua roulette vote count - handled by RouletteVotingUI
-        if (minigameIndex == VotingManager.ROULETTE_OPTION_INDEX)
-        {
-            return;
-        }
-
-        // Handle minigame vote count
         if (minigameIndex >= 0 && minigameIndex < cards.Count)
         {
             cards[minigameIndex].UpdateVoteCount(newCount);
@@ -253,22 +245,17 @@ public class VotingUI : MonoBehaviour
         if (statusText != null)
         {
             int winner = VotingManager.Instance?.WinnerIndex ?? 0;
-            
-            // Chỉ hiển thị kết quả nếu là minigame (không phải roulette)
-            if (winner != VotingManager.ROULETTE_OPTION_INDEX)
+
+            string winnerName = $"Minigame #{winner + 1}";
+            if (MinigameVotingManager.Instance != null)
             {
-                // Lấy tên minigame nếu có
-                string winnerName = $"Minigame #{winner + 1}";
-                if (MinigameVotingManager.Instance != null)
+                var minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(winner);
+                if (minigameData != null)
                 {
-                    var minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(winner);
-                    if (minigameData != null)
-                    {
-                        winnerName = minigameData.minigameName;
-                    }
+                    winnerName = minigameData.minigameName;
                 }
-                statusText.text = $"Starting: {winnerName}!";
             }
+            statusText.text = $"Starting: {winnerName}!";
         }
 
         // Disable all interactions

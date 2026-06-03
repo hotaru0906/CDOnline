@@ -14,6 +14,12 @@ public class BoardPlayerToken : MonoBehaviour
 
     [Header("Visual")]
     [SerializeField] private Renderer tokenRenderer;
+    [SerializeField] private Transform modelAnchor;
+    [SerializeField] private bool usePlayerModelVisual = true;
+    [SerializeField] private bool hideTokenWhenModelLoaded = true;
+    [SerializeField] private GameObject[] fallbackCharacterModels;
+    [SerializeField] private float visualSetupTimeout = 4f;
+    [SerializeField] private float visualRetryInterval = 0.15f;
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 4f;    // nodes per second
@@ -36,6 +42,11 @@ public class BoardPlayerToken : MonoBehaviour
         new Color(0.95f, 0.8f, 0.1f)   // slot 3 — vàng
     };
 
+    private GameObject _spawnedModelVisual;
+    private int _currentCharacterIndex = -1;
+    private Coroutine _visualSetupRoutine;
+    private Coroutine _moveRoutine;
+
     /// <summary>
     /// Gọi bởi BoardManager khi board phase bắt đầu để gán player và snap về node 0.
     /// </summary>
@@ -43,11 +54,37 @@ public class BoardPlayerToken : MonoBehaviour
     {
         ownerPlayerId  = playerId;
         playerSlotIndex = slotIndex;
+        _currentCharacterIndex = -1;
+
+        if (_spawnedModelVisual != null)
+        {
+            Destroy(_spawnedModelVisual);
+            _spawnedModelVisual = null;
+        }
 
         if (tokenRenderer != null)
             tokenRenderer.material.color = SlotColors[Mathf.Clamp(slotIndex, 0, 3)];
 
+        if (_visualSetupRoutine != null)
+            StopCoroutine(_visualSetupRoutine);
+
+        if (usePlayerModelVisual && tokenRenderer != null)
+            tokenRenderer.enabled = false;
+
+        _visualSetupRoutine = StartCoroutine(EnsureVisualReady());
         SnapToNode(startNodeID);
+    }
+
+    private void OnDestroy()
+    {
+        if (_visualSetupRoutine != null)
+            StopCoroutine(_visualSetupRoutine);
+
+        if (_moveRoutine != null)
+            StopCoroutine(_moveRoutine);
+
+        if (_spawnedModelVisual != null)
+            Destroy(_spawnedModelVisual);
     }
 
     /// <summary>Teleport ngay lập tức đến node chỉ định.</summary>
@@ -65,8 +102,128 @@ public class BoardPlayerToken : MonoBehaviour
     /// </summary>
     public void AnimateMovement(int[] pathNodeIDs)
     {
-        if (IsMoving) StopAllCoroutines();
-        StartCoroutine(MoveCoroutine(pathNodeIDs));
+        if (_moveRoutine != null)
+            StopCoroutine(_moveRoutine);
+
+        _moveRoutine = StartCoroutine(MoveCoroutine(pathNodeIDs));
+    }
+
+    private IEnumerator EnsureVisualReady()
+    {
+        if (!usePlayerModelVisual)
+        {
+            ShowTokenVisual(true);
+            yield break;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < visualSetupTimeout)
+        {
+            if (TryBuildPlayerVisual())
+                yield break;
+
+            elapsed += visualRetryInterval;
+            yield return new WaitForSeconds(visualRetryInterval);
+        }
+
+        Debug.LogWarning($"[BoardPlayerToken] Failed to bind player visual for P{ownerPlayerId}, falling back to token mesh.");
+        ShowTokenVisual(true);
+    }
+
+    private bool TryBuildPlayerVisual()
+    {
+        if (!usePlayerModelVisual)
+            return true;
+
+        var playerData = FindPlayerData(ownerPlayerId);
+        if (playerData == null)
+        {
+            return false;
+        }
+
+        int characterIndex = Mathf.Clamp(playerData.CharacterIndex, 0, 3);
+        if (_spawnedModelVisual != null && _currentCharacterIndex == characterIndex)
+            return true;
+
+        return BuildModelVisual(playerData, characterIndex);
+    }
+
+    private PlayerNetworkData FindPlayerData(int playerId)
+    {
+        var allPlayers = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+        foreach (var p in allPlayers)
+        {
+            if (p == null || p.Object == null) continue;
+            if (p.Object.InputAuthority.PlayerId == playerId)
+                return p;
+        }
+        return null;
+    }
+
+    private bool BuildModelVisual(PlayerNetworkData playerData, int characterIndex)
+    {
+        if (_spawnedModelVisual != null)
+            Destroy(_spawnedModelVisual);
+
+        var parent = modelAnchor != null ? modelAnchor : transform;
+        GameObject source = null;
+
+        var switcher = playerData.GetComponent<PlayerModelSwitcher>();
+        if (switcher != null)
+            source = switcher.GetActiveModel();
+
+        if (source == null)
+        {
+            playerData.UpdateCharacterModel();
+            if (switcher != null)
+                source = switcher.GetActiveModel();
+        }
+
+        if (source == null && fallbackCharacterModels != null && characterIndex < fallbackCharacterModels.Length)
+            source = fallbackCharacterModels[characterIndex];
+
+        if (source == null)
+        {
+            _spawnedModelVisual = null;
+            _currentCharacterIndex = -1;
+            return false;
+        }
+
+        _spawnedModelVisual = Instantiate(source, parent);
+        _spawnedModelVisual.name = $"BoardVisual_P{ownerPlayerId}";
+        _spawnedModelVisual.transform.localPosition = Vector3.zero;
+        _spawnedModelVisual.transform.localRotation = Quaternion.identity;
+
+        RemoveRuntimeComponents(_spawnedModelVisual);
+
+        _currentCharacterIndex = characterIndex;
+        ShowTokenVisual(!hideTokenWhenModelLoaded);
+
+        return true;
+    }
+
+    private void RemoveRuntimeComponents(GameObject go)
+    {
+        var colliders = go.GetComponentsInChildren<Collider>(true);
+        foreach (var c in colliders)
+            Destroy(c);
+
+        var rigidbodies = go.GetComponentsInChildren<Rigidbody>(true);
+        foreach (var rb in rigidbodies)
+            Destroy(rb);
+
+        var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
+        foreach (var b in behaviours)
+        {
+            if (b is Animator) continue;
+            Destroy(b);
+        }
+    }
+
+    private void ShowTokenVisual(bool visible)
+    {
+        if (tokenRenderer != null)
+            tokenRenderer.enabled = visible;
     }
 
     private IEnumerator MoveCoroutine(int[] pathNodeIDs)
@@ -89,6 +246,12 @@ public class BoardPlayerToken : MonoBehaviour
                 float t   = Mathf.SmoothStep(0f, 1f, elapsed / duration);
                 float hop = Mathf.Sin(t * Mathf.PI) * hopHeight;
                 transform.position = Vector3.Lerp(from, to, t) + Vector3.up * hop;
+
+                Vector3 flatDir = to - transform.position;
+                flatDir.y = 0f;
+                if (flatDir.sqrMagnitude > 0.0001f)
+                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(flatDir), t);
+
                 yield return null;
             }
 
@@ -99,6 +262,7 @@ public class BoardPlayerToken : MonoBehaviour
         }
 
         IsMoving = false;
+        _moveRoutine = null;
         OnMoveFinished?.Invoke(this);
     }
 

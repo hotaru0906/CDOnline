@@ -261,6 +261,41 @@ public abstract class BaseMinigameController : NetworkBehaviour
     /// </summary>
     protected virtual void BuildScoreboardResults() { }
 
+    /// <summary>
+    /// Tạo thứ tự player sẽ đi board phase.
+    /// Default: winner đi trước, các player còn lại theo PlayerId tăng dần.
+    /// </summary>
+    protected virtual int[] BuildBoardRanking(PlayerRef winner)
+    {
+        var ranking = new List<int>();
+
+        if (winner != PlayerRef.None)
+            ranking.Add(winner.PlayerId);
+
+        if (Runner == null)
+            return ranking.ToArray();
+
+        var playerIds = new List<int>();
+        foreach (var playerRef in Runner.ActivePlayers)
+        {
+            int playerId = playerRef.PlayerId;
+            if (playerId >= 0 && !playerIds.Contains(playerId))
+                playerIds.Add(playerId);
+        }
+
+        playerIds.Sort();
+
+        foreach (var playerId in playerIds)
+        {
+            if (playerId == winner.PlayerId)
+                continue;
+
+            ranking.Add(playerId);
+        }
+
+        return ranking.ToArray();
+    }
+
     // ----------------------------------------------------------------
     //  Countdown — managed by GameManager
     // ----------------------------------------------------------------
@@ -390,6 +425,9 @@ public abstract class BaseMinigameController : NetworkBehaviour
             // Build kết quả trước khi chuyển phase (data replicate cùng lúc với phase change)
             BuildScoreboardResults();
             ScoreboardTransitionTimer = TickTimer.CreateFromSeconds(Runner, 2.5f);
+
+            if (GameManager.Instance != null)
+                GameManager.Instance.SetMinigameRanking(BuildBoardRanking(winner));
 
             if (GameManager.Instance != null)
                 GameManager.Instance.EndMinigame(winner.PlayerId);

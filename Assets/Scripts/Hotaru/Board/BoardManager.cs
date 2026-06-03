@@ -570,8 +570,9 @@ public class BoardManager : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_ShowDiceResult(int playerId, int result)
     {
-        // Phase 0: chỉ log. Phase 7 sẽ có animation xúc xắc.
         Debug.Log($"[BoardManager] Player {playerId} tung được: {result}");
+        // Cập nhật Dice UI (BoardHUDController.OnDiceResult sẽ hiện popup)
+        BoardHUDController.Instance?.OnDiceResult(playerId, result);
     }
 
     // =====================================================================
@@ -1064,20 +1065,31 @@ public class BoardManager : NetworkBehaviour
         if (HasStateAuthority && boardItemPool != null)
         {
             GUILayout.Space(4);
-            if (GUILayout.Button("[DEBUG] Give All 2 Board Items"))
+            GUILayout.Label("[DEBUG] Give Board Items:");
+
+            // Nút riêng cho từng loại — dễ test từng effect
+            BoardItemEffect[] testEffects =
             {
-                for (int i = 0; i < ActivePlayerCount; i++)
+                BoardItemEffect.PushBack,
+                BoardItemEffect.RushForward,
+                BoardItemEffect.EvenDice
+            };
+
+            foreach (var eff in testEffects)
+            {
+                var c = GUI.color;
+                GUI.color = new Color(0.4f, 1f, 0.6f);
+                if (GUILayout.Button($"▶ Give all: {eff}"))
                 {
-                    int pid = GetPlayerIDAtSlot(i);
-                    if (pid < 0) continue;
-                    var inv = PlayerItemInventory.GetForPlayer(pid);
-                    if (inv == null) continue;
-                    for (int k = 0; k < 2; k++)
+                    for (int i = 0; i < ActivePlayerCount; i++)
                     {
-                        var item = boardItemPool.GetRandom();
-                        if (item != null) inv.AddBoardItem(item.effectType);
+                        int pid = GetPlayerIDAtSlot(i);
+                        if (pid < 0) continue;
+                        var inv = PlayerItemInventory.GetForPlayer(pid);
+                        inv?.AddBoardItem(eff);
                     }
                 }
+                GUI.color = c;
             }
         }
 
