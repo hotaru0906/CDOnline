@@ -75,6 +75,7 @@ public class PlayerController : NetworkBehaviour
     private Transform _cameraTransform;
     private CameraOrbit _cameraOrbit;
     private PlayerAnimator _playerAnimator;
+    private PlayerSFXController _sfx;
     private Vector3 _normalScale;
     private Vector3 _crouchScale;
 
@@ -82,6 +83,7 @@ public class PlayerController : NetworkBehaviour
     {
         _networkCC = GetComponent<NetworkCharacterController>();
         _playerAnimator = GetComponent<PlayerAnimator>();
+        _sfx = GetComponent<PlayerSFXController>(); 
         
         // Lưu scale gốc và tính scale crouch
         _normalScale = transform.localScale;
@@ -215,7 +217,7 @@ public class PlayerController : NetworkBehaviour
         if (_isFrozen)
         {
             _networkCC.Move(Vector3.zero);
-            IsMoving = false;
+            IsMoving = false;   
             return;
         }
 
@@ -262,6 +264,14 @@ public class PlayerController : NetworkBehaviour
 
         // Apply movement
         _networkCC.Move(finalMovement);
+        // SFX footstep
+        if (HasStateAuthority)
+        {
+            if (IsMoving)
+                _sfx?.StartFootstep(IsRunning ? PlayerSFXType.Run : PlayerSFXType.Walk);
+            else
+                _sfx?.StopFootstep();
+        }
 
         _targetMoveDirection = moveDirection;
     }
@@ -425,6 +435,7 @@ public class PlayerController : NetworkBehaviour
         if (input.IsButtonPressed(PlayerInputData.BUTTON_JUMP) && canJump)
         {
             _networkCC.Jump();
+            _sfx?.PlayAction(PlayerSFXType.Jump);
             GroundedTimer = 0; // Reset buffer khi đã nhảy
 
             // Trigger jump animation
