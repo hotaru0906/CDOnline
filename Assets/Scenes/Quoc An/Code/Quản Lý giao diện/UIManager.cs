@@ -16,6 +16,8 @@ public class UIManager : MonoBehaviour
 
     public CanvasGroup UIBoardGame;
 
+    public CanvasGroup UIInventory;
+
 
     private CanvasGroup currentPanel;
     private Stack<CanvasGroup> history = new Stack<CanvasGroup>();
@@ -97,5 +99,6 @@ public class UIManager : MonoBehaviour
         HidePanel(UILobby);
         HidePanel(UIMiniGame); // ← Thêm
         HidePanel(UIBoardGame); // ← Thêm
+        HidePanel(UIInventory);
     }
 }
