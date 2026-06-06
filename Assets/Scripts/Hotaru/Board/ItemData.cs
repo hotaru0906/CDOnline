@@ -15,6 +15,10 @@ public class ItemData : ScriptableObject
     [Header("Effect")]
     public ItemEffect effectType = ItemEffect.None;
 
+    [Header("Rarity")]
+    [Tooltip("Common=6, Rare=3, Legendary=1 — ảnh hưởng xác suất xuất hiện trong pool")]
+    public ItemRarity rarity = ItemRarity.Common;
+
     [Header("Visual")]
     public Sprite icon;
 }

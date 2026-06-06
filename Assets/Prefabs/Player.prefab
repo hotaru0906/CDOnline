@@ -2981,7 +2981,6 @@ MonoBehaviour:
   jumpTrigger: Jump
   attackTrigger: Attack
   isSittingParam: isSitting
-  isSittingOnChair: sitOnChair
 --- !u!114 &5650056082442984469
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3007,6 +3006,12 @@ MonoBehaviour:
     _value: 0
   _IsEliminated:
     _value: 0
+  _FinishRank: 0
+  _HasFinished:
+    _value: 0
+  _FinishTime: 0
+  _DistanceProgress: 0
+  _Score: 0
 --- !u!114 &-5116773515047285194
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3072,7 +3077,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f813b9c5546ade840a3a11965d902c1d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _HeldItems: 
+  _BoardItems: 
+  _RouletteItems: 
 --- !u!1 &9077173086571457645
 GameObject:
   m_ObjectHideFlags: 0

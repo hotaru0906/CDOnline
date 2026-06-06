@@ -7,7 +7,6 @@ public enum TileType
     Item,
     Steal,
     Toss,
-    Shuffle,
     Jackpot,
     Gamble
 }
@@ -40,14 +39,13 @@ public class BoardNode : MonoBehaviour
     /// Gọi trên host khi player đứng lên ô.
     /// pool: cần thiết cho Item và Jackpot tiles; có thể null với các tile khác.
     /// </summary>
-    public IBoardTileEffect CreateEffect(ItemPool pool = null)
+    public IBoardTileEffect CreateEffect(BoardItemPool pool = null)
     {
         return tileType switch
         {
             TileType.Item    => new ItemTileEffect(pool),
             TileType.Steal   => new StealTileEffect(),
             TileType.Toss    => new TossTileEffect(),
-            TileType.Shuffle => new ShuffleTileEffect(),
             TileType.Jackpot => new JackpotTileEffect(pool),
             TileType.Gamble  => new GambleTileEffect(),
             _                => new EmptyTileEffect()
@@ -82,7 +80,6 @@ public class BoardNode : MonoBehaviour
             TileType.Item    => Color.green,
             TileType.Steal   => Color.red,
             TileType.Toss    => Color.magenta,
-            TileType.Shuffle => Color.blue,
             TileType.Jackpot => new Color(1f, 0.85f, 0f),
             TileType.Gamble  => new Color(1f, 0.5f, 0f),
             _                => Color.white

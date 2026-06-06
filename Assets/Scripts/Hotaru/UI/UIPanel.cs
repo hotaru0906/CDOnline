@@ -3,8 +3,7 @@ using UnityEngine;
 public enum UIPanelType
 {
     Lobby,
-    Voting,             // Vote chọn minigame (MinigameOnly)
-    RouletteVoting,     // Vote Roulette hoặc Minigame (RouletteOrMinigame)
+    Voting,             // Vote chọn minigame
     Scoreboard,
     Result,
     MinigameTutorial,   // Tutorial trong minigame scene (mỗi scene khác nhau)

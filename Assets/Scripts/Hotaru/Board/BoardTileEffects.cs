@@ -4,6 +4,7 @@ using UnityEngine;
 /// Stub implementations cho mỗi TileType.
 /// Phase 1: chỉ log + trả về display message.
 /// Phase 2+: thay thế từng class bằng logic thật.
+/// Item/Jackpot tile sử dụng BoardItemPool để cấp Board items.
 /// </summary>
 
 public class EmptyTileEffect : IBoardTileEffect
@@ -17,31 +18,36 @@ public class EmptyTileEffect : IBoardTileEffect
 
 public class ItemTileEffect : IBoardTileEffect
 {
-    private readonly ItemPool _pool;
+    private readonly BoardItemPool _pool;
 
-    public ItemTileEffect(ItemPool pool) { _pool = pool; }
+    public ItemTileEffect(BoardItemPool pool) { _pool = pool; }
 
     public string Resolve(int playerId)
     {
         if (_pool == null)
         {
-            Debug.LogWarning("[Tile] ItemPool chưa được assign trong BoardManager Inspector.");
-            return "GOT ITEM!";
+            Debug.LogWarning("[Tile] BoardItemPool chưa được assign trong BoardManager Inspector.");
+            return "GOT BOARD ITEM!";
         }
 
         var inv = PlayerItemInventory.GetForPlayer(playerId);
         if (inv == null)
         {
             Debug.LogWarning($"[Tile] Không tìm thấy PlayerItemInventory cho player {playerId}. Thêm component vào player prefab.");
-            return "GOT ITEM!";
+            return "GOT BOARD ITEM!";
         }
 
         var item = _pool.GetRandom();
-        if (item == null) return "GOT ITEM! (pool empty)";
+        if (item == null) return "GOT BOARD ITEM! (pool empty)";
 
-        inv.AddItem(item.effectType);
-        Debug.Log($"[Tile] Player {playerId} nhận: {item.itemName} ({item.effectType})");
-        return $"GOT: {item.itemName}";
+        if (!inv.AddBoardItem(item.effectType))
+        {
+            Debug.Log($"[Tile] Player {playerId} Board items FULL — {item.itemName} bị từ chối.");
+            return "[BOARD ITEMS FULL]";
+        }
+
+        Debug.Log($"[Tile] Player {playerId} nhận Board item: {item.itemName} ({item.effectType}) [{item.rarity}]");
+        return $"GOT: {item.itemName} [{item.rarity}]";
     }
 }
 
@@ -49,7 +55,7 @@ public class StealTileEffect : IBoardTileEffect
 {
     public string Resolve(int playerId)
     {
-        Debug.Log($"[Tile] Player {playerId} — STEAL: cướp item người khác (Phase 3).");
+        Debug.Log($"[Tile] Player {playerId} — STEAL: cướp Board item người khác (Phase 3).");
         return "STEAL!";
     }
 }
@@ -58,31 +64,22 @@ public class TossTileEffect : IBoardTileEffect
 {
     public string Resolve(int playerId)
     {
-        Debug.Log($"[Tile] Player {playerId} — TOSS: mất random item (Phase 3).");
+        Debug.Log($"[Tile] Player {playerId} — TOSS: mất random Board item (Phase 3).");
         return "TOSS ITEM!";
-    }
-}
-
-public class ShuffleTileEffect : IBoardTileEffect
-{
-    public string Resolve(int playerId)
-    {
-        Debug.Log($"[Tile] Player {playerId} — SHUFFLE: xáo trộn vị trí / item (Phase 3).");
-        return "SHUFFLE!";
     }
 }
 
 public class JackpotTileEffect : IBoardTileEffect
 {
-    private readonly ItemPool _pool;
+    private readonly BoardItemPool _pool;
 
-    public JackpotTileEffect(ItemPool pool) { _pool = pool; }
+    public JackpotTileEffect(BoardItemPool pool) { _pool = pool; }
 
     public string Resolve(int playerId)
     {
         if (_pool == null)
         {
-            Debug.LogWarning("[Tile] ItemPool chưa được assign trong BoardManager Inspector.");
+            Debug.LogWarning("[Tile] BoardItemPool chưa được assign trong BoardManager Inspector.");
             return "JACKPOT!";
         }
 
@@ -96,14 +93,21 @@ public class JackpotTileEffect : IBoardTileEffect
         int granted = 0;
         for (int i = 0; i < 2; i++)
         {
-            var item = _pool.GetRandom();
+            // Item đầu tiên luôn ít nhất Rare, item thứ 2 random bình thường
+            var item = (i == 0) ? _pool.GetRandom(ItemRarity.Rare) : _pool.GetRandom();
             if (item == null) continue;
-            inv.AddItem(item.effectType);
-            Debug.Log($"[Tile] JACKPOT Player {playerId} nhận: {item.itemName} ({item.effectType})");
+
+            if (!inv.AddBoardItem(item.effectType))
+            {
+                Debug.Log($"[Tile] JACKPOT Player {playerId} Board items FULL — {item.itemName} bị từ chối.");
+                break; // nếu không còn chỗ, dừng luôn
+            }
+
+            Debug.Log($"[Tile] JACKPOT Player {playerId} nhận: {item.itemName} ({item.effectType}) [{item.rarity}]");
             granted++;
         }
 
-        return $"JACKPOT! +{granted} items";
+        return granted > 0 ? $"JACKPOT! +{granted} [{(granted < 2 ? "FULL" : "OK")}]" : "JACKPOT! [BOARD ITEMS FULL]";
     }
 }
 
@@ -115,3 +119,4 @@ public class GambleTileEffect : IBoardTileEffect
         return "GAMBLE!";
     }
 }
+

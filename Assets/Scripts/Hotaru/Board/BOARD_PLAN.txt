@@ -1,7 +1,7 @@
 ================================================================
 BOARD SYSTEM — IMPLEMENTATION PLAN & NOTES
 Project: CDOnline | Branch: BoardHotaru
-Last updated: 2026-05-22
+Last updated: 2026-05-31
 ================================================================
 
 GAME FLOW (confirmed)
@@ -123,7 +123,7 @@ STATUS: [x] Completed
 
 --- TileType Enum (7 loại) ---
   Empty     - không có gì
-  Item      - nhận random Roulette item
+  Item      - nhận random Board item
   Steal     - cướp item người khác
   Toss      - mất random item
   Shuffle   - xáo trộn vị trí player trên bàn  ← [TODO: XÓA - xem ghi chú bên dưới]
@@ -182,12 +182,12 @@ STATUS: [x] Completed
 --- TODO: XÓA SHUFFLE TILE ---
   Shuffle tile sẽ bị loại bỏ khỏi game.
   Các việc cần làm khi xóa:
-    [ ] Xóa TileType.Shuffle khỏi enum — BoardNode.cs
-    [ ] Xóa ShuffleTileEffect class — BoardTileEffects.cs
-    [ ] Xóa case Shuffle trong CreateEffect() — BoardNode.cs
-    [ ] Xóa case Shuffle trong GetTileColor() — BoardNode.cs
-    [ ] Xóa case TileType.Shuffle trong FinishTurn() — BoardManager.cs
-    [ ] Xóa ResolveShuffle() method — BoardManager.cs
+    [x] Xóa TileType.Shuffle khỏi enum — BoardNode.cs
+    [x] Xóa ShuffleTileEffect class — BoardTileEffects.cs
+    [x] Xóa case Shuffle trong CreateEffect() — BoardNode.cs
+    [x] Xóa case Shuffle trong GetTileColor() — BoardNode.cs
+    [x] Xóa case TileType.Shuffle trong FinishTurn() — BoardManager.cs
+    [x] Xóa ResolveShuffle() method — BoardManager.cs
     [ ] Kiểm tra BoardScene: đổi bất kỳ node nào đang set Shuffle sang loại khác
 
 --- DEAD-END BOUNCE-BACK MECHANIC ---
@@ -245,24 +245,35 @@ STATUS: [x] Completed
 
 --- Inventory ---
   PlayerItemInventory (NetworkBehaviour):
-    [Networked] NetworkArray<int> HeldItems (max 8 slots, -1 = empty)
-    AddItem(ItemEffect effect)
-    RemoveItem(int slot)
-    GetItemCount()
+    [Networked] NetworkArray<int> BoardItems    (max 4 slots, -1 = empty)  ← dùng trong Board phase
+    [Networked] NetworkArray<int> RouletteItems (max 8 slots, -1 = empty)  ← dùng trong Roulette phase
+    AddBoardItem(BoardItemEffect effect)
+    AddRouletteItem(RouletteItemEffect effect)
+    RemoveBoardItem(int slot)
+    RemoveRouletteItem(int slot)
+    GetBoardItemCount()
+    GetRouletteItemCount()
 
-  Tất cả item đều là Roulette item — chỉ dùng được trong Roulette phase.
-  Không có Board item.
-  Inventory cap: max 8 (có thể chỉnh sau).
-  Nếu đầy: auto discard oldest (Phase 2 tạm, Phase 3+ sẽ có UI chọn).
+  Board items: nhận từ tile Item/Jackpot trên bàn cờ, dùng trong Board phase.
+  Roulette items: nhận qua cơ chế đua bàn cờ (không còn từ tile), dùng trong Roulette phase.
 
---- ItemData (ScriptableObject) ---
-  Fields:
-    string itemName
-    Sprite icon
-    ItemEffect effectType
-    string description
+--- Board Items ---
+  BoardItemEffect enum:
+    PushBack     - Chỉ định 1 player, player đó lùi 2 ô
+    RushForward  - Bản thân di chuyển thêm 2 ô (cộng thêm vào kết quả xúc xắc)
+    EvenDice     - Bản thân luôn đổ xúc xắc ra số chẵn trong lượt đó
 
-  ItemEffect enum (Roulette items):
+  (Danh sách sẽ được mở rộng sau này)
+
+  Quy tắc sử dụng:
+    - Mỗi lượt chỉ dùng được 1 Board item
+    - Item PHẢI được dùng TRƯỚC khi đổ xúc xắc
+    - Nếu đã dùng item → tiếp tục đổ xúc xắc bình thường
+    - Nếu đã đổ xúc xắc → không được dùng item trong lượt đó
+    => Turn flow: [Dùng item (optional, max 1)] -> Đổ xúc xắc -> Di chuyển
+
+--- Roulette Items ---
+  RouletteItemEffect enum (giữ nguyên từ design cũ):
     RestoreLife       - +1 mạng trong Roulette
     DoubleDamage      - viên đạn tiếp theo gây 2 mạng
     SeeNextBullet     - xem đạn tiếp theo là thật/giả
@@ -270,14 +281,32 @@ STATUS: [x] Completed
     SkipOpponentTurn  - skip lượt 1 người chơi trong Roulette
     ReverseRoulette   - đảo chiều vòng bắn Roulette
 
---- Item Reward Flow ---
+  Roulette items KHÔNG còn nhận từ tile trên bàn cờ.
+  Thay vào đó nhận qua cơ chế đua bàn cờ (xem bên dưới).
+
+--- Roulette Item Reward qua Board Race ---
+  Kích hoạt khi: kết thúc board phase (sau N minigame) HOẶC khi có player chạm tile Đích
+  Xếp hạng dựa theo: node index (player tiến xa nhất = 1st)
+
+  Phân phối item (4 player):
+    1st (xa nhất):  4 Roulette item ngẫu nhiên
+    2nd:            3 Roulette item ngẫu nhiên
+    3rd:            2 Roulette item ngẫu nhiên
+    4th (gần nhất): 1 Roulette item ngẫu nhiên
+
+  Implementation:
+    -> So sánh NodeSlot của tất cả player -> sort descending -> gán rank
+    -> Gọi PlayerItemInventory.AddRouletteItem() theo số lượng rank tương ứng
+    -> Hiện UI thông báo kết quả phân phối trước khi sang Roulette phase
+
+--- Item Reward Flow (Board Items từ tile) ---
   Tile Item:
-    -> Random item từ ItemPool (ScriptableObject list)
-    -> PlayerItemInventory.AddItem()
+    -> Random 1 BoardItem từ BoardItemPool
+    -> PlayerItemInventory.AddBoardItem()
     -> Debug: hiện tên item nhận được
 
   Tile Jackpot:
-    -> Nhận 2 item ngẫu nhiên từ pool (nếu còn slot)
+    -> Nhận 2 BoardItem ngẫu nhiên từ pool (nếu còn slot)
 
 --- CHECKLIST PHASE 2 ---
 [x] ItemEffect enum — ItemEffect.cs
@@ -289,11 +318,26 @@ STATUS: [x] Completed
 [x] Inventory cap logic: auto discard oldest khi đầy (8 slots)
 [x] Debug panel: hiện inventory từng player trong BoardManager.OnGUI()
 
+  --- CẦN CẬP NHẬT DO THAY ĐỔI DESIGN (Board items + Race rewards) ---
+[x] Tách PlayerItemInventory: BoardItems (max 4) + RouletteItems (max 8) riêng biệt
+[x] BoardItemEffect enum — BoardItemEffect.cs (PushBack, RushForward, EvenDice)
+[x] BoardItemPool ScriptableObject — pool riêng cho Board items
+[x] Tile Item / Jackpot: đổi sang AddBoardItem() thay vì AddItem()
+[x] PushBack: target selection UI + RPC di chuyển target lùi 2 ô
+[x] RushForward: cộng thêm 2 vào bước di chuyển lượt đó
+[x] EvenDice: _forceEvenDice[slot] host-side, áp dụng trong RPC_SubmitRollRequest
+[x] Turn flow: cho phép dùng item TRƯỚC khi roll — có UI chọn dùng/bỏ qua
+[x] Lock: nếu đã roll thì không cho dùng item (item buttons ẩn)
+[x] Board Race reward: tính rank theo NodeSlot -> phân phối RouletteItems sau board phase
+[x] Debug panel: cập nhật hiện cả BoardItems và RouletteItems riêng biệt
+
 SETUP CẦN LÀM TRONG UNITY EDITOR:
   1. Thêm PlayerItemInventory component vào player prefab (cùng chỗ với PlayerNetworkData)
-  2. Create > Board > Item Data — tạo 6 ItemData assets (1 cho mỗi ItemEffect)
-  3. Create > Board > Item Pool — tạo 1 ItemPool asset, add các ItemData vào entries
-  4. Assign ItemPool asset vào BoardManager Inspector (field "Item Pool")
+  2. Create > Board > Board Item Data — tạo 3 BoardItemData assets (PushBack, RushForward, EvenDice)
+  3. Create > Board > Board Item Pool — tạo 1 BoardItemPool asset, add các BoardItemData vào entries
+  4. Assign BoardItemPool vào BoardManager Inspector (field "Board Item Pool")
+  5. Create > Board > Item Pool — tạo 1 ItemPool asset cho Roulette items
+  6. Assign ItemPool vào BoardManager Inspector (field "Roulette Item Pool")
 
 ================================================================
 PHASE 3 — SOCIAL INTERACTION
@@ -301,15 +345,15 @@ PHASE 3 — SOCIAL INTERACTION
 Goal: Board bắt đầu vui thật
 
 STATUS: [x] Completed
-  Chọn target (UI: list player còn item)
-  -> Lấy random 1 item từ target
-  -> Thêm vào inventory của mình
+  Chọn target (UI: list player còn Board item)
+  -> Lấy random 1 Board item từ target
+  -> Thêm vào Board inventory của mình
 
 --- Toss Tile ---
-  Random 1 item trong inventory của mình -> mất
+  Random 1 Board item trong inventory của mình -> mất
 
 --- Shuffle Tile (Map Chaos) ---
-  Tất cả player: random discard 1 item
+  Tất cả player: random discard 1 Board item
   Hoặc: xáo trộn vị trí node của tất cả player
 
 --- Reaction FX (tạm) ---
@@ -325,33 +369,35 @@ STATUS: [x] Completed
 [ ] Playtest với 4 người sau phase này ← QUAN TRỌNG
 
 ================================================================
-PHASE 4 — BOARD ECONOMY & CONTROL
+PHASE 4 — RARITY & INVENTORY CAP
 ================================================================
-Goal: Board có strategic layer nhẹ
+Goal: Item drop có độ hiếm, inventory không tràn
 
-STATUS: [ ] Not started
+STATUS: [x] Completed
 
---- Currency (optional, quyết định sau playtest) ---
-  [Networked] int Coins per player
-  Coin reward từ tile, minigame rank, special events
-
---- Shop Tile ---
-  Hiện danh sách item có thể mua bằng coin
-  Mua Roulette item hoặc Board utility
+NOTE: Currency và Shop đã bị loại bỏ — không cần thiết cho gameplay hiện tại.
 
 --- Rarity Pool ---
-  ItemData.rarity: Common / Rare / Legendary
-  Weighted random khi spawn item từ tile
+  ItemRarity enum: Common / Rare / Legendary
+  Trọng số mặc định: Common=6, Rare=3, Legendary=1
+  Rarity lưu trong BoardItemData và ItemData (field rarity).
+  BoardItemPool và ItemPool tự tính weight từ item.rarity — không cần nhập tay.
+  Jackpot tile dùng GetRandom(ItemRarity.Rare) để đảm bảo ít nhất Rare.
 
 --- Inventory Cap (final) ---
-  Roulette items: max 8 (có thể chỉnh sau)
-  (Board items đã loại bỏ khỏi design)
+  Board items: max 4 — khi đầy từ chối item MỚI, hiện "[BOARD ITEMS FULL]"
+  Roulette items: max 8 — khi đầy từ chối, bỏ qua trong DistributeRouletteRewards
 
 --- CHECKLIST PHASE 4 ---
-[ ] Coin system (nếu quyết định dùng)
-[ ] Shop tile UI + mua item
-[ ] Rarity weight trong ItemPool
-[ ] Enforce inventory cap với UI feedback
+[x] ItemRarity enum — ItemRarity.cs (Common, Rare, Legendary)
+[x] Thêm rarity field vào BoardItemData + ItemData
+[x] BoardItemPool: bỏ weight thủ công, tự tính từ item.rarity
+[x] ItemPool: tương tự BoardItemPool
+[x] Thêm GetRandom(ItemRarity minRarity) vào BoardItemPool + ItemPool
+[x] AddBoardItem() hard cap — trả về false khi đầy (không auto-discard nữa)
+[x] AddRouletteItem() hard cap — trả về false khi đầy
+[x] ItemTileEffect + JackpotTileEffect: hiện "[BOARD ITEMS FULL]" khi từ chối
+[x] JackpotTileEffect: dùng GetRandom(ItemRarity.Rare) cho item đầu tiên
 
 ================================================================
 PHASE 5 — MAP DESIGN SYSTEM

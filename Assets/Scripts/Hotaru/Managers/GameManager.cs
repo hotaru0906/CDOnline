@@ -20,8 +20,7 @@ public enum GameState
 /// </summary>
 public enum VotingType
 {
-    MinigameOnly,    // Chỉ vote minigame (lần đầu)
-    RouletteOrMinigame // Vote giữa Roulette và Minigame
+    MinigameOnly,    // Chỉ vote minigame
 }
 
 public class GameManager : NetworkBehaviour
@@ -34,8 +33,7 @@ public class GameManager : NetworkBehaviour
     #region UI References
     [Header("UI Panels (Auto-found via UIPanel component)")]
     [SerializeField] private GameObject lobbyUI;
-    [SerializeField] private GameObject votingUI;           // UI vote chọn minigame (MinigameOnly)
-    [SerializeField] private GameObject rouletteVotingUI;   // UI vote Roulette/Minigame (RouletteOrMinigame)
+    [SerializeField] private GameObject votingUI;           // UI vote chọn minigame
     [SerializeField] private GameObject scoreboardUI;
     [SerializeField] private GameObject resultUI;
 
@@ -187,7 +185,7 @@ public class GameManager : NetworkBehaviour
             RegisterUIPanel(panel);
         }
 
-        Debug.Log($"[GameManager] FindUIReferences - Lobby:{lobbyUI != null}, Voting:{votingUI != null}, RouletteVoting:{rouletteVotingUI != null}, Scoreboard:{scoreboardUI != null}, Result:{resultUI != null}, MGTutorial:{minigameTutorialUI != null}, MGCountdown:{minigameCountdownUI != null}");
+        Debug.Log($"[GameManager] FindUIReferences - Lobby:{lobbyUI != null}, Voting:{votingUI != null}, Scoreboard:{scoreboardUI != null}, Result:{resultUI != null}, MGTutorial:{minigameTutorialUI != null}, MGCountdown:{minigameCountdownUI != null}");
     }
 
     /// <summary>
@@ -204,9 +202,6 @@ public class GameManager : NetworkBehaviour
                 break;
             case UIPanelType.Voting:
                 votingUI = panel.gameObject;
-                break;
-            case UIPanelType.RouletteVoting:
-                rouletteVotingUI = panel.gameObject;
                 break;
             case UIPanelType.Scoreboard:
                 scoreboardUI = panel.gameObject;
@@ -433,7 +428,6 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả trước
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameCountdownUI, false);
@@ -920,25 +914,6 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Gọi bởi VotingManager khi vote kết thúc (cho RouletteOrMinigame voting)
-    /// </summary>
-    /// <param name="chooseRoulette">True nếu vote Roulette thắng</param>
-    public void OnVotingComplete(bool chooseRoulette)
-    {
-        if (!HasStateAuthority) return;
-
-        if (chooseRoulette)
-        {
-            Debug.Log("[GameManager] Vote result: Roulette");
-            StartRoulette();
-        }
-        else
-        {
-            Debug.Log("[GameManager] Vote result: Minigame");
-            // VotingManager sẽ gọi StartMinigame với index được chọn
-        }
-    }
 
     public void ReturnToLobby()
     {
@@ -992,7 +967,6 @@ public class GameManager : NetworkBehaviour
         // Show lobby UI, hide others
         SetActiveUI(lobbyUI, true);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1026,37 +1000,23 @@ public class GameManager : NetworkBehaviour
 
     protected virtual void HandleVotingState()
     {
-        Debug.Log($"[GameManager] Entered Voting state. VotingType: {CurrentVotingType}");
+        Debug.Log("[GameManager] Entered Voting state");
 
         // Ẩn tất cả UI trước
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
 
-        // Hiện UI dựa vào VotingType
-        if (CurrentVotingType == VotingType.MinigameOnly)
+        // Hiện voting UI
+        SetActiveUI(votingUI, true);
+        Debug.Log("[GameManager] Showing VotingUI");
+        // Chuẩn bị danh sách minigame cho voting
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady && HasStateAuthority)
         {
-            SetActiveUI(votingUI, true);
-            Debug.Log("[GameManager] Showing VotingUI (MinigameOnly)");
-            // Chuẩn bị danh sách minigame cho voting thường
-            if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady && HasStateAuthority)
-            {
-                MinigameVotingManager.Instance.PrepareNextVotingRound();
-            }
-        }
-        else // RouletteOrMinigame
-        {
-            SetActiveUI(rouletteVotingUI, true);
-            Debug.Log("[GameManager] Showing RouletteVotingUI (RouletteOrMinigame)");
-            // Chỉ lấy các minigame chưa chơi cho voting Roulette
-            if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady && HasStateAuthority)
-            {
-                MinigameVotingManager.Instance.PrepareNextVotingRoundForRoulette();
-            }
+            MinigameVotingManager.Instance.PrepareNextVotingRound();
         }
 
         // Khóa xoay camera khi voting
@@ -1103,7 +1063,6 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả UI panels (minigame UI sẽ được show sau khi scene load)
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1167,16 +1126,20 @@ public class GameManager : NetworkBehaviour
 
         // Load scene - Fusion sẽ sync tất cả clients
         int sceneIndex = GetSceneIndex(minigameData.sceneName);
+        if (sceneIndex < 0)
+        {
+            Debug.LogError($"[GameManager] Minigame scene '{minigameData.sceneName}' not found in Build Settings!");
+            return;
+        }
         var sceneRef = SceneRef.FromIndex(sceneIndex);
-
         if (sceneRef.IsValid)
         {
-            Debug.Log($"[GameManager] Loading scene via Runner.LoadScene...");
+            Debug.Log($"[GameManager] Loading minigame scene: {minigameData.sceneName} (index {sceneIndex})");
             Runner.LoadScene(sceneRef);
         }
         else
         {
-            Debug.LogError($"[GameManager] Invalid scene: {minigameData.sceneName}");
+            Debug.LogError($"[GameManager] Invalid SceneRef for scene '{minigameData.sceneName}' index {sceneIndex}!");
         }
     }
 
@@ -1187,7 +1150,6 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả UI panels
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1240,8 +1202,8 @@ public class GameManager : NetworkBehaviour
                 return i;
             }
         }
-        Debug.LogWarning($"[GameManager] Scene '{sceneName}' not found in Build Settings!");
-        return 1; // Fallback to index 1
+        Debug.LogError($"[GameManager] Scene '{sceneName}' not found in Build Settings! Check that the scene is added in File > Build Settings.");
+        return -1; // Not found
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -1272,7 +1234,6 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, true);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1323,7 +1284,6 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1348,16 +1308,20 @@ public class GameManager : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         int sceneIndex = GetSceneIndex(boardSceneName);
-        var sceneRef   = SceneRef.FromIndex(sceneIndex);
-
+        if (sceneIndex < 0)
+        {
+            Debug.LogError($"[GameManager] BoardScene '{boardSceneName}' not found in Build Settings — cannot load board!");
+            return;
+        }
+        var sceneRef = SceneRef.FromIndex(sceneIndex);
         if (sceneRef.IsValid)
         {
-            Debug.Log($"[GameManager] Loading BoardScene: {boardSceneName}");
+            Debug.Log($"[GameManager] Loading BoardScene: {boardSceneName} (index {sceneIndex})");
             Runner.LoadScene(sceneRef);
         }
         else
         {
-            Debug.LogError($"[GameManager] BoardScene '{boardSceneName}' không tìm thấy trong Build Settings!");
+            Debug.LogError($"[GameManager] Invalid SceneRef for BoardScene index {sceneIndex}!");
         }
     }
 
@@ -1368,7 +1332,6 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả UI - Roulette xử lí bằng gameplay 3D
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1398,22 +1361,20 @@ public class GameManager : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         int sceneIndex = GetSceneIndex(rouletteSceneName);
+        if (sceneIndex < 0)
+        {
+            Debug.LogError($"[GameManager] Roulette scene '{rouletteSceneName}' not found in Build Settings!");
+            return;
+        }
         var sceneRef = SceneRef.FromIndex(sceneIndex);
-
         if (sceneRef.IsValid)
         {
-            Debug.Log($"[GameManager] Loading Roulette scene: {rouletteSceneName}");
+            Debug.Log($"[GameManager] Loading Roulette scene: {rouletteSceneName} (index {sceneIndex})");
             Runner.LoadScene(sceneRef);
         }
         else
         {
-            Debug.LogError($"[GameManager] Roulette scene '{rouletteSceneName}' not found in Build Settings! Starting roulette directly.");
-            // Fallback nếu scene chưa được add vào Build Settings
-            if (RouletteManager.Instance != null)
-            {
-                RouletteManager.Instance.TeleportPlayersToRoulettePositions();
-                RouletteManager.Instance.StartRoulette();
-            }
+            Debug.LogError($"[GameManager] Invalid SceneRef for Roulette scene index {sceneIndex}!");
         }
     }
 
@@ -1423,7 +1384,6 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
-        SetActiveUI(rouletteVotingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, true);
         SetActiveUI(minigameTutorialUI, false);
