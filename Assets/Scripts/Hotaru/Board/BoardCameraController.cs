@@ -25,12 +25,10 @@ public class BoardCameraController : MonoBehaviour
     [SerializeField] private Camera boardCamera;
 
     [Header("Overhead Settings")]
-    [Tooltip("Độ cao camera so với token target")]
     [SerializeField] private float cameraHeight = 12f;
-    [Tooltip("Góc nghiêng camera (0 = nhìn thẳng xuống, 45 = nghiêng 45°)")]
     [SerializeField] private float overheadAngle = 50f;
-    [Tooltip("Khoảng lùi ra sau theo hướng nghiêng")]
     [SerializeField] private float cameraDistance = 8f;
+    [SerializeField] private float cameraZOffset = 10f;
 
     [Header("Pan Settings")]
     [Tooltip("Tốc độ smooth pan (cao hơn = nhanh hơn)")]
@@ -206,10 +204,11 @@ public class BoardCameraController : MonoBehaviour
 
     private Vector3 CalcCameraPosition(Vector3 targetWorldPos)
     {
-        // Offset ngược chiều forward của camera (lùi ra sau theo góc nghiêng)
-        Vector3 offset = Quaternion.Euler(overheadAngle, 0f, 0f) * Vector3.back * cameraDistance;
-        offset.y = Mathf.Abs(offset.y) + cameraHeight;  // đảm bảo camera luôn ở trên
-        return targetWorldPos + new Vector3(0f, cameraHeight, -cameraDistance * Mathf.Cos(overheadAngle * Mathf.Deg2Rad));
+        return targetWorldPos + new Vector3(
+            0f,
+            cameraHeight,
+            -cameraDistance * Mathf.Cos(overheadAngle * Mathf.Deg2Rad) + cameraZOffset
+        );
     }
 
     // =====================================================================

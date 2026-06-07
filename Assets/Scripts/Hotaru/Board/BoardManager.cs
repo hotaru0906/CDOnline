@@ -995,18 +995,14 @@ public class BoardManager : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        Debug.Log("[BoardManager] Board phase complete!");
+        // Lưu vị trí trước khi rời scene
+        GameManager.Instance?.SaveBoardPositions(
+            NodeSlot0, NodeSlot1, NodeSlot2, NodeSlot3);
 
-        // Phân phối Roulette items theo thứ hạng vị trí trên bàn cờ
         DistributeRouletteRewards();
-
         BoardState = BoardPhaseState.BoardComplete;
-
         RPC_BoardComplete();
-
-        // Thông báo GameManager để chuyển sang state tiếp theo
-        if (GameManager.Instance != null)
-            GameManager.Instance.ProceedFromBoard();
+        GameManager.Instance?.ProceedFromBoard();
     }
 
     /// <summary>
@@ -1099,6 +1095,34 @@ public class BoardManager : NetworkBehaviour
 
         IsReversed = !IsReversed;
         Debug.Log($"[BoardManager] Chiều vòng: {(IsReversed ? "NGƯỢC" : "XUÔI")}");
+    }
+    /// <summary>
+    /// Restore vị trí node của từng slot sau khi BoardScene load lại.
+    /// Gọi bởi GameManager sau StartBoardPhase().
+    /// </summary>
+    public void RestoreBoardPositions(int[] nodeSlots)
+    {
+        if (!HasStateAuthority) return;
+        if (nodeSlots == null || nodeSlots.Length < 4) return;
+
+        for (int i = 0; i < 4; i++)
+            SetNodeIDAtSlot(i, nodeSlots[i]);
+
+        // Snap tokens đến đúng vị trí
+        RPC_SnapTokensToSavedPositions(nodeSlots[0], nodeSlots[1], nodeSlots[2], nodeSlots[3]);
+
+        Debug.Log($"[BoardManager] Restored positions: [{string.Join(", ", nodeSlots)}]");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SnapTokensToSavedPositions(int n0, int n1, int n2, int n3)
+    {
+        int[] slots = { n0, n1, n2, n3 };
+        for (int i = 0; i < 4; i++)
+        {
+            if (tokens != null && i < tokens.Length && tokens[i] != null)
+                tokens[i].SnapToNode(slots[i]);
+        }
     }
 
     // =====================================================================
