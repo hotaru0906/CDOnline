@@ -1,4 +1,3 @@
-
 using Fusion;
 using UnityEngine;
 
@@ -13,6 +12,9 @@ public enum PlayerState
     Crouching
 }
 
+/// <summary>
+/// Các hành động có thể bị giới hạn bởi MinigameData
+/// </summary>
 public enum MinigameAction
 {
     Move,
@@ -23,128 +25,155 @@ public enum MinigameAction
 }
 
 [RequireComponent(typeof(NetworkCharacterController))]
-[RequireComponent(typeof(PlayerAnimator))]
 public class PlayerController : NetworkBehaviour
 {
-    [Header("Movement")]
+    [Header("Movement Settings")]
     [SerializeField] private float walkSpeed = 5f;
     [SerializeField] private float runSpeed = 9f;
     [SerializeField] private float crouchSpeed = 2.5f;
     [SerializeField] private float rotationSpeed = 15f;
 
-    [Header("Jump")]
-    [SerializeField] private float groundBufferTime = 0.15f;
+    [Header("Ground Check")]
+    [SerializeField] private float groundBufferTime = 0.15f; // Thời gian buffer sau khi rời mặt đất
 
-    [Header("Attack")]
+    [Header("Attack Settings")]
     [SerializeField] private float attackDuration = 0.7f;
 
-    [Header("Crouch")]
-    [SerializeField] private float crouchScale = 0.75f;
-    [SerializeField] private float crouchScaleSpeed = 10f;
+    [Header("Crouch Settings")]
+    [SerializeField] private float crouchScale = 0.75f; // Scale khi crouch (0.75 = 75% kích thước)
+    [SerializeField] private float crouchScaleSpeed = 10f; // Tốc độ scale
 
-    [Header("External Force")]
-    [SerializeField] private float externalForceDrag = 5f;
-    [SerializeField] private float externalForceThreshold = 0.1f;
+    [Header("External Force Settings")]
+    [SerializeField] private float externalForceDrag = 5f; // Tốc độ giảm dần external force
+    [SerializeField] private float externalForceThreshold = 0.1f; // Ngưỡng để reset về 0
 
-    [Header("Hit Cooldown")]
-    [SerializeField] private float hitCooldownDuration = 0.5f;
+    [Header("Hit Cooldown Settings")]
+    [SerializeField] private float hitCooldownDuration = 0.5f; // Thời gian cooldown sau khi bị hit
 
     [Header("UI")]
     [SerializeField] private GameObject crosshairUI;
 
     [Networked] public PlayerState CurrentState { get; private set; }
-
-    [Networked] private Vector3 ExternalVelocity { get; set; }
+    [Networked] private Vector3 ExternalVelocity { get; set; } // Lực từ bên ngoài (obstacle, knockback)
     [Networked] private float AttackTimer { get; set; }
-
     [Networked] private NetworkBool IsRunning { get; set; }
     [Networked] private NetworkBool IsCrouching { get; set; }
     [Networked] private NetworkBool IsMoving { get; set; }
-
-    [Networked] private float GroundedTimer { get; set; }
-    [Networked] private TickTimer HitCooldownTimer { get; set; }
+    [Networked] private float GroundedTimer { get; set; } // Timer để buffer ground check
+    [Networked] private TickTimer HitCooldownTimer { get; set; } // Timer cho hit cooldown
 
     /// <summary>
-    /// Đếm ngược thời gian knockback. Khi > 0, player không tự điều khiển được.
-    /// Set bởi ApplyExternalForce(force, duration, overrideInput: true).
+    /// Kiểm tra player có đang trong hit cooldown không
     /// </summary>
-    [Networked] private float KnockbackTimer { get; set; }
+    public bool IsInHitCooldown => HitCooldownTimer.ExpiredOrNotRunning(Runner) == false;
 
-    public bool IsInHitCooldown =>
-        HitCooldownTimer.ExpiredOrNotRunning(Runner) == false;
-
-    /// <summary>true khi player đang bị knockback (không thể input).</summary>
-    public bool IsKnockbacked => KnockbackTimer > 0f;
-
-    public Vector3 Velocity =>
-        _networkCC != null ? _networkCC.Velocity : Vector3.zero;
-
-    private NetworkCharacterController _networkCC;
-    private PlayerAnimator _playerAnimator;
-
-    private CameraOrbit _cameraOrbit;
-    private Transform _cameraTransform;
+    public Vector3 Velocity => _networkCC != null ? _networkCC.Velocity : Vector3.zero;
 
     private Vector3 _targetMoveDirection;
 
+    private NetworkCharacterController _networkCC;
+    private Transform _cameraTransform;
+    private CameraOrbit _cameraOrbit;
+    private PlayerAnimator _playerAnimator;
+    private PlayerSFXController _sfx;
     private Vector3 _normalScale;
     private Vector3 _crouchScale;
-
-    private bool _isFrozen;
-
-    public bool IsFrozen => _isFrozen;
 
     private void Awake()
     {
         _networkCC = GetComponent<NetworkCharacterController>();
         _playerAnimator = GetComponent<PlayerAnimator>();
-
+        _sfx = GetComponent<PlayerSFXController>(); 
+        
+        // Lưu scale gốc và tính scale crouch
         _normalScale = transform.localScale;
-
-        _crouchScale = new Vector3(
-            _normalScale.x,
-            _normalScale.y * crouchScale,
-            _normalScale.z
-        );
+        _crouchScale = new Vector3(_normalScale.x, _normalScale.y * crouchScale, _normalScale.z);
     }
 
     public override void Spawned()
     {
-        Debug.Log($"[PlayerController] Spawned - InputAuthority: {HasInputAuthority}");
+        Debug.Log($"[PlayerController] Spawned. HasInputAuthority: {HasInputAuthority}, HasStateAuthority: {HasStateAuthority}");
 
-        if (!HasInputAuthority)
+        if (HasInputAuthority)
         {
+            // Đăng ký với CameraManager
+            if (CameraManager.Instance != null)
+            {
+                CameraManager.Instance.RegisterLocalPlayer(transform);
+
+                // Chọn camera mode dựa trên GameState hiện tại
+                if (GameManager.Instance != null)
+                {
+                    var state = GameManager.Instance.CurrentState;
+                    if (state == GameState.Lobby || state == GameState.Voting || state == GameState.Roulette)
+                    {
+                        // First Person cho Lobby, Voting, Roulette
+                        CameraManager.Instance.SwitchToFirstPersonCamera();
+                    }
+                    else if (state == GameState.Playing)
+                    {
+                        // Kiểm tra setting từ MinigameData
+                        var minigameData = GameManager.Instance.CurrentMinigameData;
+                        if (minigameData != null && !minigameData.useSharedCamera)
+                        {
+                            if (minigameData.useThirdPersonCamera)
+                                CameraManager.Instance.SwitchToThirdPersonCamera();
+                            else
+                                CameraManager.Instance.SwitchToFirstPersonCamera();
+                        }
+                        else
+                        {
+                            // Default: Third Person cho Minigame
+                            CameraManager.Instance.SwitchToThirdPersonCamera();
+                        }
+                    }
+                    else
+                    {
+                        // Default: First Person
+                        CameraManager.Instance.SwitchToFirstPersonCamera();
+                    }
+                }
+                else
+                {
+                    // Fallback: First Person nếu không có GameManager
+                    CameraManager.Instance.SwitchToFirstPersonCamera();
+                }
+
+                // Lấy reference từ CameraManager
+                _cameraOrbit = CameraManager.Instance.CameraOrbit;
+            }
+
+            // Fallback: tìm trực tiếp trên Main Camera
+            if (_cameraOrbit == null)
+            {
+                _cameraOrbit = Camera.main?.GetComponent<CameraOrbit>();
+                _cameraOrbit?.SetTarget(transform);
+            }
+
+            _cameraTransform = Camera.main?.transform;
+
+            // Crosshair sẽ được update trong Render() dựa trên camera mode
+            UpdateCrosshairVisibility();
+
+            Debug.Log("[PlayerController] Local player spawned and camera activated");
+        }
+        else
+        {
+            // Tắt crosshair cho player khác
             if (crosshairUI != null)
                 crosshairUI.SetActive(false);
-
-            return;
         }
-
-        if (CameraManager.Instance != null)
-        {
-            CameraManager.Instance.RegisterLocalPlayer(transform);
-
-            CameraManager.Instance.SwitchToThirdPersonCamera();
-
-            _cameraOrbit = CameraManager.Instance.CameraOrbit;
-        }
-
-        if (_cameraOrbit == null)
-        {
-            _cameraOrbit = Camera.main?.GetComponent<CameraOrbit>();
-            _cameraOrbit?.SetTarget(transform);
-        }
-
-        _cameraTransform = Camera.main?.transform;
-
-        UpdateCrosshairVisibility();
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
-        if (HasInputAuthority && CameraManager.Instance != null)
+        if (HasInputAuthority)
         {
-            CameraManager.Instance.UnregisterLocalPlayer();
+            // Hủy đăng ký với CameraManager (sẽ tự chuyển về Fixed mode)
+            if (CameraManager.Instance != null)
+            {
+                CameraManager.Instance.UnregisterLocalPlayer();
+            }
         }
     }
 
@@ -154,33 +183,28 @@ public class PlayerController : NetworkBehaviour
         if (AttackTimer > 0)
         {
             AttackTimer -= Runner.DeltaTime;
-
             if (AttackTimer <= 0)
             {
                 AttackTimer = 0;
             }
         }
 
-        // External force decay
+        // Update external velocity (decay over time)
         UpdateExternalVelocity();
 
-        // Knockback timer countdown
-        if (HasStateAuthority && KnockbackTimer > 0f)
-        {
-            KnockbackTimer = Mathf.Max(0f, KnockbackTimer - Runner.DeltaTime);
-        }
-
-        // Input
         if (GetInput(out PlayerInputData input))
         {
-            // Attack luôn check riêng
-            HandleAttack(input);
-
-            // Không move khi attack
+            // Không di chuyển khi đang attack
             if (CurrentState != PlayerState.Attacking)
             {
                 Move(input);
                 HandleJump(input);
+                HandleAttack(input);
+            }
+            else if (AttackTimer <= 0)
+            {
+                // Reset state sau khi attack xong
+                CurrentState = PlayerState.Idle;
             }
         }
 
@@ -189,36 +213,35 @@ public class PlayerController : NetworkBehaviour
 
     private void Move(PlayerInputData input)
     {
+        // Không di chuyển khi bị frozen
         if (_isFrozen)
         {
             _networkCC.Move(Vector3.zero);
-            IsMoving = false;
+            IsMoving = false;   
             return;
         }
 
-        bool canMove = CanPerformAction(MinigameAction.Move);
+        // Kiểm tra minigame có cho phép di chuyển không
+        bool canMoveInMinigame = CanPerformAction(MinigameAction.Move);
 
-        // Knockback: player không tự di chuyển được, nhưng ExternalVelocity vẫn tác động
-        Vector3 moveDirection = (canMove && !IsKnockbacked)
-            ? CalculateMoveDirection(input.MoveDirection, input.CameraForward)
+        // Dùng camera direction từ input (đã được client gửi lên)
+        Vector3 moveDirection = canMoveInMinigame 
+            ? CalculateMoveDirection(input.MoveDirection, input.CameraForward) 
             : Vector3.zero;
 
+        // Check có input di chuyển không
         IsMoving = moveDirection.magnitude > 0.01f;
 
-        bool canRun = CanPerformAction(MinigameAction.Run);
+        // Check running (giữ Shift) - kiểm tra canRun
+        bool canRunInMinigame = CanPerformAction(MinigameAction.Run);
+        IsRunning = canRunInMinigame && input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
 
-        IsRunning =
-            canRun &&
-            input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
+        // Check crouching (giữ C hoặc Left Ctrl) - kiểm tra canCrouch
+        bool canCrouchInMinigame = CanPerformAction(MinigameAction.Crouch);
+        IsCrouching = canCrouchInMinigame && input.IsButtonPressed(PlayerInputData.BUTTON_CROUCH);
 
-        bool canCrouch = CanPerformAction(MinigameAction.Crouch);
-
-        IsCrouching =
-            canCrouch &&
-            input.IsButtonPressed(PlayerInputData.BUTTON_CROUCH);
-
+        // Tốc độ: ngồi < đi < chạy
         float targetSpeed = 0f;
-
         if (IsMoving)
         {
             if (IsCrouching)
@@ -229,178 +252,43 @@ public class PlayerController : NetworkBehaviour
                 targetSpeed = walkSpeed;
         }
 
-        Vector3 finalMovement =
-            moveDirection.normalized * targetSpeed;
+        // Tính final movement bao gồm external velocity
+        Vector3 finalMovement = moveDirection.normalized * targetSpeed;
 
+        // Thêm external velocity (lực đẩy từ obstacle)
         finalMovement += ExternalVelocity;
 
+        // Update MaxSpeed để không bị clamp (cần cao hơn khi có external force)
         float totalSpeed = finalMovement.magnitude;
+        _networkCC.maxSpeed = Mathf.Max(targetSpeed, totalSpeed);
 
-        _networkCC.maxSpeed =
-            Mathf.Max(targetSpeed, totalSpeed);
-
+        // Apply movement
         _networkCC.Move(finalMovement);
+        // SFX footstep
+        if (HasStateAuthority)
+        {
+            if (IsMoving)
+                _sfx?.StartFootstep(IsRunning ? PlayerSFXType.Run : PlayerSFXType.Walk);
+            else
+                _sfx?.StopFootstep();
+        }
 
         _targetMoveDirection = moveDirection;
-
-        // Luôn giữ player thẳng đứng — tránh NetworkCC / knockback làm nghiêng trục X/Z
-        Vector3 euler = transform.eulerAngles;
-        if (euler.x != 0f || euler.z != 0f)
-            transform.rotation = Quaternion.Euler(0f, euler.y, 0f);
     }
 
-    private void HandleJump(PlayerInputData input)
-    {
-        if (!CanPerformAction(MinigameAction.Jump))
-            return;
-
-        if (IsKnockbacked) return;
-
-        bool canJump =
-            _networkCC.Grounded ||
-            GroundedTimer > 0;
-
-        if (input.IsButtonPressed(PlayerInputData.BUTTON_JUMP) && canJump)
-        {
-            _networkCC.Jump();
-
-            GroundedTimer = 0;
-
-            Debug.Log("[PlayerController] JUMP!");
-        }
-    }
-
-    private void HandleAttack(PlayerInputData input)
-    {
-        if (!CanPerformAction(MinigameAction.Attack))
-            return;
-
-        if (IsKnockbacked) return;
-
-        // Không spam attack
-        if (CurrentState == PlayerState.Attacking)
-            return;
-
-        bool canAttack =
-            _networkCC.Grounded ||
-            GroundedTimer > 0;
-
-        if (input.IsButtonPressed(PlayerInputData.BUTTON_PUNCH) && canAttack)
-        {
-            CurrentState = PlayerState.Attacking;
-
-            AttackTimer = attackDuration;
-
-            Debug.Log("[PlayerController] ATTACK!");
-            CheckAttackHit();
-        }
-    }
-
-    private void UpdateState()
-    {
-        // Giữ attack state
-        if (CurrentState == PlayerState.Attacking)
-        {
-            if (AttackTimer > 0)
-                return;
-
-            CurrentState = PlayerState.Idle;
-        }
-
-        bool isGrounded = _networkCC.Grounded;
-
-        Vector3 velocity = _networkCC.Velocity;
-
-        // Ground buffer
-        if (isGrounded)
-        {
-            GroundedTimer = groundBufferTime;
-        }
-        else
-        {
-            GroundedTimer -= Runner.DeltaTime;
-        }
-
-        bool isBufferedGrounded =
-            isGrounded || GroundedTimer > 0;
-
-        // Crouch scale
-        if (isBufferedGrounded)
-        {
-            UpdateCrouchHitbox(IsCrouching);
-        }
-
-        // Jump/Fall
-        if (!isBufferedGrounded)
-        {
-            CurrentState =
-                velocity.y > 0.2f
-                ? PlayerState.Jumping
-                : PlayerState.Falling;
-
-            return;
-        }
-
-        // Crouch
-        if (IsCrouching)
-        {
-            CurrentState = PlayerState.Crouching;
-            return;
-        }
-
-        // Move
-        if (IsMoving)
-        {
-            CurrentState =
-                IsRunning
-                ? PlayerState.Running
-                : PlayerState.Walking;
-
-            return;
-        }
-
-        // Idle
-        CurrentState = PlayerState.Idle;
-    }
-
-    private Vector3 CalculateMoveDirection(Vector2 input, Vector3 cameraForward)
-    {
-        if (input.sqrMagnitude < 0.01f)
-            return Vector3.zero;
-
-        Vector3 forward = cameraForward;
-
-        if (forward.sqrMagnitude < 0.01f)
-            forward = Vector3.forward;
-
-        forward.y = 0;
-        forward.Normalize();
-
-        Vector3 right =
-            Vector3.Cross(Vector3.up, forward).normalized;
-
-        Vector3 moveDir =
-            forward * input.y +
-            right * input.x;
-
-        return moveDir.normalized;
-    }
-
+    /// <summary>
+    /// Giảm dần external velocity theo thời gian
+    /// </summary>
     private void UpdateExternalVelocity()
     {
-        if (
-            ExternalVelocity.sqrMagnitude <
-            externalForceThreshold * externalForceThreshold
-        )
+        if (ExternalVelocity.sqrMagnitude < externalForceThreshold * externalForceThreshold)
         {
             ExternalVelocity = Vector3.zero;
             return;
         }
 
-        Vector3 decay =
-            ExternalVelocity.normalized *
-            externalForceDrag *
-            Runner.DeltaTime;
+        // Decay external velocity
+        Vector3 decay = ExternalVelocity.normalized * externalForceDrag * Runner.DeltaTime;
 
         if (decay.sqrMagnitude >= ExternalVelocity.sqrMagnitude)
         {
@@ -412,155 +300,122 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    public override void Render()
+    /// <summary>
+    /// Áp dụng lực từ bên ngoài (obstacle, knockback) - HOST ONLY
+    /// </summary>
+    public void ApplyExternalForce(Vector3 force)
     {
-        if (!HasInputAuthority)
-            return;
-
-        UpdateCrosshairVisibility();
-
-        if (CameraManager.Instance == null)
-            return;
-
-        if (CameraManager.Instance.CurrentMode == CameraMode.FirstPerson)
-        {
-            RotateToYaw(CameraManager.Instance.FPYaw);
-            return;
-        }
-
-        if (CameraManager.Instance.CurrentMode == CameraMode.ThirdPerson)
-        {
-            if (
-                IsMoving &&
-                _targetMoveDirection.sqrMagnitude > 0.01f &&
-                CurrentState != PlayerState.Attacking
-            )
-            {
-                RotateTowards(_targetMoveDirection);
-            }
-        }
-    }
-
-    private void RotateToYaw(float yaw)
-    {
-        Quaternion targetRotation =
-            Quaternion.Euler(0, yaw, 0);
-
-        transform.rotation = Quaternion.Slerp(
-            transform.rotation,
-            targetRotation,
-            rotationSpeed * 2f * Time.deltaTime
-        );
-    }
-
-    private void RotateTowards(Vector3 direction)
-    {
-        Quaternion targetRotation =
-            Quaternion.LookRotation(direction, Vector3.up);
-
-        transform.rotation = Quaternion.Slerp(
-            transform.rotation,
-            targetRotation,
-            rotationSpeed * Time.deltaTime
-        );
-    }
-
-    private void UpdateCrosshairVisibility()
-    {
-        if (crosshairUI == null)
-            return;
-
-        bool shouldShow =
-            CameraManager.Instance != null &&
-            CameraManager.Instance.CurrentMode == CameraMode.FirstPerson;
-
-        if (crosshairUI.activeSelf != shouldShow)
-        {
-            crosshairUI.SetActive(shouldShow);
-        }
-    }
-
-    public void SetFrozen(bool frozen)
-    {
-        _isFrozen = frozen;
-
-        if (frozen)
-        {
-            ResetVelocity();
-        }
-    }
-
-    public void ResetVelocity()
-    {
-        if (_networkCC != null)
-        {
-            _networkCC.Move(Vector3.zero);
-        }
-
-        ExternalVelocity = Vector3.zero;
-    }
-
-    private void UpdateCrouchHitbox(bool crouching)
-    {
-        Vector3 targetScale =
-            crouching ? _crouchScale : _normalScale;
-
-        transform.localScale = Vector3.Lerp(
-            transform.localScale,
-            targetScale,
-            crouchScaleSpeed * Runner.DeltaTime
-        );
-    }
-
-    /// <param name="force">Hướng và độ mạnh của lực.</param>
-    /// <param name="duration">Thời gian block input (giây). 0 = không block.</param>
-    /// <param name="overrideInput">Nếu true + duration > 0: block toàn bộ input trong thời gian duration.</param>
-    public void ApplyExternalForce(Vector3 force, float duration = 0f, bool overrideInput = false)
-    {
-        if (!HasStateAuthority)
-            return;
+        if (!HasStateAuthority) return;
 
         ExternalVelocity += force;
-
-        if (overrideInput && duration > 0f)
+        Debug.Log($"[PlayerController] Applied external force: {force}, total: {ExternalVelocity}");
+    }
+    
+    /// <summary>
+    /// Áp dụng knockback - gọi từ local player, RPC đến host
+    /// </summary>
+    public void ApplyKnockback(Vector3 force)
+    {
+        if (Object.HasInputAuthority)
         {
-            // Lấy giá trị lớn hơn để không cắt ngắn knockback đang chạy
-            KnockbackTimer = Mathf.Max(KnockbackTimer, duration);
+            RPC_RequestKnockback(force);
         }
     }
 
     /// <summary>
-    /// Dùng cho JumpPad — phóng player lên cao với tốc độ Y tùy chỉnh.
-    /// Dùng trực tiếp Velocity của NetworkCC thay vì ExternalVelocity để đảm bảo quỹ đạo tự nhiên.
+    /// Áp dụng knockback với hit cooldown - ngăn spam hit
     /// </summary>
-    public void LaunchPad(float verticalSpeed)
+    public void ApplyKnockbackWithCooldown(Vector3 force)
     {
-        if (!HasStateAuthority) return;
-        var v = _networkCC.Velocity;
-        _networkCC.Velocity = new Vector3(v.x, verticalSpeed, v.z);
+        if (Object.HasInputAuthority)
+        {
+            RPC_RequestKnockbackWithCooldown(force);
+        }
     }
 
+    /// <summary>
+    /// Request teleport từ local player - gửi RPC đến host với cooldown
+    /// </summary>
+    public void RequestTeleport(Vector3 targetPosition)
+    {
+        if (Object.HasInputAuthority)
+        {
+            RPC_RequestTeleportWithCooldown(targetPosition);
+        }
+    }
+    
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_RequestKnockback(Vector3 force)
+    {
+        ExternalVelocity += force;
+        Debug.Log($"[PlayerController] Knockback applied: {force}, total: {ExternalVelocity}");
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_RequestKnockbackWithCooldown(Vector3 force)
+    {
+        // Kiểm tra cooldown trên host
+        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
+        {
+            Debug.Log($"[PlayerController] Knockback ignored - still in cooldown");
+            return;
+        }
+
+        // Áp dụng knockback    
+        ExternalVelocity += force;
+        
+        // Bắt đầu cooldown timer
+        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldownDuration);
+        
+        Debug.Log($"[PlayerController] Knockback with cooldown applied: {force}, cooldown: {hitCooldownDuration}s");
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_RequestTeleportWithCooldown(Vector3 targetPosition)
+    {
+        // Kiểm tra cooldown trên host
+        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
+        {
+            Debug.Log($"[PlayerController] Teleport ignored - still in cooldown");
+            return;
+        }
+
+        // Teleport player
+        _networkCC.Teleport(targetPosition);
+        
+        // Bắt đầu cooldown timer
+        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldownDuration);
+        
+        Debug.Log($"[PlayerController] Teleport with cooldown applied: {targetPosition}, cooldown: {hitCooldownDuration}s");
+    }
+
+    /// <summary>
+    /// Kiểm tra và áp dụng hit từ bên ngoài (attack từ player khác, etc.)
+    /// Trả về true nếu hit được áp dụng, false nếu đang trong cooldown
+    /// </summary>
     public bool TryApplyHit(Vector3 knockbackForce)
     {
-        if (!HasStateAuthority)
-            return false;
-
+        if (!HasStateAuthority) return false;
+        
+        // Kiểm tra cooldown
         if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
         {
             return false;
         }
 
+        // Áp dụng knockback
         ExternalVelocity += knockbackForce;
-
-        HitCooldownTimer =
-            TickTimer.CreateFromSeconds(
-                Runner,
-                hitCooldownDuration
-            );
-
+        
+        // Bắt đầu cooldown
+        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldownDuration);
+        
+        Debug.Log($"[PlayerController] Hit applied with knockback: {knockbackForce}");
         return true;
     }
 
+    /// <summary>
+    /// Reset hit cooldown - dùng khi respawn hoặc round mới
+    /// </summary>
     public void ResetHitCooldown()
     {
         if (HasStateAuthority)
@@ -569,30 +424,186 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    public float GetHorizontalSpeed()
+    private void HandleJump(PlayerInputData input)
     {
-        if (_networkCC == null)
-            return 0f;
+        // Kiểm tra minigame có cho phép nhảy không
+        if (!CanPerformAction(MinigameAction.Jump)) return;
+        
+        // Coyote time - cho phép nhảy trong buffer time sau khi rời mặt đất
+        bool canJump = _networkCC.Grounded || GroundedTimer > 0;
 
+        if (input.IsButtonPressed(PlayerInputData.BUTTON_JUMP) && canJump)
+        {
+            _networkCC.Jump();
+            _sfx?.PlayAction(PlayerSFXType.Jump);
+            GroundedTimer = 0; // Reset buffer khi đã nhảy
+
+            // Trigger jump animation
+            if (_playerAnimator != null)
+            {
+                _playerAnimator.TriggerJump();
+            }
+        }
+    }
+
+    private void HandleAttack(PlayerInputData input)
+    {
+        // Kiểm tra minigame có cho phép tấn công không
+        if (!CanPerformAction(MinigameAction.Attack)) return;
+        
+        // Cho phép attack trong buffer time
+        bool canAttack = _networkCC.Grounded || GroundedTimer > 0;
+
+        if (input.IsButtonPressed(PlayerInputData.BUTTON_PUNCH) && canAttack)
+        {
+            CurrentState = PlayerState.Attacking;
+            AttackTimer = attackDuration;
+
+            // Trigger animation
+            if (_playerAnimator != null)
+            {
+                _playerAnimator.TriggerAttack();
+            }
+        }
+    }
+
+    private Vector3 CalculateMoveDirection(Vector2 input, Vector3 cameraForward)
+    {
+        if (input.sqrMagnitude < 0.01f)
+            return Vector3.zero;
+
+        // Dùng camera forward từ input data (được client gửi lên)
+        Vector3 forward = cameraForward;
+        if (forward.sqrMagnitude < 0.01f)
+            forward = Vector3.forward;
+
+        forward.y = 0f;
+        forward.Normalize();
+
+        // Tính right từ forward
+        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+
+        Vector3 moveDir = (forward * input.y + right * input.x);
+        return moveDir.normalized;
+    }
+
+    private void UpdateState()
+    {
+        // Không update state nếu đang attack
+        if (CurrentState == PlayerState.Attacking && AttackTimer > 0)
+            return;
+
+        bool isGrounded = _networkCC.Grounded;
         Vector3 velocity = _networkCC.Velocity;
 
-        return new Vector3(
-            velocity.x,
-            0,
-            velocity.z
-        ).magnitude;
+        // Update ground buffer timer
+        if (isGrounded)
+        {
+            GroundedTimer = groundBufferTime;
+        }
+        else
+        {
+            GroundedTimer -= Runner.DeltaTime;
+        }
+
+        // Buffered ground check - vẫn coi như grounded nếu còn trong buffer time
+        bool isBufferedGrounded = isGrounded || GroundedTimer > 0;
+
+        // Cập nhật hitbox crouch - chỉ khi đang ở trên mặt đất và không nhảy/rơi
+        if (isBufferedGrounded)
+        {
+            UpdateCrouchHitbox(IsCrouching);
+        }
+
+        if (!isBufferedGrounded)
+        {
+            CurrentState = velocity.y > 0.2f ? PlayerState.Jumping : PlayerState.Falling;
+        }
+        else if (IsCrouching)
+        {
+            // Crouching có priority cao hơn walking/running
+            CurrentState = PlayerState.Crouching;
+        }
+        else if (IsMoving) // Dựa vào input, không dựa vào velocity
+        {
+            CurrentState = IsRunning ? PlayerState.Running : PlayerState.Walking;
+        }
+        else
+        {
+            CurrentState = PlayerState.Idle;
+        }
     }
 
-    public bool IsInAir()
+    public override void Render()
     {
-        return _networkCC != null &&
-               !_networkCC.Grounded;
+        // CHỈ xử lý rotation cho LOCAL player (HasInputAuthority)
+        // Remote players sẽ được sync rotation qua NetworkTransform hoặc không cần xoay local
+        if (!HasInputAuthority) return;
+
+        // Update crosshair visibility dựa trên camera mode
+        UpdateCrosshairVisibility();
+
+        if (CameraManager.Instance == null) return;
+
+        // First Person: Player body luôn xoay theo hướng camera nhìn
+        if (CameraManager.Instance.CurrentMode == CameraMode.FirstPerson)
+        {
+            RotateToYaw(CameraManager.Instance.FPYaw);
+            return;
+        }
+
+        // Third Person: CHỈ xoay khi đang di chuyển (không xoay khi đứng yên)
+        // Điều này cho phép xoay camera quanh player để ngắm model
+        if (CameraManager.Instance.CurrentMode == CameraMode.ThirdPerson)
+        {
+            // Chỉ xoay nếu đang thực sự di chuyển (có input)
+            if (IsMoving && _targetMoveDirection.sqrMagnitude > 0.01f && CurrentState != PlayerState.Attacking)
+            {
+                RotateTowards(_targetMoveDirection);
+            }
+            // Khi đứng yên: KHÔNG xoay model → có thể xoay camera xung quanh để ngắm
+        }
     }
+
+    /// <summary>
+    /// Xoay player theo yaw angle (dùng cho First Person)
+    /// </summary>
+    private void RotateToYaw(float yaw)
+    {
+        Quaternion targetRotation = Quaternion.Euler(0, yaw, 0);
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            targetRotation,
+            rotationSpeed * 2f * Time.deltaTime // Nhanh hơn để sync với camera
+        );
+    }
+
+    private void RotateTowards(Vector3 direction)
+    {
+        Quaternion targetRotation = Quaternion.LookRotation(direction, Vector3.up);
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation,
+            targetRotation,
+            rotationSpeed * Time.deltaTime
+        );
+    }
+
+    public float GetHorizontalSpeed()
+    {
+        if (_networkCC == null) return 0f;
+        Vector3 velocity = _networkCC.Velocity;
+        return new Vector3(velocity.x, 0, velocity.z).magnitude;
+    }
+
+    public bool IsInAir() => _networkCC != null && !_networkCC.Grounded;
 
     public void Teleport(Vector3 position)
     {
         if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[PlayerController] Only state authority can teleport");
             return;
+        }
 
         _networkCC.Teleport(position);
     }
@@ -605,14 +616,88 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Freeze/Unfreeze player - dùng cho minigame countdown/win
+    /// </summary>
+    private bool _isFrozen;
+    public bool IsFrozen => _isFrozen;
+
+    /// <summary>
+    /// Update crosshair visibility based on camera mode
+    /// Crosshair chỉ hiển thị ở First Person mode
+    /// </summary>
+    private void UpdateCrosshairVisibility()
+    {
+        if (crosshairUI == null) return;
+
+        bool shouldShow = CameraManager.Instance != null &&
+                          CameraManager.Instance.CurrentMode == CameraMode.FirstPerson;
+
+        if (crosshairUI.activeSelf != shouldShow)
+        {
+            crosshairUI.SetActive(shouldShow);
+        }
+    }
+
+    public void SetFrozen(bool frozen)
+    {
+        _isFrozen = frozen;
+        Debug.Log($"[PlayerController] Player {Object.InputAuthority} frozen: {frozen}");
+
+        if (frozen)
+        {
+            // Reset velocity khi freeze
+            ResetVelocity();
+        }
+    }
+
+    /// <summary>
+    /// Reset velocity - dùng khi respawn
+    /// </summary>
+    public void ResetVelocity()
+    {
+        if (_networkCC != null)
+        {
+            _networkCC.Move(Vector3.zero);
+        }
+        ExternalVelocity = Vector3.zero;
+    }
+
+    /// <summary>
+    /// Điều chỉnh scale của player khi crouch
+    /// Scale Y nhỏ lại sẽ làm CharacterController hitbox nhỏ theo
+    /// </summary>
+    private void UpdateCrouchHitbox(bool crouching)
+    {
+        Vector3 targetScale = crouching ? _crouchScale : _normalScale;
+        
+        // Lerp smooth scale
+        transform.localScale = Vector3.Lerp(
+            transform.localScale, 
+            targetScale, 
+            crouchScaleSpeed * Runner.DeltaTime
+        );
+    }
+
+    #region Minigame Action Check
+    /// <summary>
+    /// Kiểm tra xem hành động có được phép trong minigame hiện tại không
+    /// Nếu không trong minigame (Playing state), luôn trả về true
+    /// </summary>
     private bool CanPerformAction(MinigameAction action)
     {
+        // Không trong Playing state -> cho phép tất cả
         if (GameManager.Instance == null)
+        {
             return true;
-
+        }
+        
         if (GameManager.Instance.CurrentState != GameState.Playing)
+        {
             return true;
-
+        }
+        
+        // Đọc từ synced Networked properties (đã được host sync)
         return action switch
         {
             MinigameAction.Move => GameManager.Instance.MG_CanMove,
@@ -623,87 +708,14 @@ public class PlayerController : NetworkBehaviour
             _ => true
         };
     }
-
-    private void CheckAttackHit()
-    {
-        Collider[] hits = Physics.OverlapSphere(
-            transform.position + transform.forward * 1.5f,
-            1f
-        );
-
-        foreach (Collider hit in hits)
-        {
-            // bỏ qua chính mình
-            if (hit.gameObject == gameObject)
-                continue;
-
-            PlayerController other =
-                hit.GetComponent<PlayerController>();
-
-            if (other == null)
-                continue;
-
-            // tạo lực đẩy
-            Vector3 knockback =
-                transform.forward * 8f +
-                Vector3.up * 2f;
-
-            bool success =
-                other.TryApplyHit(knockback);
-
-            if (success)
-            {
-                other.ForceIdle();
-
-                Debug.Log(
-                    $"[FUSION HIT] {Object.InputAuthority} hit {other.Object.InputAuthority}"
-                );
-            }
-        }
-    }
-
-    public void ForceIdle()
-    {
-        if (!HasStateAuthority)
-            return;
-
-        CurrentState = PlayerState.Idle;
-
-        AttackTimer = 0;
-    }
+    #endregion
 
     private void OnDrawGizmosSelected()
     {
-        bool grounded =
-            _networkCC != null &&
-            _networkCC.Grounded;
+        bool grounded = _networkCC != null && _networkCC.Grounded;
 
-        Gizmos.color =
-            grounded
-            ? Color.green
-            : Color.yellow;
-
-        Vector3 origin =
-            transform.position + Vector3.up * 0.1f;
-
-        Gizmos.DrawWireSphere(
-            origin + Vector3.down * 0.1f,
-            0.3f
-        );
-
-        Gizmos.color = Color.red;
-
-        Gizmos.DrawWireSphere(
-            transform.position + transform.forward * 1.5f,
-            1f
-        );
-    }
-
-    public void RequestTeleport(Vector3 targetPosition)
-    {
-        if (_networkCC != null)
-        {
-            _networkCC.Teleport(targetPosition);
-        }
+        Gizmos.color = grounded ? Color.green : Color.yellow;
+        Vector3 origin = transform.position + Vector3.up * 0.1f;
+        Gizmos.DrawWireSphere(origin + Vector3.down * 0.1f, 0.3f);
     }
 }
