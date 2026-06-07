@@ -12,6 +12,7 @@ public class MenuManager : MonoBehaviour
     [SerializeField] private GameObject canvasFindLobby;
     [SerializeField] private GameObject canvasCreateRoom;
     [SerializeField] private GameObject canvasItemUI;
+    [SerializeField] private GameObject canvasOptions;
 
     [Header("Settings")]
     [SerializeField] private SettingsManager settingsManager;
@@ -43,6 +44,7 @@ public class MenuManager : MonoBehaviour
         canvasFindLobby.SetActive(false);
         canvasCreateRoom.SetActive(false);
         canvasItemUI.SetActive(false);
+        canvasOptions.SetActive(false);
 
         _currentScreen = canvasMainMenu;
         canvasMainMenu.SetActive(true);
@@ -74,6 +76,7 @@ public class MenuManager : MonoBehaviour
     public void ShowPlayOnline() => SwitchScreen(canvasPlayOnline);
     public void ShowFindLobby() => SwitchScreen(canvasFindLobby);
     public void ShowCreateRoom() => SwitchScreen(canvasCreateRoom);
+    public void ShowOptions() => SwitchScreen(canvasOptions);
 
     public void ShowSettings()
     {
