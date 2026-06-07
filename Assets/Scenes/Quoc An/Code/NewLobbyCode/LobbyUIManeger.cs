@@ -3,55 +3,59 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 
+// ============================================================
+// LobbyUIManager — quản lý toàn bộ UI Panel Lobby
+// Tất cả nằm trong 1 Canvas, dùng CanvasGroup
+// OFFLINE: test qua Inspector debugPlayers
+// ONLINE:  Uncomment phần Fusion khi sẵn sàng
+// ============================================================
 public class LobbyUIManager : MonoBehaviour
 {
     public static LobbyUIManager Instance;
 
-    // ========================================================
-    // INSPECTOR REFERENCES
-    // ========================================================
-
+    // ── Top Bar ──────────────────────────────────────────────
     [Header("--- TOP BAR ---")]
-    [Tooltip("Kéo QuitRoomButton vào đây")]
-    public Button quitRoomButton;
-
-    [Tooltip("Kéo SettingsButton vào đây")]
     public Button settingsButton;
+    public Button quitRoomButton;
+    public TextMeshProUGUI roomNameText;
 
-    [Header("--- ROOM INFO ---")]
-    [Tooltip("Kéo Text hiển thị tên phòng vào đây")]
-    public TextMeshProUGUI roomNameTitle;
-
-
+    // ── Player List ──────────────────────────────────────────
     [Header("--- PLAYER LIST ---")]
-    [Tooltip("Kéo object Content (trong PlayerScrollView/Viewport/Content) vào đây")]
     public Transform playerListContainer;
-
-    [Tooltip("Kéo PlayerRow prefab vào đây")]
     public GameObject playerRowPrefab;
-
-    [Tooltip("Kéo PlayerCountText (TextMeshPro) vào đây")]
     public TextMeshProUGUI playerCountText;
 
-    [Tooltip("Số player tối đa trong phòng")]
-    public int maxPlayers = 4;
+    // ── Action Buttons ────────────────────────────────────────
+    [Header("--- ACTION BUTTONS ---")]
+    [Tooltip("Nút Force Start — chỉ hiện với Host, luôn bấm được")]
+    public Button forceStartButton;
 
+    [Tooltip("Nút Start Game — sáng khi tất cả người chơi đã Ready")]
+    public Button startGameButton;
+
+    [Tooltip("Nút Ready — chỉ hiện với non-host")]
+    public Button readyButton;
+    public TextMeshProUGUI readyButtonText;
+
+    // ── Debug / Offline ───────────────────────────────────────
     [Header("--- DEBUG / OFFLINE TEST ---")]
-    [Tooltip("Danh sách player giả để test offline")]
+    public bool isHostDebug = true;
+    public int maxPlayersDebug = 4;
+
     public List<DebugPlayerData> debugPlayers = new List<DebugPlayerData>()
     {
         new DebugPlayerData { playerName = "HostPlayer", isReady = true,  isHost = true  },
         new DebugPlayerData { playerName = "Alice",      isReady = false, isHost = false },
     };
 
-    // ========================================================
-    // RUNTIME DATA
-    // ========================================================
-    private List<GameObject> playerRowObjects = new List<GameObject>();
+    // ── Runtime ───────────────────────────────────────────────
+    private List<GameObject> spawnedRows = new List<GameObject>();
+    private bool localPlayerReady = false;
+    private bool isHost = false;
+    private int maxPlayers = 4;
 
-    // ========================================================
-    // UNITY LIFECYCLE
-    // ========================================================
+    // ─────────────────────────────────────────────────────────
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -60,172 +64,233 @@ public class LobbyUIManager : MonoBehaviour
 
     void Start()
     {
+        isHost     = isHostDebug;
+        maxPlayers = maxPlayersDebug;
+
         SetupButtons();
-        RefreshPlayerList_Debug();
-        Debug.Log("[LobbyUI] LobbyUIManager initialized.");
+        RefreshPlayerList();
+        UpdateActionButtons();
     }
 
-    // ========================================================
-    // NHẬN DỮ LIỆU TỪ CREATE ROOM
-    // ========================================================
+    // ── Setup từ CreateRoom ───────────────────────────────────
     public void SetupLobby(string roomName, int playerMax, string miniGame)
     {
-        // Hiển thị tên phòng
-        if (roomNameTitle != null)
-            roomNameTitle.text = roomName;
-        else
-            Debug.LogWarning("[LobbyUI] roomNameTitle chưa được gán!");
+        if (roomNameText != null)
+            roomNameText.text = $"Game Lobby — {roomName}";
 
-
-        // Cập nhật maxPlayers cho player count
         maxPlayers = playerMax;
         UpdatePlayerCount(debugPlayers.Count, maxPlayers);
-
         Debug.Log($"[LobbyUI] Setup — Room: {roomName}, Max: {playerMax}, Game: {miniGame}");
     }
 
-    // ========================================================
-    // BUTTON SETUP
-    // ========================================================
+    // ── Button Setup ──────────────────────────────────────────
     void SetupButtons()
     {
-        if (quitRoomButton != null)
-            quitRoomButton.onClick.AddListener(OnQuitRoomClicked);
-        else
-            Debug.LogWarning("[LobbyUI] quitRoomButton chưa được gán trong Inspector!");
-
         if (settingsButton != null)
-            settingsButton.onClick.AddListener(OnSettingsClicked);
-        else
-            Debug.LogWarning("[LobbyUI] settingsButton chưa được gán trong Inspector!");
+            settingsButton.onClick.AddListener(OnSettings);
+        else Debug.LogWarning("[LobbyUI] settingsButton chưa gán!");
+
+        if (quitRoomButton != null)
+            quitRoomButton.onClick.AddListener(OnQuitRoom);
+        else Debug.LogWarning("[LobbyUI] quitRoomButton chưa gán!");
+
+        if (forceStartButton != null)
+            forceStartButton.onClick.AddListener(OnForceStart);
+        else Debug.LogWarning("[LobbyUI] forceStartButton chưa gán!");
+
+        if (startGameButton != null)
+            startGameButton.onClick.AddListener(OnStartGame);
+        else Debug.LogWarning("[LobbyUI] startGameButton chưa gán!");
+
+        if (readyButton != null)
+            readyButton.onClick.AddListener(OnReady);
+        else Debug.LogWarning("[LobbyUI] readyButton chưa gán!");
     }
 
-    // ========================================================
-    // QUIT ROOM → Về PlayOnline qua UIManager
-    // ========================================================
-    void OnQuitRoomClicked()
+    // ── Action Buttons Logic ──────────────────────────────────
+
+    void OnSettings()
     {
-        Debug.Log("[LobbyUI] Quit Room clicked.");
-
-        // --- ONLINE (Photon PUN2) --- uncomment khi tích hợp
-        // PhotonNetwork.LeaveRoom();
-
-        // Dùng UIManager để về PlayOnline
-        if (UIManager.Instance != null)
-            UIManager.Instance.QuitToPlayOnline();
-        else
-            Debug.LogWarning("[LobbyUI] UIManager.Instance là null!");
-    }
-
-    // ========================================================
-    // SETTINGS → Dùng UIManager Navigate
-    // ========================================================
-    void OnSettingsClicked()
-    {
-        Debug.Log("[LobbyUI] Settings clicked.");
-
         if (UIManager.Instance != null)
             UIManager.Instance.NavigateTo(UIManager.Instance.UISetting);
-        else
-            Debug.LogWarning("[LobbyUI] UIManager.Instance là null!");
     }
 
-    // ========================================================
-    // PLAYER LIST — OFFLINE DEBUG
-    // ========================================================
-    public void RefreshPlayerList_Debug()
+    void OnQuitRoom()
     {
-        foreach (var row in playerRowObjects)
-            if (row != null) Destroy(row);
-        playerRowObjects.Clear();
+        // FUSION STUB: uncomment khi online
+        // await runner.Disconnect();
+        if (UIManager.Instance != null)
+            UIManager.Instance.NavigateTo(UIManager.Instance.UIFindLobby);
+    }
 
-        foreach (var playerData in debugPlayers)
-            SpawnPlayerRow(playerData.playerName, playerData.isReady, playerData.isHost);
+    void OnForceStart()
+    {
+        Debug.Log("[LobbyUI] Force Start! Host bắt đầu game bất kể trạng thái ready.");
+        // FUSION STUB:
+        // runner.LoadScene(...)
+    }
+
+    void OnStartGame()
+    {
+        if (!AllPlayersReady()) return;
+        Debug.Log("[LobbyUI] Start Game! Tất cả đã sẵn sàng.");
+        // FUSION STUB:
+        // runner.LoadScene(...)
+    }
+
+    void OnReady()
+    {
+        localPlayerReady = !localPlayerReady;
+        UpdateReadyButton();
+        UpdateStartButton();
+
+        // Cập nhật debug data để hiển thị đúng trên list
+        foreach (var p in debugPlayers)
+        {
+            if (!p.isHost)
+            {
+                p.isReady = localPlayerReady;
+                break;
+            }
+        }
+        RefreshPlayerList();
+
+        // FUSION STUB:
+        // RPC_SetReady(localPlayerReady);
+        Debug.Log($"[LobbyUI] Local player ready: {localPlayerReady}");
+    }
+
+    // ── Cập nhật trạng thái nút ───────────────────────────────
+
+    void UpdateActionButtons()
+    {
+        // Force Start: chỉ hiện với host
+        if (forceStartButton != null)
+            forceStartButton.gameObject.SetActive(isHost);
+
+        // Start Game: chỉ hiện với host, sáng/tối theo all ready
+        if (startGameButton != null)
+        {
+            startGameButton.gameObject.SetActive(isHost);
+            UpdateStartButton();
+        }
+
+        // Ready: chỉ hiện với non-host
+        if (readyButton != null)
+        {
+            readyButton.gameObject.SetActive(!isHost);
+            UpdateReadyButton();
+        }
+    }
+
+    void UpdateStartButton()
+    {
+        if (startGameButton == null) return;
+        bool allReady = AllPlayersReady();
+        startGameButton.interactable = allReady;
+
+        // Màu sáng/tối
+        var colors = startGameButton.colors;
+        colors.normalColor      = allReady ? new Color(0.2f, 0.8f, 0.2f) : new Color(0.4f, 0.4f, 0.4f);
+        colors.disabledColor    = new Color(0.35f, 0.35f, 0.35f);
+        startGameButton.colors  = colors;
+    }
+
+    void UpdateReadyButton()
+    {
+        if (readyButtonText == null) return;
+        readyButtonText.text = localPlayerReady ? "Not Ready" : "Ready";
+
+        if (readyButton == null) return;
+        var colors = readyButton.colors;
+        colors.normalColor = localPlayerReady
+            ? new Color(0.9f, 0.3f, 0.3f)   // đỏ = Not Ready
+            : new Color(0.2f, 0.75f, 0.2f);  // xanh = Ready
+        readyButton.colors = colors;
+    }
+
+    bool AllPlayersReady()
+    {
+        foreach (var p in debugPlayers)
+            if (!p.isHost && !p.isReady) return false;
+        return true;
+        // FUSION STUB: kiểm tra NetworkDictionary trạng thái player thay vì debugPlayers
+    }
+
+    // ── Player List ───────────────────────────────────────────
+
+    public void RefreshPlayerList()
+    {
+        foreach (var row in spawnedRows)
+            if (row != null) Destroy(row);
+        spawnedRows.Clear();
+
+        foreach (var p in debugPlayers)
+            SpawnPlayerRow(p);
 
         UpdatePlayerCount(debugPlayers.Count, maxPlayers);
-        Debug.Log($"[LobbyUI] Player list refreshed. {debugPlayers.Count}/{maxPlayers} players.");
     }
 
-    // ========================================================
-    // SPAWN 1 PLAYER ROW
-    // ========================================================
-    void SpawnPlayerRow(string playerName, bool isReady, bool isHost)
+    void SpawnPlayerRow(DebugPlayerData data)
     {
         if (playerRowPrefab == null || playerListContainer == null)
         {
-            Debug.LogError("[LobbyUI] playerRowPrefab hoặc playerListContainer chưa được gán!");
+            Debug.LogError("[LobbyUI] Thiếu playerRowPrefab hoặc playerListContainer!");
             return;
         }
 
         GameObject row = Instantiate(playerRowPrefab, playerListContainer);
-        playerRowObjects.Add(row);
+        spawnedRows.Add(row);
 
-        TextMeshProUGUI nameText   = row.transform.Find("PlayerNameText")?.GetComponent<TextMeshProUGUI>();
+        // Avatar color
+        Image avatar = row.transform.Find("Avatar")?.GetComponent<Image>();
+        if (avatar != null) avatar.color = GetAvatarColor(data.playerName);
+
+        // Tên
+        TextMeshProUGUI nameText = row.transform.Find("PlayerNameText")?.GetComponent<TextMeshProUGUI>();
+        if (nameText != null) nameText.text = data.isHost ? $"{data.playerName} (Host)" : data.playerName;
+
+        // Trạng thái
         TextMeshProUGUI statusText = row.transform.Find("StatusText")?.GetComponent<TextMeshProUGUI>();
-        Toggle readyToggle         = row.transform.Find("ReadyToggle")?.GetComponent<Toggle>();
-        Image avatarImage          = row.transform.Find("Avatar")?.GetComponent<Image>();
-        GameObject hostBadge       = row.transform.Find("HostBadge")?.gameObject;
-
-        if (nameText != null)
-            nameText.text = playerName;
-        else
-            Debug.LogWarning("[LobbyUI] Không tìm thấy 'PlayerNameText' trong PlayerRow prefab.");
-
         if (statusText != null)
         {
-            statusText.text  = isReady ? "Ready" : "Not Ready";
-            statusText.color = isReady
-                ? new Color(74f/255f,  222f/255f, 128f/255f)
-                : new Color(248f/255f, 113f/255f, 113f/255f);
+            statusText.text  = data.isReady ? "Ready" : "Not Ready";
+            statusText.color = data.isReady
+                ? new Color(0.29f, 0.87f, 0.5f)
+                : new Color(0.97f, 0.44f, 0.44f);
         }
 
-        if (readyToggle != null)
-            readyToggle.isOn = isReady;
-
-        if (avatarImage != null)
-            avatarImage.color = GetAvatarColor(playerName);
-
-        if (hostBadge != null)
-            hostBadge.SetActive(isHost);
-
-        Debug.Log($"[LobbyUI] Spawned row — Name: {playerName}, Ready: {isReady}, Host: {isHost}");
+        // Host badge
+        GameObject hostBadge = row.transform.Find("HostBadge")?.gameObject;
+        if (hostBadge != null) hostBadge.SetActive(data.isHost);
     }
 
-    // ========================================================
-    // CẬP NHẬT PLAYER COUNT
-    // ========================================================
     void UpdatePlayerCount(int current, int max)
     {
         if (playerCountText != null)
             playerCountText.text = $"{current} / {max}";
     }
 
-    // ========================================================
-    // MÀU AVATAR THEO TÊN
-    // ========================================================
     Color GetAvatarColor(string playerName)
     {
-        Color[] colors = {
-            new Color(59f/255f,  130f/255f, 246f/255f),
-            new Color(139f/255f, 92f/255f,  246f/255f),
-            new Color(34f/255f,  197f/255f, 94f/255f),
-            new Color(249f/255f, 115f/255f, 22f/255f),
-            new Color(236f/255f, 72f/255f,  153f/255f),
+        Color[] palette = {
+            new Color(0.23f, 0.51f, 0.96f),
+            new Color(0.55f, 0.36f, 0.96f),
+            new Color(0.13f, 0.77f, 0.37f),
+            new Color(0.98f, 0.45f, 0.09f),
+            new Color(0.93f, 0.28f, 0.60f),
         };
-        int index = Mathf.Abs(playerName.GetHashCode()) % colors.Length;
-        return colors[index];
+        return palette[Mathf.Abs(playerName.GetHashCode()) % palette.Length];
     }
 
-    // ========================================================
-    // ONLINE — uncomment khi tích hợp Photon PUN2
-    // ========================================================
-    // public override void OnPlayerEnteredRoom(Photon.Realtime.Player newPlayer) { ... }
-    // public override void OnPlayerLeftRoom(Photon.Realtime.Player otherPlayer) { ... }
+    // ── FUSION STUB ───────────────────────────────────────────
+    // [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    // void RPC_SetReady(bool ready) { ... }
+    //
+    // public override void OnPlayerJoined(PlayerRef player) { RefreshPlayerList(); }
+    // public override void OnPlayerLeft(PlayerRef player)   { RefreshPlayerList(); }
 }
 
-// ============================================================
-// Data class cho debug player list
-// ============================================================
 [System.Serializable]
 public class DebugPlayerData
 {

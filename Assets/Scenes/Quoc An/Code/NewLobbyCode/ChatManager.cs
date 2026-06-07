@@ -4,242 +4,174 @@ using TMPro;
 using System.Collections.Generic;
 
 // ============================================================
-// ChatManager
-// Xử lý: nhập tin nhắn, lọc từ tục tĩu, hiển thị lên khung chat
-//
-// OFFLINE  : Chạy hoàn toàn local, test ngay trong Play Mode
-// ONLINE   : Uncomment phần Photon/Mirror để sync qua mạng
+// ChatManager — Chat lobby với profanity filter VI + EN
+// Gửi bằng Enter, không có nút Send
+// OFFLINE: test trực tiếp, tin nhắn hiện ngay
+// ONLINE:  Uncomment phần Fusion khi sẵn sàng
 // ============================================================
-
 public class ChatManager : MonoBehaviour
 {
-    [Header("UI References")]
-    [Tooltip("Kéo ChatInputField vào đây")]
-    public TMP_InputField chatInputField;
+    // ── References ────────────────────────────────────────────
+    [Header("--- UI REFERENCES ---")]
+    [Tooltip("ScrollRect chứa nội dung chat")]
+    public ScrollRect chatScrollRect;
 
-    [Tooltip("Kéo SendBtn vào đây")]
-    public Button sendButton;
+    [Tooltip("Content bên trong ScrollRect")]
+    public Transform chatContent;
 
-    [Tooltip("Kéo object Content (nằm trong ChatScrollView/Viewport/Content) vào đây")]
-    public Transform messageContainer;
+    [Tooltip("Prefab 1 dòng chat (có TMP)")]
+    public GameObject chatLinePrefab;
 
-    [Tooltip("Kéo prefab ChatMessage vào đây (TextMeshPro object)")]
-    public GameObject messagePrefab;
+    [Tooltip("InputField để nhập tin nhắn — nhấn Enter để gửi")]
+    public TMP_InputField chatInput;
 
-    [Tooltip("Kéo ChatScrollView vào đây để auto-scroll xuống dưới")]
-    public ScrollRect scrollRect;
-
-    [Header("Settings")]
-    [Tooltip("Số tin nhắn tối đa hiển thị (tránh lag)")]
-    public int maxMessages = 50;
-
-    [Tooltip("Tên người chơi hiện tại — test offline")]
+    // ── Settings ──────────────────────────────────────────────
+    [Header("--- SETTINGS ---")]
+    [Tooltip("Tên người chơi local (để test offline)")]
     public string localPlayerName = "HostPlayer";
 
-    // --------------------------------------------------------
-    // Danh sách từ cần lọc — thêm từ vào đây
-    // Format: { "từgốc", "từthayThế" }  
-    // Nếu chỉ muốn censore thành ***** thì để replacements rỗng
-    // --------------------------------------------------------
-    private readonly List<string> bannedWords = new List<string>
+    [Tooltip("Số dòng chat tối đa trước khi xóa dòng cũ nhất")]
+    public int maxChatLines = 50;
+
+    [Header("--- DEBUG TEST ---")]
+    [Tooltip("Nhấn nút này trong Inspector để gửi tin nhắn test")]
+    public string debugMessageToSend = "Hello everyone!";
+
+    // ── Profanity filter ──────────────────────────────────────
+    // Tiếng Việt + Tiếng Anh — mở rộng tùy ý
+    private static readonly HashSet<string> bannedWords = new HashSet<string>(
+        System.StringComparer.OrdinalIgnoreCase)
     {
-        // Tiếng Anh
+        // EN
         "fuck", "shit", "bitch", "asshole", "bastard", "damn", "crap",
-        // Tiếng Việt (không dấu để dễ detect)
-        "dit", "cac", "lon", "buoi", "vcl", "dmm", "dm", "clm", "vkl",
-        "đit", "cặc", "lồn", "buồi", "đmm", "đm", "clm",
-        // Thêm từ khác ở đây
+        "dick", "pussy", "cock", "whore", "slut", "nigger", "faggot",
+        // VI (latin không dấu để match dễ hơn)
+        "dit", "buoi", "lon", "cac", "cu", "dm", "vcl", "vkl",
+        "clm", "dcm", "đm", "đmm", "cmm", "cml", "đcm",
+        "má mày", "mẹ mày", "bố mày", "thằng chó", "con chó",
+        "đồ chó", "thứ chó", "ngu", "óc chó", "óc bò"
     };
 
-    private List<GameObject> messageObjects = new List<GameObject>();
+    // ── Runtime ───────────────────────────────────────────────
+    private List<GameObject> chatLines = new List<GameObject>();
+
+    // ─────────────────────────────────────────────────────────
 
     void Start()
     {
-        // Gán sự kiện cho nút Send
-        if (sendButton != null)
-            sendButton.onClick.AddListener(OnSendButtonClicked);
-
-        // Cho phép nhấn Enter để gửi
-        if (chatInputField != null)
-            chatInputField.onSubmit.AddListener(OnInputSubmit);
-
-        Debug.Log("[Chat] ChatManager initialized. Local player: " + localPlayerName);
-    }
-
-    // --------------------------------------------------------
-    // Gọi khi nhấn nút Send
-    // --------------------------------------------------------
-    void OnSendButtonClicked()
-    {
-        SendMessage_Local();
-    }
-
-    // --------------------------------------------------------
-    // Gọi khi nhấn Enter trong input field
-    // --------------------------------------------------------
-    void OnInputSubmit(string text)
-    {
-        SendMessage_Local();
-        // Re-focus input field sau khi gửi
-        chatInputField.ActivateInputField();
-    }
-
-    // --------------------------------------------------------
-    // Xử lý gửi tin nhắn (offline)
-    // --------------------------------------------------------
-    void SendMessage_Local()
-    {
-        if (chatInputField == null) return;
-
-        string rawText = chatInputField.text.Trim();
-
-        if (string.IsNullOrEmpty(rawText)) return;
-
-        // Lọc từ tục tĩu
-        string filteredText = FilterBannedWords(rawText);
-
-        // Hiển thị tin nhắn
-        DisplayMessage(localPlayerName, filteredText, MessageType.Player);
-
-        // Log ra console
-        Debug.Log($"[Chat] {localPlayerName}: {filteredText}");
-
-        // Xóa input field
-        chatInputField.text = "";
-
-        // --- ONLINE (Photon PUN2) — uncomment khi tích hợp ---
-        // photonView.RPC("RPC_ReceiveMessage", RpcTarget.All, localPlayerName, filteredText);
-
-        // --- ONLINE (Mirror) --- 
-        // CmdSendMessage(localPlayerName, filteredText);
-    }
-
-    // --------------------------------------------------------
-    // Lọc từ tục tĩu — thay thế bằng *****
-    // --------------------------------------------------------
-    string FilterBannedWords(string input)
-    {
-        string result = input;
-
-        foreach (string word in bannedWords)
+        if (chatInput != null)
         {
-            // Case-insensitive replace
-            string stars = new string('*', word.Length);
-            System.Text.RegularExpressions.Regex regex =
-                new System.Text.RegularExpressions.Regex(
-                    System.Text.RegularExpressions.Regex.Escape(word),
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                );
-            result = regex.Replace(result, stars);
+            // Lắng nghe phím Enter
+            chatInput.onSubmit.AddListener(OnSubmitChat);
         }
+        else Debug.LogWarning("[Chat] chatInput chưa gán!");
 
-        return result;
+        // Tin nhắn hệ thống khi vào lobby
+        AddSystemMessage("Bạn đã vào phòng. Chào mừng!");
     }
 
-    // --------------------------------------------------------
-    // Hiển thị tin nhắn lên UI
-    // --------------------------------------------------------
-    public enum MessageType { Player, System }
-
-    public void DisplayMessage(string sender, string content, MessageType type = MessageType.Player)
+    // ── Nhận input Enter ──────────────────────────────────────
+    void OnSubmitChat(string message)
     {
-        if (messagePrefab == null || messageContainer == null)
+        SendMessage_Local(message);
+
+        // Xóa input và giữ focus để tiếp tục nhập
+        chatInput.text = "";
+        chatInput.ActivateInputField();
+    }
+
+    // ── Gửi tin nhắn local ───────────────────────────────────
+    void SendMessage_Local(string message)
+    {
+        message = message.Trim();
+        if (string.IsNullOrEmpty(message)) return;
+
+        string filtered = FilterProfanity(message);
+        string formatted = $"<b>{localPlayerName}:</b> {filtered}";
+
+        AddChatLine(formatted, Color.white);
+
+        // FUSION STUB:
+        // RPC_SendChatMessage(localPlayerName, filtered);
+    }
+
+    // ── Thêm 1 dòng chat vào UI ───────────────────────────────
+    public void AddChatLine(string text, Color color)
+    {
+        if (chatContent == null || chatLinePrefab == null)
         {
-            Debug.LogError("[Chat] messagePrefab hoặc messageContainer chưa được gán!");
+            Debug.LogWarning("[Chat] Thiếu chatContent hoặc chatLinePrefab!");
             return;
         }
 
-        // Tạo message object
-        GameObject msgObj = Instantiate(messagePrefab, messageContainer);
-        TextMeshProUGUI tmpText = msgObj.GetComponent<TextMeshProUGUI>();
-
-        if (tmpText == null)
+        // Xóa dòng cũ nhất nếu quá giới hạn
+        if (chatLines.Count >= maxChatLines)
         {
-            Debug.LogError("[Chat] messagePrefab không có component TextMeshProUGUI!");
-            return;
+            Destroy(chatLines[0]);
+            chatLines.RemoveAt(0);
         }
 
-        // Set nội dung và màu theo loại
-        if (type == MessageType.System)
+        GameObject line = Instantiate(chatLinePrefab, chatContent);
+        TextMeshProUGUI tmp = line.GetComponentInChildren<TextMeshProUGUI>();
+        if (tmp != null)
         {
-            tmpText.text = $"<i><color=#999999>{content}</color></i>";
-        }
-        else
-        {
-            // Màu tên người chơi khác nhau dựa theo hash tên
-            string nameColor = GetPlayerColor(sender);
-            tmpText.text = $"<color={nameColor}><b>{sender}:</b></color> {content}";
+            tmp.text  = text;
+            tmp.color = color;
         }
 
-        messageObjects.Add(msgObj);
+        chatLines.Add(line);
 
-        // Xóa tin nhắn cũ nếu quá maxMessages
-        if (messageObjects.Count > maxMessages)
-        {
-            Destroy(messageObjects[0]);
-            messageObjects.RemoveAt(0);
-        }
-
-        // Auto-scroll xuống tin nhắn mới nhất
-        ScrollToBottom();
+        // Scroll xuống cuối
+        Canvas.ForceUpdateCanvases();
+        if (chatScrollRect != null)
+            chatScrollRect.verticalNormalizedPosition = 0f;
     }
 
-    // --------------------------------------------------------
-    // Tạo màu khác nhau cho mỗi tên người chơi
-    // --------------------------------------------------------
-    string GetPlayerColor(string playerName)
+    // ── Tin nhắn hệ thống (màu vàng) ─────────────────────────
+    public void AddSystemMessage(string text)
     {
-        string[] colors = { "#7EC8F5", "#C8A8F5", "#F5C87E", "#8DF5A8", "#F58D8D" };
-        int index = Mathf.Abs(playerName.GetHashCode()) % colors.Length;
-        return colors[index];
+        AddChatLine($"<i>[System] {text}</i>", new Color(1f, 0.85f, 0.3f));
     }
 
-    // --------------------------------------------------------
-    // Auto-scroll xuống dưới cùng
-    // --------------------------------------------------------
-    void ScrollToBottom()
+    // ── Profanity Filter ──────────────────────────────────────
+    string FilterProfanity(string input)
     {
-        if (scrollRect == null) return;
-        // Delay 1 frame để Content Size Fitter cập nhật trước
-        StartCoroutine(ScrollNextFrame());
+        if (string.IsNullOrEmpty(input)) return input;
+
+        string[] words = input.Split(' ');
+        for (int i = 0; i < words.Length; i++)
+        {
+            // Strip dấu câu để so sánh
+            string clean = System.Text.RegularExpressions.Regex
+                .Replace(words[i], @"[^\w]", "");
+
+            if (bannedWords.Contains(clean))
+                words[i] = new string('*', words[i].Length);
+        }
+        return string.Join(" ", words);
     }
 
-    System.Collections.IEnumerator ScrollNextFrame()
+    // ── Nhận tin từ người khác (gọi khi online) ──────────────
+    public void ReceiveMessage(string senderName, string message)
     {
-        yield return null;
-        scrollRect.verticalNormalizedPosition = 0f;
+        string filtered   = FilterProfanity(message);
+        string formatted  = $"<b>{senderName}:</b> {filtered}";
+        AddChatLine(formatted, Color.white);
     }
 
-    // --------------------------------------------------------
-    // ONLINE: Nhận tin nhắn từ player khác qua mạng
-    // --------------------------------------------------------
+    // ── Inspector Debug ───────────────────────────────────────
+#if UNITY_EDITOR
+    [ContextMenu("Debug: Send Test Message")]
+    void Debug_SendTestMessage()
+    {
+        SendMessage_Local(debugMessageToSend);
+    }
+#endif
 
-    // --- Photon PUN2 ---
-    // [PunRPC]
-    // public void RPC_ReceiveMessage(string sender, string content)
+    // ── FUSION STUB ───────────────────────────────────────────
+    // [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
+    // void RPC_SendChatMessage(string sender, string message)
     // {
-    //     DisplayMessage(sender, content, MessageType.Player);
+    //     ReceiveMessage(sender, message);
     // }
-
-    // --- Mirror ---
-    // [Command]
-    // void CmdSendMessage(string sender, string content)
-    // {
-    //     RpcReceiveMessage(sender, content);
-    // }
-    // [ClientRpc]
-    // void RpcReceiveMessage(string sender, string content)
-    // {
-    //     DisplayMessage(sender, content, MessageType.Player);
-    // }
-
-    // --------------------------------------------------------
-    // Gọi hàm này để hiển thị system message
-    // Ví dụ: chatManager.ShowSystemMessage("Alice joined the room");
-    // --------------------------------------------------------
-    public void ShowSystemMessage(string content)
-    {
-        DisplayMessage("", content, MessageType.System);
-        Debug.Log($"[Chat][System] {content}");
-    }
 }

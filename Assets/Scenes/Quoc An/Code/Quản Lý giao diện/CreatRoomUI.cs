@@ -8,9 +8,8 @@ public class CreateRoomPanel : MonoBehaviour
     public TMP_InputField RoomNameInput;
     public TMP_InputField MaxPlayersInput;
 
-    [Header("--- MINIGAME DROPDOWN (custom) ---")]
-    [Tooltip("Kéo GameObject MiniGameAmount (có gắn MiniGameDropdownUI) vào đây")]
-    public MiniGameDropdownUI MiniGameDropdown;
+    [Header("--- MINIGAME DROPDOWN ---")]
+    public TMP_Dropdown MiniGameDropdown;
 
     [Header("--- BUTTONS ---")]
     public Button createButton;
@@ -37,8 +36,10 @@ public class CreateRoomPanel : MonoBehaviour
 
     void OnClick_CreateRoom()
     {
-        string roomName  = RoomNameInput  != null ? RoomNameInput.text.Trim() : "";
-        string miniGame  = MiniGameDropdown != null ? MiniGameDropdown.SelectedValue : "None";
+        string roomName = RoomNameInput != null ? RoomNameInput.text.Trim() : "";
+        string miniGame = MiniGameDropdown != null
+            ? MiniGameDropdown.options[MiniGameDropdown.value].text
+            : "None";
 
         if (string.IsNullOrEmpty(roomName))
         {
