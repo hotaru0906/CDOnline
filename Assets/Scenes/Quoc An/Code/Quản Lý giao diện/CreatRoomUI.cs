@@ -7,7 +7,10 @@ public class CreateRoomPanel : MonoBehaviour
     [Header("--- INPUT FIELDS ---")]
     public TMP_InputField RoomNameInput;
     public TMP_InputField MaxPlayersInput;
-    public TMP_Dropdown MiniGameDropdown;
+
+    [Header("--- MINIGAME DROPDOWN (custom) ---")]
+    [Tooltip("Kéo GameObject MiniGameAmount (có gắn MiniGameDropdownUI) vào đây")]
+    public MiniGameDropdownUI MiniGameDropdown;
 
     [Header("--- BUTTONS ---")]
     public Button createButton;
@@ -34,13 +37,9 @@ public class CreateRoomPanel : MonoBehaviour
 
     void OnClick_CreateRoom()
     {
-        // ── Lấy dữ liệu ──────────────────────────────
-        string roomName = RoomNameInput != null ? RoomNameInput.text.Trim() : "";
-        string miniGame = MiniGameDropdown != null
-            ? MiniGameDropdown.options[MiniGameDropdown.value].text
-            : "None";
+        string roomName  = RoomNameInput  != null ? RoomNameInput.text.Trim() : "";
+        string miniGame  = MiniGameDropdown != null ? MiniGameDropdown.SelectedValue : "None";
 
-        // ── Validate ──────────────────────────────────
         if (string.IsNullOrEmpty(roomName))
         {
             Debug.LogWarning("[CreateRoom] Tên phòng không được để trống!");
@@ -55,13 +54,11 @@ public class CreateRoomPanel : MonoBehaviour
 
         Debug.Log($"[CreateRoom] Tạo phòng → Name: {roomName} | Max: {maxPlayers} | Game: {miniGame}");
 
-        // ── Gửi data sang Lobby ───────────────────────
         if (LobbyUIManager.Instance != null)
             LobbyUIManager.Instance.SetupLobby(roomName, maxPlayers, miniGame);
         else
             Debug.LogWarning("[CreateRoom] LobbyUIManager.Instance là null!");
 
-        // ── Chuyển sang Panel Lobby ───────────────────
         if (UIManager.Instance != null)
             UIManager.Instance.NavigateTo(UIManager.Instance.UILobby);
         else
