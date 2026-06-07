@@ -265,14 +265,6 @@ public class PlayerController : NetworkBehaviour
         // Apply movement
         _networkCC.Move(finalMovement);
         // SFX footstep
-        if (HasStateAuthority)
-        {
-            if (IsMoving)
-                _sfx?.StartFootstep(IsRunning ? PlayerSFXType.Run : PlayerSFXType.Walk);
-            else
-                _sfx?.StopFootstep();
-        }
-
         _targetMoveDirection = moveDirection;
     }
 
@@ -435,7 +427,6 @@ public class PlayerController : NetworkBehaviour
         if (input.IsButtonPressed(PlayerInputData.BUTTON_JUMP) && canJump)
         {
             _networkCC.Jump();
-            _sfx?.PlayAction(PlayerSFXType.Jump);
             GroundedTimer = 0; // Reset buffer khi đã nhảy
 
             // Trigger jump animation
@@ -562,7 +553,7 @@ public class PlayerController : NetworkBehaviour
                 RotateTowards(_targetMoveDirection);
             }
             // Khi đứng yên: KHÔNG xoay model → có thể xoay camera xung quanh để ngắm
-        }
+        } UpdateSFXByState();
     }
 
     /// <summary>
@@ -717,5 +708,44 @@ public class PlayerController : NetworkBehaviour
         Gizmos.color = grounded ? Color.green : Color.yellow;
         Vector3 origin = transform.position + Vector3.up * 0.1f;
         Gizmos.DrawWireSphere(origin + Vector3.down * 0.1f, 0.3f);
+    }
+    private PlayerState _lastSFXState = PlayerState.Idle;
+
+    private void UpdateSFXByState()
+    {
+        if (_sfx == null) return;
+        if (CurrentState == _lastSFXState) return; // Không thay đổi → bỏ qua
+
+        PlayerState prev = _lastSFXState;
+        _lastSFXState = CurrentState;
+
+        switch (CurrentState)
+        {
+            case PlayerState.Walking:
+                _sfx.StartFootstep(PlayerSFXType.Walk);
+                break;
+
+            case PlayerState.Running:
+                _sfx.StartFootstep(PlayerSFXType.Run);
+                break;
+
+            case PlayerState.Jumping:
+                _sfx.StopFootstep();
+                // Chỉ play jump sound khi chuyển từ state có thể nhảy
+                if (prev == PlayerState.Idle   ||
+                    prev == PlayerState.Walking ||
+                    prev == PlayerState.Running)
+                {
+                    _sfx.PlayAction(PlayerSFXType.Jump);
+                }
+                break;
+
+            case PlayerState.Idle:
+            case PlayerState.Falling:
+            case PlayerState.Crouching:
+            case PlayerState.Attacking:
+                _sfx.StopFootstep();
+                break;
+        }
     }
 }
