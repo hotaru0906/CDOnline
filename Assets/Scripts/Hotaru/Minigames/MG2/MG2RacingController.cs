@@ -69,6 +69,7 @@ public class MG2RacingController : BaseMinigameController
 
         // Ghi nhận vào PlayerMinigameData
         var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+
         foreach (var p in allPlayers)
         {
             if (p.Object.InputAuthority == playerRef)
@@ -78,23 +79,14 @@ public class MG2RacingController : BaseMinigameController
             }
         }
 
+        // Hiện UI cho player vừa về đích
+        RPC_ShowFinishUI(playerRef);
+
         OnPlayerFinished(playerRef);
         RPC_OnPlayerRanked(playerRef, rank);
+
         Debug.Log($"[MG2RacingController] Player {playerRef} finished — Rank: {rank}, Time: {elapsed:F2}s");
-
-        // Check nếu tất cả players non-eliminated đã về đích
-        int activePlayers = 0;
-        foreach (var p in allPlayers)
-            if (!p.IsEliminated) activePlayers++;
-
-        if (_finishOrder.Count >= activePlayers)
-        {
-            Debug.Log("[MG2RacingController] All active players finished!");
-            FinalizeRanks(); // rank nốt những ai còn IsEliminated=true chưa có rank
-            EndGame(_finishOrder[0]);
-        }
     }
-
     // ----------------------------------------------------------------
     //  FinalizeRanks — assign rank cho tất cả players chưa về đích
     //  (timeout hoặc eliminated) theo DistanceProgress giảm dần
@@ -131,9 +123,22 @@ public class MG2RacingController : BaseMinigameController
     private void RPC_OnPlayerRanked(PlayerRef playerRef, int rank)
     {
         string[] ordinals = { "1st", "2nd", "3rd" };
-        string rankStr = rank <= 3 ? ordinals[rank - 1] : $"{rank}th";
+
+        string rankStr = rank <= 3
+            ? ordinals[rank - 1]
+            : $"{rank}th";
+
         Debug.Log($"[MG2RacingController] Player {playerRef}: {rankStr}!");
         // TODO Phase 5 (UI): Hiện rank badge UI cho player tương ứng
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowFinishUI(PlayerRef playerRef)
+    {
+        if (Runner.LocalPlayer == playerRef)
+        {
+            FinishUI.Instance?.ShowFinish();
+        }
     }
 
     // ----------------------------------------------------------------
@@ -215,5 +220,22 @@ public class MG2RacingController : BaseMinigameController
         }
 
         Debug.Log("==============================================");
+    }
+
+    private PlayerMinigameData GetNextActivePlayer(PlayerRef finishedPlayer)
+    {
+        var players =
+            FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+
+        foreach (var p in players)
+        {
+            if (p.Object.InputAuthority == finishedPlayer)
+                continue;
+
+            if (!p.HasFinished && !p.IsEliminated)
+                return p;
+        }
+
+        return null;
     }
 }

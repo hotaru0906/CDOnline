@@ -62,6 +62,7 @@ public class PlayerController : NetworkBehaviour
     [Networked] private NetworkBool IsMoving { get; set; }
 
     [Networked] private float GroundedTimer { get; set; }
+    [Networked] private NetworkBool IsJumpingByInput { get; set; }
     [Networked] private TickTimer HitCooldownTimer { get; set; }
 
     /// <summary>
@@ -254,7 +255,8 @@ public class PlayerController : NetworkBehaviour
         if (!CanPerformAction(MinigameAction.Jump))
             return;
 
-        if (IsKnockbacked) return;
+        if (IsKnockbacked)
+            return;
 
         bool canJump =
             _networkCC.Grounded ||
@@ -265,6 +267,9 @@ public class PlayerController : NetworkBehaviour
             _networkCC.Jump();
 
             GroundedTimer = 0;
+
+            // Đánh dấu đây là cú nhảy do người chơi bấm
+            IsJumpingByInput = true;
 
             Debug.Log("[PlayerController] JUMP!");
         }
@@ -315,6 +320,9 @@ public class PlayerController : NetworkBehaviour
         if (isGrounded)
         {
             GroundedTimer = groundBufferTime;
+
+            // Chạm đất => kết thúc trạng thái jump
+            IsJumpingByInput = false;
         }
         else
         {
@@ -333,10 +341,14 @@ public class PlayerController : NetworkBehaviour
         // Jump/Fall
         if (!isBufferedGrounded)
         {
-            CurrentState =
-                velocity.y > 0.2f
-                ? PlayerState.Jumping
-                : PlayerState.Falling;
+            if (IsJumpingByInput && velocity.y > 0.2f)
+            {
+                CurrentState = PlayerState.Jumping;
+            }
+            else
+            {
+                CurrentState = PlayerState.Falling;
+            }
 
             return;
         }
