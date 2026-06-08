@@ -98,6 +98,21 @@ public class GameManager : NetworkBehaviour
     [Networked] public int MgRank2 { get; private set; } = -1;
     [Networked] public int MgRank3 { get; private set; } = -1;
     [Networked] public int MgRank4 { get; private set; } = -1;
+    [Networked] public int BoardNodeSlot0 { get; private set; } = 0;
+    [Networked] public int BoardNodeSlot1 { get; private set; } = 0;
+    [Networked] public int BoardNodeSlot2 { get; private set; } = 0;
+    [Networked] public int BoardNodeSlot3 { get; private set; } = 0;
+    public void SaveBoardPositions(int s0, int s1, int s2, int s3)
+    {
+        if (!HasStateAuthority) return;
+        BoardNodeSlot0 = s0;
+        BoardNodeSlot1 = s1;
+        BoardNodeSlot2 = s2;
+        BoardNodeSlot3 = s3;
+    }
+
+    public int[] GetBoardPositions() =>
+        new[] { BoardNodeSlot0, BoardNodeSlot1, BoardNodeSlot2, BoardNodeSlot3 };
 
     #region Synced Minigame Settings (từ MinigameData, sync cho tất cả clients)
     [Networked] public NetworkBool MG_CanMove { get; private set; } = true;
@@ -818,6 +833,12 @@ public class GameManager : NetworkBehaviour
         }
 
         BoardManager.Instance.StartBoardPhase(ranking);
+        BoardManager.Instance.StartBoardPhase(ranking);
+
+        // Restore vị trí nếu đã từng chơi board trước đó
+        int[] saved = GetBoardPositions();
+        if (saved[0] != 0 || saved[1] != 0 || saved[2] != 0 || saved[3] != 0)
+            BoardManager.Instance.RestoreBoardPositions(saved);
     }
 
     /// <summary>
@@ -1293,12 +1314,8 @@ public class GameManager : NetworkBehaviour
         if (CursorManager.Instance != null)
             CursorManager.Instance.ShowCursor();
 
-        // Camera: ThirdPerson follow token của local player
         if (CameraManager.Instance != null)
-        {
-            CameraManager.Instance.SwitchToThirdPersonCamera();
             CameraManager.Instance.SetCameraRotationLocked(false);
-        }
 
         // Disable player input (không di chuyển character khi ở board)
         if (PlayerInputHandler.Instance != null)
