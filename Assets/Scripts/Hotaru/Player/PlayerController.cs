@@ -1,3 +1,4 @@
+
 using Fusion;
 using UnityEngine;
 
@@ -51,56 +52,56 @@ public class PlayerController : NetworkBehaviour
     [Header("UI")]
     [SerializeField] private GameObject crosshairUI;
 
-    // ── Networked State ───────────────────────────────────
     [Networked] public PlayerState CurrentState { get; private set; }
+
     [Networked] private Vector3 ExternalVelocity { get; set; }
     [Networked] private float AttackTimer { get; set; }
+
     [Networked] private NetworkBool IsRunning { get; set; }
     [Networked] private NetworkBool IsCrouching { get; set; }
     [Networked] private NetworkBool IsMoving { get; set; }
+
     [Networked] private float GroundedTimer { get; set; }
     [Networked] private TickTimer HitCooldownTimer { get; set; }
 
     /// <summary>
     /// Đếm ngược thời gian knockback. Khi > 0, player không tự điều khiển được.
+    /// Set bởi ApplyExternalForce(force, duration, overrideInput: true).
     /// </summary>
     [Networked] private float KnockbackTimer { get; set; }
 
     public bool IsInHitCooldown =>
         HitCooldownTimer.ExpiredOrNotRunning(Runner) == false;
 
+    /// <summary>true khi player đang bị knockback (không thể input).</summary>
     public bool IsKnockbacked => KnockbackTimer > 0f;
 
     public Vector3 Velocity =>
         _networkCC != null ? _networkCC.Velocity : Vector3.zero;
 
-    // ── Private refs ─────────────────────────────────────
     private NetworkCharacterController _networkCC;
     private PlayerAnimator _playerAnimator;
-    private PlayerSFXController _sfx;           // ← SFX (nhánh bạn)
 
     private CameraOrbit _cameraOrbit;
     private Transform _cameraTransform;
 
     private Vector3 _targetMoveDirection;
+
     private Vector3 _normalScale;
-    private Vector3 _crouchScaleVec;
+    private Vector3 _crouchScale;
 
     private bool _isFrozen;
-    public bool IsFrozen => _isFrozen;
 
-    // ─────────────────────────────────────────────────────
-    // Lifecycle
-    // ─────────────────────────────────────────────────────
+    public bool IsFrozen => _isFrozen;
 
     private void Awake()
     {
-        _networkCC      = GetComponent<NetworkCharacterController>();
+        _networkCC = GetComponent<NetworkCharacterController>();
         _playerAnimator = GetComponent<PlayerAnimator>();
-        _sfx            = GetComponent<PlayerSFXController>(); // ← SFX (nhánh bạn)
 
-        _normalScale  = transform.localScale;
-        _crouchScaleVec = new Vector3(
+        _normalScale = transform.localScale;
+
+        _crouchScale = new Vector3(
             _normalScale.x,
             _normalScale.y * crouchScale,
             _normalScale.z
@@ -122,7 +123,9 @@ public class PlayerController : NetworkBehaviour
         if (CameraManager.Instance != null)
         {
             CameraManager.Instance.RegisterLocalPlayer(transform);
+
             CameraManager.Instance.SwitchToThirdPersonCamera();
+
             _cameraOrbit = CameraManager.Instance.CameraOrbit;
         }
 
@@ -140,21 +143,22 @@ public class PlayerController : NetworkBehaviour
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
         if (HasInputAuthority && CameraManager.Instance != null)
+        {
             CameraManager.Instance.UnregisterLocalPlayer();
+        }
     }
-
-    // ─────────────────────────────────────────────────────
-    // Network Update
-    // ─────────────────────────────────────────────────────
 
     public override void FixedUpdateNetwork()
     {
-        // Attack timer
+        // Update attack timer
         if (AttackTimer > 0)
         {
             AttackTimer -= Runner.DeltaTime;
+
             if (AttackTimer <= 0)
+            {
                 AttackTimer = 0;
+            }
         }
 
         // External force decay
@@ -162,13 +166,17 @@ public class PlayerController : NetworkBehaviour
 
         // Knockback timer countdown
         if (HasStateAuthority && KnockbackTimer > 0f)
+        {
             KnockbackTimer = Mathf.Max(0f, KnockbackTimer - Runner.DeltaTime);
+        }
 
         // Input
         if (GetInput(out PlayerInputData input))
         {
+            // Attack luôn check riêng
             HandleAttack(input);
 
+            // Không move khi attack
             if (CurrentState != PlayerState.Attacking)
             {
                 Move(input);
@@ -178,10 +186,6 @@ public class PlayerController : NetworkBehaviour
 
         UpdateState();
     }
-
-    // ─────────────────────────────────────────────────────
-    // Movement
-    // ─────────────────────────────────────────────────────
 
     private void Move(PlayerInputData input)
     {
@@ -194,37 +198,52 @@ public class PlayerController : NetworkBehaviour
 
         bool canMove = CanPerformAction(MinigameAction.Move);
 
+        // Knockback: player không tự di chuyển được, nhưng ExternalVelocity vẫn tác động
         Vector3 moveDirection = (canMove && !IsKnockbacked)
             ? CalculateMoveDirection(input.MoveDirection, input.CameraForward)
             : Vector3.zero;
 
         IsMoving = moveDirection.magnitude > 0.01f;
 
-        bool canRun    = CanPerformAction(MinigameAction.Run);
+        bool canRun = CanPerformAction(MinigameAction.Run);
+
+        IsRunning =
+            canRun &&
+            input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
+
         bool canCrouch = CanPerformAction(MinigameAction.Crouch);
 
-        IsRunning   = canRun    && input.IsButtonPressed(PlayerInputData.BUTTON_SLIDE);
-        IsCrouching = canCrouch && input.IsButtonPressed(PlayerInputData.BUTTON_CROUCH);
+        IsCrouching =
+            canCrouch &&
+            input.IsButtonPressed(PlayerInputData.BUTTON_CROUCH);
 
         float targetSpeed = 0f;
+
         if (IsMoving)
         {
-            if (IsCrouching)      targetSpeed = crouchSpeed;
-            else if (IsRunning)   targetSpeed = runSpeed;
-            else                  targetSpeed = walkSpeed;
+            if (IsCrouching)
+                targetSpeed = crouchSpeed;
+            else if (IsRunning)
+                targetSpeed = runSpeed;
+            else
+                targetSpeed = walkSpeed;
         }
 
-        Vector3 finalMovement = moveDirection.normalized * targetSpeed;
+        Vector3 finalMovement =
+            moveDirection.normalized * targetSpeed;
+
         finalMovement += ExternalVelocity;
 
         float totalSpeed = finalMovement.magnitude;
-        _networkCC.maxSpeed = Mathf.Max(targetSpeed, totalSpeed);
+
+        _networkCC.maxSpeed =
+            Mathf.Max(targetSpeed, totalSpeed);
 
         _networkCC.Move(finalMovement);
 
         _targetMoveDirection = moveDirection;
 
-        // Giữ player thẳng đứng
+        // Luôn giữ player thẳng đứng — tránh NetworkCC / knockback làm nghiêng trục X/Z
         Vector3 euler = transform.eulerAngles;
         if (euler.x != 0f || euler.z != 0f)
             transform.rotation = Quaternion.Euler(0f, euler.y, 0f);
@@ -232,36 +251,116 @@ public class PlayerController : NetworkBehaviour
 
     private void HandleJump(PlayerInputData input)
     {
-        if (!CanPerformAction(MinigameAction.Jump)) return;
+        if (!CanPerformAction(MinigameAction.Jump))
+            return;
+
         if (IsKnockbacked) return;
 
-        bool canJump = _networkCC.Grounded || GroundedTimer > 0;
+        bool canJump =
+            _networkCC.Grounded ||
+            GroundedTimer > 0;
 
         if (input.IsButtonPressed(PlayerInputData.BUTTON_JUMP) && canJump)
         {
             _networkCC.Jump();
-            GroundedTimer = 0;
-            Debug.Log("[PlayerController] JUMP!");
 
-            // SFX không gọi ở đây — driven by state trong Render()
+            GroundedTimer = 0;
+
+            Debug.Log("[PlayerController] JUMP!");
         }
     }
 
     private void HandleAttack(PlayerInputData input)
     {
-        if (!CanPerformAction(MinigameAction.Attack)) return;
-        if (IsKnockbacked) return;
-        if (CurrentState == PlayerState.Attacking) return;
+        if (!CanPerformAction(MinigameAction.Attack))
+            return;
 
-        bool canAttack = _networkCC.Grounded || GroundedTimer > 0;
+        if (IsKnockbacked) return;
+
+        // Không spam attack
+        if (CurrentState == PlayerState.Attacking)
+            return;
+
+        bool canAttack =
+            _networkCC.Grounded ||
+            GroundedTimer > 0;
 
         if (input.IsButtonPressed(PlayerInputData.BUTTON_PUNCH) && canAttack)
         {
             CurrentState = PlayerState.Attacking;
-            AttackTimer  = attackDuration;
+
+            AttackTimer = attackDuration;
+
             Debug.Log("[PlayerController] ATTACK!");
             CheckAttackHit();
         }
+    }
+
+    private void UpdateState()
+    {
+        // Giữ attack state
+        if (CurrentState == PlayerState.Attacking)
+        {
+            if (AttackTimer > 0)
+                return;
+
+            CurrentState = PlayerState.Idle;
+        }
+
+        bool isGrounded = _networkCC.Grounded;
+
+        Vector3 velocity = _networkCC.Velocity;
+
+        // Ground buffer
+        if (isGrounded)
+        {
+            GroundedTimer = groundBufferTime;
+        }
+        else
+        {
+            GroundedTimer -= Runner.DeltaTime;
+        }
+
+        bool isBufferedGrounded =
+            isGrounded || GroundedTimer > 0;
+
+        // Crouch scale
+        if (isBufferedGrounded)
+        {
+            UpdateCrouchHitbox(IsCrouching);
+        }
+
+        // Jump/Fall
+        if (!isBufferedGrounded)
+        {
+            CurrentState =
+                velocity.y > 0.2f
+                ? PlayerState.Jumping
+                : PlayerState.Falling;
+
+            return;
+        }
+
+        // Crouch
+        if (IsCrouching)
+        {
+            CurrentState = PlayerState.Crouching;
+            return;
+        }
+
+        // Move
+        if (IsMoving)
+        {
+            CurrentState =
+                IsRunning
+                ? PlayerState.Running
+                : PlayerState.Walking;
+
+            return;
+        }
+
+        // Idle
+        CurrentState = PlayerState.Idle;
     }
 
     private Vector3 CalculateMoveDirection(Vector2 input, Vector3 cameraForward)
@@ -270,80 +369,58 @@ public class PlayerController : NetworkBehaviour
             return Vector3.zero;
 
         Vector3 forward = cameraForward;
+
         if (forward.sqrMagnitude < 0.01f)
             forward = Vector3.forward;
 
         forward.y = 0;
         forward.Normalize();
 
-        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
-        return (forward * input.y + right * input.x).normalized;
-    }
+        Vector3 right =
+            Vector3.Cross(Vector3.up, forward).normalized;
 
-    // ─────────────────────────────────────────────────────
-    // State
-    // ─────────────────────────────────────────────────────
+        Vector3 moveDir =
+            forward * input.y +
+            right * input.x;
 
-    private void UpdateState()
-    {
-        if (CurrentState == PlayerState.Attacking)
-        {
-            if (AttackTimer > 0) return;
-            CurrentState = PlayerState.Idle;
-        }
-
-        bool isGrounded  = _networkCC.Grounded;
-        Vector3 velocity = _networkCC.Velocity;
-
-        if (isGrounded)
-            GroundedTimer = groundBufferTime;
-        else
-            GroundedTimer -= Runner.DeltaTime;
-
-        bool isBufferedGrounded = isGrounded || GroundedTimer > 0;
-
-        if (isBufferedGrounded)
-            UpdateCrouchHitbox(IsCrouching);
-
-        if (!isBufferedGrounded)
-        {
-            CurrentState = velocity.y > 0.2f ? PlayerState.Jumping : PlayerState.Falling;
-            return;
-        }
-
-        if (IsCrouching) { CurrentState = PlayerState.Crouching; return; }
-        if (IsMoving)    { CurrentState = IsRunning ? PlayerState.Running : PlayerState.Walking; return; }
-
-        CurrentState = PlayerState.Idle;
+        return moveDir.normalized;
     }
 
     private void UpdateExternalVelocity()
     {
-        if (ExternalVelocity.sqrMagnitude < externalForceThreshold * externalForceThreshold)
+        if (
+            ExternalVelocity.sqrMagnitude <
+            externalForceThreshold * externalForceThreshold
+        )
         {
             ExternalVelocity = Vector3.zero;
             return;
         }
 
-        Vector3 decay = ExternalVelocity.normalized * externalForceDrag * Runner.DeltaTime;
+        Vector3 decay =
+            ExternalVelocity.normalized *
+            externalForceDrag *
+            Runner.DeltaTime;
 
         if (decay.sqrMagnitude >= ExternalVelocity.sqrMagnitude)
+        {
             ExternalVelocity = Vector3.zero;
+        }
         else
+        {
             ExternalVelocity -= decay;
+        }
     }
-
-    // ─────────────────────────────────────────────────────
-    // Render
-    // ─────────────────────────────────────────────────────
 
     public override void Render()
     {
-        if (!HasInputAuthority) return;
+        if (!HasInputAuthority)
+            return;
 
         UpdateCrosshairVisibility();
 
-        if (CameraManager.Instance == null) return;
+        if (CameraManager.Instance == null)
+            return;
 
         if (CameraManager.Instance.CurrentMode == CameraMode.FirstPerson)
         {
@@ -362,100 +439,100 @@ public class PlayerController : NetworkBehaviour
                 RotateTowards(_targetMoveDirection);
             }
         }
-
-        // ── SFX driven by State ──────────────────────────
-        UpdateSFXByState();
     }
 
     private void RotateToYaw(float yaw)
     {
+        Quaternion targetRotation =
+            Quaternion.Euler(0, yaw, 0);
+
         transform.rotation = Quaternion.Slerp(
             transform.rotation,
-            Quaternion.Euler(0, yaw, 0),
+            targetRotation,
             rotationSpeed * 2f * Time.deltaTime
         );
     }
 
     private void RotateTowards(Vector3 direction)
     {
+        Quaternion targetRotation =
+            Quaternion.LookRotation(direction, Vector3.up);
+
         transform.rotation = Quaternion.Slerp(
             transform.rotation,
-            Quaternion.LookRotation(direction, Vector3.up),
+            targetRotation,
             rotationSpeed * Time.deltaTime
         );
     }
 
     private void UpdateCrosshairVisibility()
     {
-        if (crosshairUI == null) return;
+        if (crosshairUI == null)
+            return;
 
         bool shouldShow =
             CameraManager.Instance != null &&
             CameraManager.Instance.CurrentMode == CameraMode.FirstPerson;
 
         if (crosshairUI.activeSelf != shouldShow)
-            crosshairUI.SetActive(shouldShow);
-    }
-
-    // ─────────────────────────────────────────────────────
-    // SFX — driven by CurrentState
-    // Không gọi trực tiếp trong Handle functions
-    // → tránh conflict với animation state machine
-    // ─────────────────────────────────────────────────────
-
-    private PlayerState _lastSFXState = PlayerState.Idle;
-
-    private void UpdateSFXByState()
-    {
-        if (_sfx == null) return;
-        if (CurrentState == _lastSFXState) return;
-
-        PlayerState prev = _lastSFXState;
-        _lastSFXState = CurrentState;
-
-        switch (CurrentState)
         {
-            case PlayerState.Walking:
-                _sfx.StartFootstep(PlayerSFXType.Walk);
-                break;
-
-            case PlayerState.Running:
-                _sfx.StartFootstep(PlayerSFXType.Run);
-                break;
-
-            case PlayerState.Jumping:
-                _sfx.StopFootstep();
-                if (prev == PlayerState.Idle    ||
-                    prev == PlayerState.Walking  ||
-                    prev == PlayerState.Running)
-                {
-                    _sfx.PlayAction(PlayerSFXType.Jump);
-                }
-                break;
-
-            case PlayerState.Idle:
-            case PlayerState.Falling:
-            case PlayerState.Crouching:
-            case PlayerState.Attacking:
-                _sfx.StopFootstep();
-                break;
+            crosshairUI.SetActive(shouldShow);
         }
     }
 
-    // ─────────────────────────────────────────────────────
-    // Public API
-    // ─────────────────────────────────────────────────────
+    public void SetFrozen(bool frozen)
+    {
+        _isFrozen = frozen;
 
+        if (frozen)
+        {
+            ResetVelocity();
+        }
+    }
+
+    public void ResetVelocity()
+    {
+        if (_networkCC != null)
+        {
+            _networkCC.Move(Vector3.zero);
+        }
+
+        ExternalVelocity = Vector3.zero;
+    }
+
+    private void UpdateCrouchHitbox(bool crouching)
+    {
+        Vector3 targetScale =
+            crouching ? _crouchScale : _normalScale;
+
+        transform.localScale = Vector3.Lerp(
+            transform.localScale,
+            targetScale,
+            crouchScaleSpeed * Runner.DeltaTime
+        );
+    }
+
+    /// <param name="force">Hướng và độ mạnh của lực.</param>
+    /// <param name="duration">Thời gian block input (giây). 0 = không block.</param>
+    /// <param name="overrideInput">Nếu true + duration > 0: block toàn bộ input trong thời gian duration.</param>
     public void ApplyExternalForce(Vector3 force, float duration = 0f, bool overrideInput = false)
     {
-        if (!HasStateAuthority) return;
+        if (!HasStateAuthority)
+            return;
 
         ExternalVelocity += force;
 
         if (overrideInput && duration > 0f)
+        {
+            // Lấy giá trị lớn hơn để không cắt ngắn knockback đang chạy
             KnockbackTimer = Mathf.Max(KnockbackTimer, duration);
+        }
     }
 
+    /// <summary>
+    /// Dùng cho JumpPad — phóng player lên cao với tốc độ Y tùy chỉnh.
+    /// Dùng trực tiếp Velocity của NetworkCC thay vì ExternalVelocity để đảm bảo quỹ đạo tự nhiên.
+    /// </summary>
     public void LaunchPad(float verticalSpeed)
     {
         if (!HasStateAuthority) return;
@@ -465,145 +542,168 @@ public class PlayerController : NetworkBehaviour
 
     public bool TryApplyHit(Vector3 knockbackForce)
     {
-        if (!HasStateAuthority) return false;
-
-        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
+        if (!HasStateAuthority)
             return false;
 
+        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner))
+        {
+            return false;
+        }
+
         ExternalVelocity += knockbackForce;
-        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldownDuration);
+
+        HitCooldownTimer =
+            TickTimer.CreateFromSeconds(
+                Runner,
+                hitCooldownDuration
+            );
+
         return true;
     }
 
     public void ResetHitCooldown()
     {
         if (HasStateAuthority)
+        {
             HitCooldownTimer = TickTimer.None;
-    }
-
-    public void SetFrozen(bool frozen)
-    {
-        _isFrozen = frozen;
-        if (frozen) ResetVelocity();
-    }
-
-    public void ResetVelocity()
-    {
-        if (_networkCC != null)
-            _networkCC.Move(Vector3.zero);
-        ExternalVelocity = Vector3.zero;
-    }
-
-    public void ForceIdle()
-    {
-        if (!HasStateAuthority) return;
-        CurrentState = PlayerState.Idle;
-        AttackTimer  = 0;
+        }
     }
 
     public float GetHorizontalSpeed()
     {
-        if (_networkCC == null) return 0f;
-        Vector3 v = _networkCC.Velocity;
-        return new Vector3(v.x, 0, v.z).magnitude;
+        if (_networkCC == null)
+            return 0f;
+
+        Vector3 velocity = _networkCC.Velocity;
+
+        return new Vector3(
+            velocity.x,
+            0,
+            velocity.z
+        ).magnitude;
     }
 
-    public bool IsInAir() =>
-        _networkCC != null && !_networkCC.Grounded;
+    public bool IsInAir()
+    {
+        return _networkCC != null &&
+               !_networkCC.Grounded;
+    }
 
     public void Teleport(Vector3 position)
     {
-        if (!HasStateAuthority) return;
-        _networkCC.Teleport(position);
-    }
+        if (!HasStateAuthority)
+            return;
 
-    public void RequestTeleport(Vector3 targetPosition)
-    {
-        if (_networkCC != null)
-            _networkCC.Teleport(targetPosition);
+        _networkCC.Teleport(position);
     }
 
     public void SetMovementEnabled(bool enabled)
     {
         if (_networkCC != null)
+        {
             _networkCC.enabled = enabled;
+        }
     }
-
-    // ─────────────────────────────────────────────────────
-    // Minigame
-    // ─────────────────────────────────────────────────────
 
     private bool CanPerformAction(MinigameAction action)
     {
-        if (GameManager.Instance == null) return true;
-        if (GameManager.Instance.CurrentState != GameState.Playing) return true;
+        if (GameManager.Instance == null)
+            return true;
+
+        if (GameManager.Instance.CurrentState != GameState.Playing)
+            return true;
 
         return action switch
         {
-            MinigameAction.Move   => GameManager.Instance.MG_CanMove,
-            MinigameAction.Jump   => GameManager.Instance.MG_CanJump,
+            MinigameAction.Move => GameManager.Instance.MG_CanMove,
+            MinigameAction.Jump => GameManager.Instance.MG_CanJump,
             MinigameAction.Crouch => GameManager.Instance.MG_CanCrouch,
             MinigameAction.Attack => GameManager.Instance.MG_CanAttack,
-            MinigameAction.Run    => GameManager.Instance.MG_CanRun,
-            _                     => true
+            MinigameAction.Run => GameManager.Instance.MG_CanRun,
+            _ => true
         };
     }
-
-    // ─────────────────────────────────────────────────────
-    // Combat
-    // ─────────────────────────────────────────────────────
 
     private void CheckAttackHit()
     {
         Collider[] hits = Physics.OverlapSphere(
-            transform.position + transform.forward * 1.5f, 1f
+            transform.position + transform.forward * 1.5f,
+            1f
         );
 
         foreach (Collider hit in hits)
         {
-            if (hit.gameObject == gameObject) continue;
+            // bỏ qua chính mình
+            if (hit.gameObject == gameObject)
+                continue;
 
-            PlayerController other = hit.GetComponent<PlayerController>();
-            if (other == null) continue;
+            PlayerController other =
+                hit.GetComponent<PlayerController>();
 
-            Vector3 knockback = transform.forward * 8f + Vector3.up * 2f;
-            bool success = other.TryApplyHit(knockback);
+            if (other == null)
+                continue;
+
+            // tạo lực đẩy
+            Vector3 knockback =
+                transform.forward * 8f +
+                Vector3.up * 2f;
+
+            bool success =
+                other.TryApplyHit(knockback);
 
             if (success)
             {
                 other.ForceIdle();
-                Debug.Log($"[FUSION HIT] {Object.InputAuthority} hit {other.Object.InputAuthority}");
+
+                Debug.Log(
+                    $"[FUSION HIT] {Object.InputAuthority} hit {other.Object.InputAuthority}"
+                );
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────
-    // Crouch
-    // ─────────────────────────────────────────────────────
-
-    private void UpdateCrouchHitbox(bool crouching)
+    public void ForceIdle()
     {
-        Vector3 targetScale = crouching ? _crouchScaleVec : _normalScale;
-        transform.localScale = Vector3.Lerp(
-            transform.localScale,
-            targetScale,
-            crouchScaleSpeed * Runner.DeltaTime
-        );
-    }
+        if (!HasStateAuthority)
+            return;
 
-    // ─────────────────────────────────────────────────────
-    // Gizmos
-    // ─────────────────────────────────────────────────────
+        CurrentState = PlayerState.Idle;
+
+        AttackTimer = 0;
+    }
 
     private void OnDrawGizmosSelected()
     {
-        bool grounded = _networkCC != null && _networkCC.Grounded;
-        Gizmos.color  = grounded ? Color.green : Color.yellow;
+        bool grounded =
+            _networkCC != null &&
+            _networkCC.Grounded;
 
-        Vector3 origin = transform.position + Vector3.up * 0.1f;
-        Gizmos.DrawWireSphere(origin + Vector3.down * 0.1f, 0.3f);
+        Gizmos.color =
+            grounded
+            ? Color.green
+            : Color.yellow;
+
+        Vector3 origin =
+            transform.position + Vector3.up * 0.1f;
+
+        Gizmos.DrawWireSphere(
+            origin + Vector3.down * 0.1f,
+            0.3f
+        );
 
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position + transform.forward * 1.5f, 1f);
+
+        Gizmos.DrawWireSphere(
+            transform.position + transform.forward * 1.5f,
+            1f
+        );
+    }
+
+    public void RequestTeleport(Vector3 targetPosition)
+    {
+        if (_networkCC != null)
+        {
+            _networkCC.Teleport(targetPosition);
+        }
     }
 }
