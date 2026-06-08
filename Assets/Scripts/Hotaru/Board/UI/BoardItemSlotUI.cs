@@ -3,19 +3,17 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Một ô item trong inventory — icon, số lượng, background.
-///
-/// SETUP (prefab "ItemSlot"):
-///   ├── SlotBG     (Image)           ← slotBackground
-///   ├── ItemIcon   (Image ~56x56)    ← iconImage
-///   └── CountText  (TMP_Text)        ← countText
+/// 1 ô item trong BoardInventoryUI.
+/// SETUP (1 prefab "ItemSlot"):
+///   ├── SlotBG      (Image)       ← slotBackground
+///   ├── ItemIcon    (Image)       ← iconImage
+///   └── CountText   (TMP_Text)    ← countText      (ẩn khi count = 1)
 /// </summary>
 public class BoardItemSlotUI : MonoBehaviour
 {
-    [Header("References")]
-    [SerializeField] private Image    iconImage;
-    [SerializeField] private TMP_Text countText;
-    [SerializeField] private Image    slotBackground;
+    [SerializeField] private Image      iconImage;
+    [SerializeField] private TMP_Text   countText;
+    [SerializeField] private Image      slotBackground;
 
     [Header("Colors")]
     [SerializeField] private Color emptyBg  = new Color(0.15f, 0.15f, 0.15f, 0.6f);
@@ -25,8 +23,8 @@ public class BoardItemSlotUI : MonoBehaviour
     {
         if (iconImage != null)
         {
-            iconImage.sprite = data != null ? data.icon : null;
-            iconImage.color  = data != null ? Color.white : new Color(1f, 1f, 1f, 0.2f);
+            iconImage.sprite  = data?.icon;
+            iconImage.color   = data != null ? Color.white : new Color(1f, 1f, 1f, 0.2f);
         }
 
         if (countText != null)
@@ -54,4 +52,3 @@ public class BoardItemSlotUI : MonoBehaviour
             slotBackground.color = emptyBg;
     }
 }
-

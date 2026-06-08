@@ -1,113 +1,51 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 using System.Collections;
 
 /// <summary>
-/// Hiện kết quả xúc xắc khi player roll — fade in to màn hình, giữ, rồi fade out.
-///
-/// SETUP TRONG UNITY EDITOR:
-///   1. Tạo GameObject con trong Canvas, đặt tên "DiceDisplayPanel".
-///   2. Gắn script này.
-///   3. Thêm CanvasGroup component lên cùng GameObject.
-///   4. Tạo cấu trúc con:
-///        DiceDisplayPanel
-///          ├── Background   (Image, màu tối bán trong suốt, RectTransform căn giữa)
-///          ├── DiceValue    (TMP_Text, font size lớn ~120, in đậm) ← gán vào diceValueText
-///          └── PlayerLabel  (TMP_Text, font size ~28)              ← gán vào playerNameText
-///   5. Set CanvasGroup.alpha = 0 trong Inspector (bắt đầu ẩn).
+/// Hiện số xúc xắc ở giữa màn hình rồi tự fade out.
+/// SETUP:
+///   1. Tạo TMP_Text ở center màn hình, font size lớn (80-120)
+///   2. Attach script này vào cùng GameObject, gán diceText
+///   3. Set alpha = 0 ban đầu
 /// </summary>
 public class BoardDiceDisplayUI : MonoBehaviour
 {
-    public static BoardDiceDisplayUI Instance { get; private set; }
-
-    [Header("References")]
-    [SerializeField] private CanvasGroup canvasGroup;
-    [SerializeField] private TMP_Text diceValueText;
-    [SerializeField] private TMP_Text playerNameText;
+    [SerializeField] private TMP_Text diceText;
 
     [Header("Timing")]
-    [SerializeField] private float fadeInDuration  = 0.2f;
-    [SerializeField] private float holdDuration    = 1.8f;
-    [SerializeField] private float fadeOutDuration = 0.4f;
+    [SerializeField] private float displayDuration = 1.5f;
+    [SerializeField] private float fadeDuration    = 0.5f;
 
-    [Header("Bounce Scale")]
-    [SerializeField] private float punchScale = 1.4f;
-
-    private Coroutine _showCoroutine;
-    private RectTransform _rect;
-
-    // =====================================================================
-    // LIFECYCLE
-    // =====================================================================
+    private Coroutine _routine;
 
     private void Awake()
     {
-        Instance = this;
-        _rect     = GetComponent<RectTransform>();
-
-        // Ẩn ban đầu
-        if (canvasGroup != null) canvasGroup.alpha = 0f;
-        if (_rect != null)       _rect.localScale   = Vector3.one;
+        if (diceText != null) diceText.alpha = 0f;
     }
 
-    private void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-    }
-
-    // =====================================================================
-    // PUBLIC API
-    // =====================================================================
-
-    /// <summary>
-    /// Gọi từ BoardHUDController khi nhận dice result.
-    /// playerName: tên hiển thị; result: số trên xúc xắc.
-    /// </summary>
     public void ShowRoll(string playerName, int result)
     {
-        if (diceValueText  != null) diceValueText.text  = result.ToString();
-        if (playerNameText != null) playerNameText.text = $"{playerName} rolled!";
-
-        if (_showCoroutine != null) StopCoroutine(_showCoroutine);
-        _showCoroutine = StartCoroutine(ShowSequence());
+        if (_routine != null) StopCoroutine(_routine);
+        _routine = StartCoroutine(ShowRoutine(result));
     }
 
-    // =====================================================================
-    // ANIMATION
-    // =====================================================================
-
-    private IEnumerator ShowSequence()
+    private IEnumerator ShowRoutine(int result)
     {
-        // Punch scale bắt đầu
-        if (_rect != null) _rect.localScale = Vector3.one * punchScale;
+        diceText.text  = result.ToString();
+        diceText.alpha = 1f;
 
-        // Fade in + scale về 1
-        float t = 0f;
-        while (t < fadeInDuration)
+        yield return new WaitForSeconds(displayDuration);
+
+        float elapsed = 0f;
+        while (elapsed < fadeDuration)
         {
-            t += Time.deltaTime;
-            float p = Mathf.Clamp01(t / fadeInDuration);
-            if (canvasGroup != null) canvasGroup.alpha = p;
-            if (_rect != null)       _rect.localScale  = Vector3.one * Mathf.Lerp(punchScale, 1f, p);
+            elapsed       += Time.deltaTime;
+            diceText.alpha = Mathf.Lerp(1f, 0f, elapsed / fadeDuration);
             yield return null;
         }
-        if (canvasGroup != null) canvasGroup.alpha = 1f;
-        if (_rect != null)       _rect.localScale  = Vector3.one;
 
-        // Hold
-        yield return new WaitForSeconds(holdDuration);
-
-        // Fade out
-        t = 0f;
-        while (t < fadeOutDuration)
-        {
-            t += Time.deltaTime;
-            if (canvasGroup != null) canvasGroup.alpha = 1f - Mathf.Clamp01(t / fadeOutDuration);
-            yield return null;
-        }
-        if (canvasGroup != null) canvasGroup.alpha = 0f;
-
-        _showCoroutine = null;
+        diceText.alpha = 0f;
+        _routine = null;
     }
 }
