@@ -67,21 +67,31 @@ public class Hammer : BaseObstacle
         _previousAngle = angle;
     }
 
-    protected override void HandleHit(PlayerController player)
-    {
-        base.HandleHit(player);
-    }
-
     protected override void ApplyEffect(PlayerController player)
     {
-        var mgData = GetMinigameData(player);
+        if (!Object.HasStateAuthority)
+            return;
 
-        if (mgData != null && mgData.CanTakeDamage())
-        {
-            mgData.Die();
-        }
+        Vector3 pushDir =
+            (player.transform.position - hammerHead.position).normalized;
 
-        Debug.Log($"[Hammer] Killed {player.Object.InputAuthority}");
+        pushDir.y = 0f;
+
+        Vector3 knockback =
+            pushDir * 15f +
+            Vector3.up * 3f;
+
+        bool success =
+            player.TryApplyHit(knockback);
+
+        if (!success)
+            return;
+
+        player.ForceIdle();
+
+        Debug.Log(
+            $"[Hammer] Knockback {player.Object.InputAuthority}"
+        );
     }
 
     protected override void PlaySFX()

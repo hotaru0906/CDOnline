@@ -268,8 +268,10 @@ public class PlayerController : NetworkBehaviour
 
             GroundedTimer = 0;
 
-            // Đánh dấu đây là cú nhảy do người chơi bấm
             IsJumpingByInput = true;
+
+            // ép state Jump ngay lập tức
+            CurrentState = PlayerState.Jumping;
 
             Debug.Log("[PlayerController] JUMP!");
         }
@@ -321,8 +323,11 @@ public class PlayerController : NetworkBehaviour
         {
             GroundedTimer = groundBufferTime;
 
-            // Chạm đất => kết thúc trạng thái jump
-            IsJumpingByInput = false;
+            // Chỉ reset khi đã thực sự chạm đất
+            if (velocity.y <= 0.1f)
+            {
+                IsJumpingByInput = false;
+            }
         }
         else
         {
@@ -338,29 +343,32 @@ public class PlayerController : NetworkBehaviour
             UpdateCrouchHitbox(IsCrouching);
         }
 
-        // Jump/Fall
-        if (!isBufferedGrounded)
-        {
-            if (IsJumpingByInput && velocity.y > 0.2f)
-            {
-                CurrentState = PlayerState.Jumping;
-            }
-            else
-            {
-                CurrentState = PlayerState.Falling;
-            }
+        // ==========================================
+        // ƯU TIÊN TRẠNG THÁI TRÊN KHÔNG
+        // ==========================================
 
+        if (velocity.y > 0.2f)
+        {
+            CurrentState = PlayerState.Jumping;
             return;
         }
 
-        // Crouch
+        if (velocity.y < -0.2f && !isBufferedGrounded)
+        {
+            CurrentState = PlayerState.Falling;
+            return;
+        }
+
+        // ==========================================
+        // MẶT ĐẤT
+        // ==========================================
+
         if (IsCrouching)
         {
             CurrentState = PlayerState.Crouching;
             return;
         }
 
-        // Move
         if (IsMoving)
         {
             CurrentState =
@@ -371,7 +379,6 @@ public class PlayerController : NetworkBehaviour
             return;
         }
 
-        // Idle
         CurrentState = PlayerState.Idle;
     }
 
