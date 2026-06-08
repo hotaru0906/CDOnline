@@ -106,7 +106,26 @@ public abstract class BaseObstacle : NetworkBehaviour
     /// <summary>Play sound effect. Override để customize.</summary>
     protected virtual void PlaySFX()
     {
-        if (hitSound != null) hitSound.Play();
+        if (hitSound != null)
+        {
+            // Tạo AudioSource tạm ở vị trí obstacle để phát âm thanh 3D
+            GameObject tempAudioObj = new GameObject("TempAudio");
+            tempAudioObj.transform.position = transform.position;
+            
+            AudioSource tempAudio = tempAudioObj.AddComponent<AudioSource>();
+            tempAudio.clip = hitSound.clip;
+            tempAudio.volume = hitSound.volume;
+            tempAudio.pitch = hitSound.pitch;
+            tempAudio.spatialBlend = 1f; // 3D audio
+            tempAudio.minDistance = 5f;  // gần hơn 5m thì to max
+            tempAudio.maxDistance = 50f; // xa hơn 50m thì nghe không thấy
+            tempAudio.rolloffMode = AudioRolloffMode.Logarithmic;
+            
+            tempAudio.Play();
+            
+            // Xóa object sau khi phát xong
+            Destroy(tempAudioObj, tempAudio.clip != null ? tempAudio.clip.length : 3f);
+        }
     }
 
     // ----------------------------------------------------------------

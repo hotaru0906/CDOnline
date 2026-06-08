@@ -30,6 +30,10 @@ public class PopupSpikeTrap : BaseObstacle
     [SerializeField] private Color activeColor = Color.red;
     [SerializeField] private Color hiddenColor = Color.gray;
 
+    [Header("Audio")]
+    [SerializeField] private AudioSource riseSound;
+    [SerializeField] private AudioSource hitAudioSource;
+
     private enum TrapState { Hidden, Rising, Active, Retracting }
     private TrapState _state = TrapState.Hidden;
     private float _stateTimer;
@@ -58,6 +62,7 @@ public class PopupSpikeTrap : BaseObstacle
                 {
                     _state = TrapState.Rising;
                     if (spikeCollider != null) spikeCollider.enabled = false;
+                    if (riseSound != null) riseSound.Play();
                 }
                 break;
 
@@ -121,6 +126,14 @@ public class PopupSpikeTrap : BaseObstacle
             mgData.Die();
 
         Debug.Log($"[PopupSpike] Killed {player.Object.InputAuthority} → respawn");
+    }
+
+    protected override void PlaySFX()
+    {
+        if (hitAudioSource != null)
+            hitAudioSource.Play();
+        else
+            base.PlaySFX();
     }
 
     private void SetSpikeColor(Color color)
