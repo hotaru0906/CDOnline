@@ -62,6 +62,7 @@ public class PlayerController : NetworkBehaviour
     [Networked] private NetworkBool IsMoving { get; set; }
 
     [Networked] private float GroundedTimer { get; set; }
+    [Networked] private NetworkBool IsJumpingByInput { get; set; }
     [Networked] private TickTimer HitCooldownTimer { get; set; }
 
     /// <summary>
@@ -254,7 +255,8 @@ public class PlayerController : NetworkBehaviour
         if (!CanPerformAction(MinigameAction.Jump))
             return;
 
-        if (IsKnockbacked) return;
+        if (IsKnockbacked)
+            return;
 
         bool canJump =
             _networkCC.Grounded ||
@@ -265,6 +267,11 @@ public class PlayerController : NetworkBehaviour
             _networkCC.Jump();
 
             GroundedTimer = 0;
+
+            IsJumpingByInput = true;
+
+            // ép state Jump ngay lập tức
+            CurrentState = PlayerState.Jumping;
 
             Debug.Log("[PlayerController] JUMP!");
         }
@@ -315,6 +322,12 @@ public class PlayerController : NetworkBehaviour
         if (isGrounded)
         {
             GroundedTimer = groundBufferTime;
+
+            // Chỉ reset khi đã thực sự chạm đất
+            if (velocity.y <= 0.1f)
+            {
+                IsJumpingByInput = false;
+            }
         }
         else
         {
@@ -330,25 +343,32 @@ public class PlayerController : NetworkBehaviour
             UpdateCrouchHitbox(IsCrouching);
         }
 
-        // Jump/Fall
-        if (!isBufferedGrounded)
-        {
-            CurrentState =
-                velocity.y > 0.2f
-                ? PlayerState.Jumping
-                : PlayerState.Falling;
+        // ==========================================
+        // ƯU TIÊN TRẠNG THÁI TRÊN KHÔNG
+        // ==========================================
 
+        if (velocity.y > 0.2f)
+        {
+            CurrentState = PlayerState.Jumping;
             return;
         }
 
-        // Crouch
+        if (velocity.y < -0.2f && !isBufferedGrounded)
+        {
+            CurrentState = PlayerState.Falling;
+            return;
+        }
+
+        // ==========================================
+        // MẶT ĐẤT
+        // ==========================================
+
         if (IsCrouching)
         {
             CurrentState = PlayerState.Crouching;
             return;
         }
 
-        // Move
         if (IsMoving)
         {
             CurrentState =
@@ -359,7 +379,6 @@ public class PlayerController : NetworkBehaviour
             return;
         }
 
-        // Idle
         CurrentState = PlayerState.Idle;
     }
 

@@ -88,7 +88,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
     /// </summary>
     protected List<PlayerRef> _finishOrder = new List<PlayerRef>();
 
-    protected NetworkRunner _runner;
+    protected NetworkRunner _minigameRunner;
 
     // ----------------------------------------------------------------
     //  Lifecycle
@@ -110,7 +110,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
     public override void Spawned()
     {
         Debug.Log($"[{GetType().Name}] Spawned. IsHost: {HasStateAuthority}");
-        _runner = Runner;
+        _minigameRunner = Runner;
 
         if (GameManager.Instance != null)
             _minigameData = GameManager.Instance.CurrentMinigameData;
