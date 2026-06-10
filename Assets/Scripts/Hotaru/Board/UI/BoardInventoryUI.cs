@@ -1,72 +1,95 @@
+using System.Collections;
 using UnityEngine;
-using System.Collections.Generic;
-
-/// <summary>
-/// Hiện Board items của local player ở phía dưới màn hình.
-/// SETUP:
-///   1. Tạo Panel góc dưới màn hình, attach script này
-///   2. Tạo 4 child GameObject từ prefab BoardItemSlotUI, gán vào slots[]
-/// </summary>
 public class BoardInventoryUI : MonoBehaviour
 {
-    [SerializeField] private BoardItemSlotUI[] slots = new BoardItemSlotUI[4];
-
+    [SerializeField] private BoardHandUI[] hands = new BoardHandUI[4];
+    private bool _initialized = false;
     private void Start()
     {
-        if (BoardManager.Instance != null)
-            BoardManager.Instance.OnTurnStarted += _ => Refresh();
-        Refresh();
+        StartCoroutine(WaitForBoardManager());
+    }
+
+    private IEnumerator WaitForBoardManager()
+    {
+        while (BoardManager.Instance == null)
+            yield return null;
+
+        BoardManager.Instance.OnTurnStarted += OnTurnStarted;
+        Debug.Log("[BoardInventoryUI] Subscribed to OnTurnStarted");
     }
 
     private void OnDestroy()
     {
         if (BoardManager.Instance != null)
-            BoardManager.Instance.OnTurnStarted -= _ => Refresh();
+            BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
     }
 
-    public void Refresh()
+    // =====================================================================
+    // INIT
+    // =====================================================================
+
+    private void InitializeHands()
     {
-        int myId = GetLocalPlayerId();
-        if (myId < 0) { ClearAll(); return; }
+        var bm = BoardManager.Instance;
+        if (bm == null) return;
 
-        var inv = PlayerItemInventory.GetForPlayer(myId);
-        if (inv == null) { ClearAll(); return; }
+        int localId = GetLocalPlayerId();
 
-        var pool = BoardItemPool.Current;
-
-        // Nhóm theo effect, giữ thứ tự xuất hiện
-        var order    = new List<BoardItemEffect>();
-        var countMap = new Dictionary<BoardItemEffect, int>();
-
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < hands.Length; i++)
         {
-            int raw = inv.BoardItems.Get(i);
-            if (raw == -1) continue;
+            if (hands[i] == null) continue;
 
-            var eff = (BoardItemEffect)raw;
-            if (!countMap.ContainsKey(eff))
+            int pid = bm.GetPlayerIDAtSlot(i);
+            if (pid < 0)
             {
-                order.Add(eff);
-                countMap[eff] = 0;
+                hands[i].gameObject.SetActive(false);
+                continue;
             }
-            countMap[eff]++;
+
+            hands[i].gameObject.SetActive(true);
+            hands[i].Initialize(pid, pid == localId);
+        }
+    }
+
+    // =====================================================================
+    // TURN
+    // =====================================================================
+
+    private void OnTurnStarted(int playerId)
+    {
+        var bm = BoardManager.Instance;
+        if (bm == null) return;
+
+        // Init lần đầu
+        if (!_initialized)
+        {
+            InitializeHands();
+            _initialized = true;
         }
 
-        for (int i = 0; i < slots.Length; i++)
-        {
-            if (slots[i] == null) continue;
+        // Refresh tất cả hands
+        foreach (var h in hands)
+            h?.RefreshHand();
 
-            if (i < order.Count)
-            {
-                var eff  = order[i];
-                var data = pool?.GetByEffect(eff);
-                slots[i].SetItem(data, countMap[eff]);
-            }
+        // Expand/collapse
+        for (int i = 0; i < hands.Length; i++)
+        {
+            if (hands[i] == null) continue;
+            if (bm.GetPlayerIDAtSlot(i) == playerId)
+                hands[i].Expand();
             else
-            {
-                slots[i].SetEmpty();
-            }
+                hands[i].Collapse();
         }
+    }
+
+    // =====================================================================
+    // HELPERS
+    // =====================================================================
+
+    private void CollapseAll()
+    {
+        foreach (var h in hands)
+            h?.Collapse();
     }
 
     private int GetLocalPlayerId()
@@ -74,10 +97,5 @@ public class BoardInventoryUI : MonoBehaviour
         if (PlayerNetworkData.Local != null && PlayerNetworkData.Local.Object != null)
             return PlayerNetworkData.Local.Object.InputAuthority.PlayerId;
         return -1;
-    }
-
-    private void ClearAll()
-    {
-        foreach (var s in slots) s?.SetEmpty();
     }
 }

@@ -52,7 +52,7 @@ public class BoardPlayerToken : MonoBehaviour
     /// </summary>
     public void Initialize(int playerId, int slotIndex, int startNodeID)
     {
-        ownerPlayerId  = playerId;
+        ownerPlayerId = playerId;
         playerSlotIndex = slotIndex;
         _currentCharacterIndex = -1;
 
@@ -235,15 +235,15 @@ public class BoardPlayerToken : MonoBehaviour
             var node = BoardNodePath.Instance?.GetNodeByID(nodeID);
             if (node == null) continue;
 
-            Vector3 from     = transform.position;
-            Vector3 to       = node.WorldPosition + Vector3.up * 0.5f;
-            float   duration = 1f / moveSpeed;
-            float   elapsed  = 0f;
+            Vector3 from = transform.position;
+            Vector3 to = node.WorldPosition + Vector3.up * 0.5f;
+            float duration = 1f / moveSpeed;
+            float elapsed = 0f;
 
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                float t   = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+                float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
                 float hop = Mathf.Sin(t * Mathf.PI) * hopHeight;
                 transform.position = Vector3.Lerp(from, to, t) + Vector3.up * hop;
 
@@ -256,7 +256,7 @@ public class BoardPlayerToken : MonoBehaviour
             }
 
             transform.position = to;
-            CurrentNodeID      = nodeID;
+            CurrentNodeID = nodeID;
 
             yield return new WaitForSeconds(0.08f); // pause nhỏ giữa mỗi ô
         }
@@ -264,6 +264,29 @@ public class BoardPlayerToken : MonoBehaviour
         IsMoving = false;
         _moveRoutine = null;
         OnMoveFinished?.Invoke(this);
+    }
+    public void PlayJumpAnimation()
+    {
+        StartCoroutine(JumpRoutine());
+    }
+
+    private IEnumerator JumpRoutine()
+    {
+        Vector3 origin = transform.position;
+        float duration = 0.35f;
+        float height = 0.8f;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            float hop = Mathf.Sin(t * Mathf.PI) * height;
+            transform.position = origin + Vector3.up * hop;
+            yield return null;
+        }
+
+        transform.position = origin;
     }
 
     private void OnGUI()

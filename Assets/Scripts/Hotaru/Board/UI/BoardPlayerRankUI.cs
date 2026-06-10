@@ -1,13 +1,7 @@
-using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
-/// <summary>
-/// Danh sách 4 player ở góc trái, xếp theo vị trí node trên bàn cờ.
-/// SETUP:
-///   1. Tạo Vertical Layout Group góc trái màn hình
-///   2. Tạo 4 child GameObject, mỗi cái attach BoardPlayerEntryUI
-///   3. Gán 4 entry vào entries[] theo thứ tự slot 0-3
-/// </summary>
 public class BoardPlayerRankUI : MonoBehaviour
 {
     [SerializeField] private BoardPlayerEntryUI[] entries = new BoardPlayerEntryUI[4];
@@ -22,23 +16,43 @@ public class BoardPlayerRankUI : MonoBehaviour
 
     private void Start()
     {
-        if (BoardManager.Instance != null)
-            BoardManager.Instance.OnTurnStarted += _ => Refresh();
-        Refresh();
+        StartCoroutine(WaitForBoardManager());
     }
 
     private void OnDestroy()
     {
         if (BoardManager.Instance != null)
-            BoardManager.Instance.OnTurnStarted -= _ => Refresh();
+            BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
     }
+
+    private IEnumerator WaitForBoardManager()
+    {
+        while (BoardManager.Instance == null)
+            yield return null;
+
+        BoardManager.Instance.OnTurnStarted += OnTurnStarted;
+        Refresh();
+        Debug.Log("[BoardPlayerRankUI] Subscribed");
+    }
+
+    // =====================================================================
+    // EVENTS
+    // =====================================================================
+
+    private void OnTurnStarted(int playerId)
+    {
+        SetActiveTurn(playerId);
+    }
+
+    // =====================================================================
+    // REFRESH
+    // =====================================================================
 
     public void Refresh()
     {
         var bm = BoardManager.Instance;
         if (bm == null) return;
 
-        // Tính rank theo nodeID
         var list = new List<(int slot, int playerId, int nodeId)>();
         for (int i = 0; i < bm.ActivePlayerCount; i++)
         {
@@ -47,7 +61,6 @@ public class BoardPlayerRankUI : MonoBehaviour
         }
         list.Sort((a, b) => b.nodeId.CompareTo(a.nodeId));
 
-        // Map slot -> rank
         var rankBySlot = new int[4];
         for (int r = 0; r < list.Count; r++)
             rankBySlot[list[r].slot] = r + 1;
@@ -64,7 +77,7 @@ public class BoardPlayerRankUI : MonoBehaviour
 
             entries[i].gameObject.SetActive(true);
 
-            int pid    = bm.GetPlayerIDAtSlot(i);
+            int    pid  = bm.GetPlayerIDAtSlot(i);
             string name = BoardHUDController.Instance?.GetPlayerName(pid) ?? $"P{pid}";
 
             entries[i].SetData(
