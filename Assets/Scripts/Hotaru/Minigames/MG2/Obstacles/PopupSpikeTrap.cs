@@ -5,47 +5,38 @@ public class PopupSpikeTrap : BaseObstacle
 {
     [Header("Spike Part")]
     [SerializeField] private Transform spikePart;
-    [SerializeField] private Collider spikeCollider;
-    [SerializeField] private Vector3 hiddenLocalPos;
-    [SerializeField] private Vector3 activeLocalPos;
-    [SerializeField] private float riseSpeed = 12f;
-    [SerializeField] private float retractSpeed = 8f;
+    [SerializeField] private Collider  spikeCollider;
+    [SerializeField] private Vector3   hiddenLocalPos;
+    [SerializeField] private Vector3   activeLocalPos;
+    [SerializeField] private float     riseSpeed    = 12f;
+    [SerializeField] private float     retractSpeed = 8f;
 
     [Header("Timing")]
-    [SerializeField] private float activeDuration = 1.5f;
+    [SerializeField] private float activeDuration   = 1.5f;
     [SerializeField] private float cooldownDuration = 2.5f;
+    [Tooltip("Delay ban đầu — đặt khác nhau cho từng instance")]
+    [SerializeField] private float startDelay = 0f;
 
-    [Header("Visual")]
-    [SerializeField] private Renderer spikeRenderer;
-    [SerializeField] private Color activeColor = Color.red;
-    [SerializeField] private Color hiddenColor = Color.gray;
-
-    private enum TrapState : byte
-    {
-        Hidden,
-        Rising,
-        Active,
-        Retracting
-    }
+    private enum TrapState : byte { Hidden, Rising, Active, Retracting }
 
     [Networked] private TrapState _state { get; set; }
-    [Networked] private float _timer { get; set; }
+    [Networked] private float     _timer { get; set; }
 
     public override void Spawned()
     {
         if (Object.HasStateAuthority)
         {
             _state = TrapState.Hidden;
-            _timer = cooldownDuration;
+            _timer = cooldownDuration + startDelay;
         }
 
-        ApplyVisual(hiddenLocalPos, hiddenColor, false);
+        spikePart.localPosition = hiddenLocalPos;
+        spikeCollider.enabled   = false;
     }
 
     public override void FixedUpdateNetwork()
     {
-        if (!Object.HasStateAuthority)
-            return;
+        if (!Object.HasStateAuthority) return;
 
         _timer -= Runner.DeltaTime;
 
@@ -55,6 +46,7 @@ public class PopupSpikeTrap : BaseObstacle
                 if (_timer <= 0f)
                 {
                     _state = TrapState.Rising;
+                    RPC_PlayHitEffects(); // phát sound khi popup
                 }
                 break;
 
@@ -63,6 +55,7 @@ public class PopupSpikeTrap : BaseObstacle
                 {
                     _state = TrapState.Active;
                     _timer = activeDuration;
+                    spikeCollider.enabled = true;
                 }
                 break;
 
@@ -70,6 +63,7 @@ public class PopupSpikeTrap : BaseObstacle
                 if (_timer <= 0f)
                 {
                     _state = TrapState.Retracting;
+                    spikeCollider.enabled = false;
                 }
                 break;
 
@@ -83,76 +77,43 @@ public class PopupSpikeTrap : BaseObstacle
         }
     }
 
-    // ===================== VISUAL =====================
-
     public override void Render()
     {
         switch (_state)
         {
-            case TrapState.Hidden:
-                spikePart.localPosition =
-                    Vector3.MoveTowards(
-                        spikePart.localPosition,
-                        hiddenLocalPos,
-                        retractSpeed * Time.deltaTime);
-                break;
-
             case TrapState.Rising:
             case TrapState.Active:
-                spikePart.localPosition =
-                    Vector3.MoveTowards(
-                        spikePart.localPosition,
-                        activeLocalPos,
-                        riseSpeed * Time.deltaTime);
+                spikePart.localPosition = Vector3.MoveTowards(
+                    spikePart.localPosition, activeLocalPos, riseSpeed * Time.deltaTime);
                 break;
 
+            case TrapState.Hidden:
             case TrapState.Retracting:
-                spikePart.localPosition =
-                    Vector3.MoveTowards(
-                        spikePart.localPosition,
-                        hiddenLocalPos,
-                        retractSpeed * Time.deltaTime);
+                spikePart.localPosition = Vector3.MoveTowards(
+                    spikePart.localPosition, hiddenLocalPos, retractSpeed * Time.deltaTime);
                 break;
         }
+    }
 
-    spikeCollider.enabled = (_state == TrapState.Active);
-}
+    // =====================================================================
+    // INTERNAL
+    // =====================================================================
 
     private bool MoveSpike(Vector3 target, float speed)
     {
         spikePart.localPosition = Vector3.MoveTowards(
-            spikePart.localPosition,
-            target,
-            speed * Runner.DeltaTime
-        );
-
+            spikePart.localPosition, target, speed * Runner.DeltaTime);
         return Vector3.Distance(spikePart.localPosition, target) < 0.01f;
     }
 
-    private void SetSpikeColor(Color color)
-    {
-        if (spikeRenderer == null) return;
-
-        spikeRenderer.material.color = color;
-    }
-
-    private void ApplyVisual(Vector3 pos, Color color, bool active)
-    {
-        spikePart.localPosition = pos;
-        spikeCollider.enabled = active;
-        SetSpikeColor(color);
-    }
-
-    // ===================== DAMAGE =====================
+    // =====================================================================
+    // DAMAGE
+    // =====================================================================
 
     protected override void HandleHit(PlayerController player)
     {
-        if (_state != TrapState.Active)
-            return;
-
-        if (!Object.HasStateAuthority)
-            return;
-
+        if (_state != TrapState.Active) return;
+        if (!Object.HasStateAuthority)  return;
         base.HandleHit(player);
     }
 
@@ -162,6 +123,6 @@ public class PopupSpikeTrap : BaseObstacle
         if (mgData != null && mgData.CanTakeDamage())
             mgData.Die();
 
-        Debug.Log($"[PopupSpike Fusion] Killed {player.Object.InputAuthority}");
+        Debug.Log($"[PopupSpikeTrap] Killed {player.Object.InputAuthority}");
     }
 }
