@@ -102,6 +102,25 @@ public class GameManager : NetworkBehaviour
     [Networked] public int BoardNodeSlot1 { get; private set; } = 0;
     [Networked] public int BoardNodeSlot2 { get; private set; } = 0;
     [Networked] public int BoardNodeSlot3 { get; private set; } = 0;
+    [Networked] public int BoardItem_P0_S0 { get; private set; } = -1;
+    [Networked] public int BoardItem_P0_S1 { get; private set; } = -1;
+    [Networked] public int BoardItem_P0_S2 { get; private set; } = -1;
+    [Networked] public int BoardItem_P0_S3 { get; private set; } = -1;
+
+    [Networked] public int BoardItem_P1_S0 { get; private set; } = -1;
+    [Networked] public int BoardItem_P1_S1 { get; private set; } = -1;
+    [Networked] public int BoardItem_P1_S2 { get; private set; } = -1;
+    [Networked] public int BoardItem_P1_S3 { get; private set; } = -1;
+
+    [Networked] public int BoardItem_P2_S0 { get; private set; } = -1;
+    [Networked] public int BoardItem_P2_S1 { get; private set; } = -1;
+    [Networked] public int BoardItem_P2_S2 { get; private set; } = -1;
+    [Networked] public int BoardItem_P2_S3 { get; private set; } = -1;
+
+    [Networked] public int BoardItem_P3_S0 { get; private set; } = -1;
+    [Networked] public int BoardItem_P3_S1 { get; private set; } = -1;
+    [Networked] public int BoardItem_P3_S2 { get; private set; } = -1;
+    [Networked] public int BoardItem_P3_S3 { get; private set; } = -1;
     public void SaveBoardPositions(int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;
@@ -111,9 +130,27 @@ public class GameManager : NetworkBehaviour
         BoardNodeSlot3 = s3;
     }
 
-    public int[] GetBoardPositions() =>
-        new[] { BoardNodeSlot0, BoardNodeSlot1, BoardNodeSlot2, BoardNodeSlot3 };
+    public int[] GetBoardPositions() => new[] { BoardNodeSlot0, BoardNodeSlot1, BoardNodeSlot2, BoardNodeSlot3 };
+    public void SaveBoardItems(int slot, int s0, int s1, int s2, int s3)
+    {
+        if (!HasStateAuthority) return;
+        switch (slot)
+        {
+            case 0: BoardItem_P0_S0 = s0; BoardItem_P0_S1 = s1; BoardItem_P0_S2 = s2; BoardItem_P0_S3 = s3; break;
+            case 1: BoardItem_P1_S0 = s0; BoardItem_P1_S1 = s1; BoardItem_P1_S2 = s2; BoardItem_P1_S3 = s3; break;
+            case 2: BoardItem_P2_S0 = s0; BoardItem_P2_S1 = s1; BoardItem_P2_S2 = s2; BoardItem_P2_S3 = s3; break;
+            case 3: BoardItem_P3_S0 = s0; BoardItem_P3_S1 = s1; BoardItem_P3_S2 = s2; BoardItem_P3_S3 = s3; break;
+        }
+    }
 
+    public int[] GetBoardItems(int slot) => slot switch
+    {
+        0 => new[] { BoardItem_P0_S0, BoardItem_P0_S1, BoardItem_P0_S2, BoardItem_P0_S3 },
+        1 => new[] { BoardItem_P1_S0, BoardItem_P1_S1, BoardItem_P1_S2, BoardItem_P1_S3 },
+        2 => new[] { BoardItem_P2_S0, BoardItem_P2_S1, BoardItem_P2_S2, BoardItem_P2_S3 },
+        3 => new[] { BoardItem_P3_S0, BoardItem_P3_S1, BoardItem_P3_S2, BoardItem_P3_S3 },
+        _ => new[] { -1, -1, -1, -1 }
+    };
     #region Synced Minigame Settings (từ MinigameData, sync cho tất cả clients)
     [Networked] public NetworkBool MG_CanMove { get; private set; } = true;
     [Networked] public NetworkBool MG_CanJump { get; private set; } = true;
@@ -839,6 +876,29 @@ public class GameManager : NetworkBehaviour
         int[] saved = GetBoardPositions();
         if (saved[0] != 0 || saved[1] != 0 || saved[2] != 0 || saved[3] != 0)
             BoardManager.Instance.RestoreBoardPositions(saved);
+        for (int i = 0; i < 4; i++)
+        {
+            int pid = BoardManager.Instance.GetPlayerIDAtSlot(i);
+            if (pid < 0) continue;
+
+            var inv = PlayerItemInventory.GetForPlayer(pid);
+            if (inv == null) continue;
+
+            int[] savedi = GetBoardItems(i);
+            bool hasAny = false;
+            foreach (var v in savedi) if (v != -1) { hasAny = true; break; }
+            if (!hasAny) continue;
+
+            // Clear inventory trước rồi restore
+            for (int s = 0; s < 4; s++)
+                inv.RemoveBoardItem(s);
+
+            for (int s = 0; s < 4; s++)
+                if (savedi[s] != -1)
+                    inv.AddBoardItem((BoardItemEffect)savedi[s]);
+
+            Debug.Log($"[GameManager] Restored Board items slot {i}: [{string.Join(", ", savedi)}]");
+        }
     }
 
     /// <summary>

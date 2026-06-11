@@ -994,6 +994,23 @@ public class BoardManager : NetworkBehaviour
         if (!HasStateAuthority) return;
 
         GameManager.Instance?.SaveBoardPositions(NodeSlot0, NodeSlot1, NodeSlot2, NodeSlot3);
+
+        // Lưu Board items của từng slot
+        for (int i = 0; i < ActivePlayerCount; i++)
+        {
+            int pid = GetPlayerIDAtSlot(i);
+            if (pid < 0) continue;
+
+            var inv = PlayerItemInventory.GetForPlayer(pid);
+            if (inv == null) continue;
+
+            GameManager.Instance?.SaveBoardItems(i,
+                inv.BoardItems.Get(0),
+                inv.BoardItems.Get(1),
+                inv.BoardItems.Get(2),
+                inv.BoardItems.Get(3));
+        }
+
         DistributeRouletteRewards();
         BoardState = BoardPhaseState.BoardComplete;
         RPC_BoardComplete();
