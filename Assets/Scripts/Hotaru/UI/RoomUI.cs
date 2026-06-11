@@ -13,6 +13,7 @@ public class RoomUI : MonoBehaviour
     [SerializeField] private Button leaveRoomButton;
     [SerializeField] private Button readyGameButton;
     [SerializeField] private Button startGameButton;
+    [SerializeField] private Button forceStartButton;
 
     [Header("Player Data")]
     [SerializeField] private PlayerInfoUI playerInfoUI;
@@ -40,6 +41,9 @@ public class RoomUI : MonoBehaviour
         leaveRoomButton.onClick.AddListener(OnLeaveRoomClicked);
         readyGameButton.onClick.AddListener(OnReadyGameClicked);
         startGameButton.onClick.AddListener(OnStartGameClicked);
+        forceStartButton.onClick.AddListener(OnForceStartClicked);
+
+        CursorManager.Instance.SetUIMode();
 
         if (closePlayerListButton != null)
         {
@@ -138,6 +142,7 @@ public class RoomUI : MonoBehaviour
 
         startGameButton.gameObject.SetActive(isHost);
         readyGameButton.gameObject.SetActive(!isHost);
+        forceStartButton.gameObject.SetActive(isHost);
     }
 
     private void OnPlayerInfoClicked()
@@ -145,7 +150,7 @@ public class RoomUI : MonoBehaviour
         if (playerInfoUI == null) return;
 
         bool isActive = playerInfoUI.gameObject.activeSelf;
-        
+
         if (!isActive)
         {
             playerInfoUI.Show();
@@ -214,6 +219,19 @@ public class RoomUI : MonoBehaviour
         }
 
         Debug.Log("[RoomUI] Host starting match");
+
+        GameManager.Instance.StartMatch();
+    }
+
+    private void OnForceStartClicked()
+    {
+        if (GameManager.Instance == null)
+            return;
+
+        if (!GameManager.Instance.IsHost)
+            return;
+
+        Debug.Log("[RoomUI] Host force starting");
 
         GameManager.Instance.StartMatch();
     }

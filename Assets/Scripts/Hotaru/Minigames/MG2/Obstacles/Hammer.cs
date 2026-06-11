@@ -22,7 +22,7 @@ public class Hammer : BaseObstacle
     {
         if (hammerHead == null) return;
 
-        float time  = Runner != null ? (float)Runner.SimulationTime : Time.time;
+        float time = Runner != null ? (float)Runner.SimulationTime : Time.time;
         float angle = Mathf.Sin((time + phaseOffset) * swingSpeed) * swingAngle;
 
         hammerHead.localRotation = _restRotation * Quaternion.Euler(0, 0, angle);
@@ -32,14 +32,18 @@ public class Hammer : BaseObstacle
     {
         if (!Object.HasStateAuthority) return;
 
-        Vector3 pushDir = (player.transform.position - hammerHead.position).normalized;
-        pushDir.y = 0f;
+        float angleZ = hammerHead.localEulerAngles.z;
+        if (angleZ > 180f) angleZ -= 360f;
 
-        Vector3 knockback = pushDir * 15f + Vector3.up * 3f;
+        // Z > 0 = đang swing sang trái → đẩy sang trái (-Z)
+        // Z < 0 = đang swing sang phải → đẩy sang phải (+Z)
+        float pushZ = angleZ > 0f ? 1f : -1f;
+
+        Vector3 knockback = new Vector3(0f, 0f, pushZ) * 10f + Vector3.up * 2f;
 
         if (!player.TryApplyHit(knockback)) return;
 
         player.ForceIdle();
-        Debug.Log($"[Hammer] Knockback {player.Object.InputAuthority}");
+        Debug.Log($"[Hammer] Knockback dir={pushZ} angleZ={angleZ}");
     }
 }

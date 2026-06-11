@@ -151,37 +151,29 @@ public class PlayerController : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        // Update attack timer
         if (AttackTimer > 0)
         {
             AttackTimer -= Runner.DeltaTime;
-
-            if (AttackTimer <= 0)
-            {
-                AttackTimer = 0;
-            }
+            if (AttackTimer <= 0) AttackTimer = 0;
         }
 
-        // External force decay
         UpdateExternalVelocity();
 
-        // Knockback timer countdown
         if (HasStateAuthority && KnockbackTimer > 0f)
-        {
             KnockbackTimer = Mathf.Max(0f, KnockbackTimer - Runner.DeltaTime);
-        }
 
-        // Input
         if (GetInput(out PlayerInputData input))
         {
-            // Attack luôn check riêng
-            HandleAttack(input);
-
-            // Không move khi attack
-            if (CurrentState != PlayerState.Attacking)
+            // Block toàn bộ input khi frozen
+            if (!_isFrozen)
             {
-                Move(input);
-                HandleJump(input);
+                HandleAttack(input);
+
+                if (CurrentState != PlayerState.Attacking)
+                {
+                    Move(input);
+                    HandleJump(input);
+                }
             }
         }
 

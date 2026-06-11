@@ -171,10 +171,10 @@ public abstract class BaseMinigameController : NetworkBehaviour
 
         switch (CurrentPhase)
         {
-            case MinigamePhase.Tutorial:   HandleTutorialPhase();   break;
-            case MinigamePhase.Countdown:  HandleCountdownPhase();  break;
-            case MinigamePhase.Playing:    HandlePlayingPhase();    break;
-            case MinigamePhase.GameOver:   HandleGameOverPhase();   break;
+            case MinigamePhase.Tutorial: HandleTutorialPhase(); break;
+            case MinigamePhase.Countdown: HandleCountdownPhase(); break;
+            case MinigamePhase.Playing: HandlePlayingPhase(); break;
+            case MinigamePhase.GameOver: HandleGameOverPhase(); break;
             case MinigamePhase.Scoreboard: HandleScoreboardPhase(); break;
         }
     }
@@ -456,36 +456,74 @@ public abstract class BaseMinigameController : NetworkBehaviour
 
     private void TeleportPlayersToSpawnPoints()
     {
+        if (spawnPoints == null || spawnPoints.Length == 0)
+        {
+            Debug.LogError($"[{GetType().Name}] No spawn points assigned!");
+            return;
+        }
+
         var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
 
         System.Array.Sort(players, (a, b) =>
             a.Object.InputAuthority.PlayerId.CompareTo(b.Object.InputAuthority.PlayerId));
 
-        int spawnIndex = 0;
-        foreach (var player in players)
+        for (int i = 0; i < players.Length; i++)
         {
-            var spawnPoint = spawnPoints[spawnIndex % spawnPoints.Length];
-            var targetPos  = spawnPoint.position;
+            var player = players[i];
+            var spawnPoint = spawnPoints[i % spawnPoints.Length];
 
-            var cc = player.GetComponent<CharacterController>();
-            if (cc != null)
-            {
-                cc.enabled = false;
-                player.transform.position = targetPos;
-                cc.enabled = true;
-            }
-            else
-            {
-                player.transform.position = targetPos;
-            }
+            // Dùng Teleport thay vì set transform.position trực tiếp
+            player.Teleport(spawnPoint.position);
+            player.transform.rotation = spawnPoint.rotation;
 
             var mgData = player.GetComponent<PlayerMinigameData>();
-            if (mgData != null) mgData.ResetCheckpoint(targetPos);
-
-            spawnIndex++;
+            if (mgData != null) mgData.ResetCheckpoint(spawnPoint.position);
         }
 
-        Debug.Log($"[{GetType().Name}] Teleported {spawnIndex} players to spawn points");
+        // Sync vị trí xuống tất cả clients
+        var positions = new Vector3[players.Length];
+        var rotations = new Quaternion[players.Length];
+        var playerRefs = new int[players.Length];
+
+        for (int i = 0; i < players.Length; i++)
+        {
+            positions[i] = spawnPoints[i % spawnPoints.Length].position;
+            rotations[i] = spawnPoints[i % spawnPoints.Length].rotation;
+            playerRefs[i] = players[i].Object.InputAuthority.PlayerId;
+        }
+
+        RPC_SyncSpawnPositions(playerRefs, positions, rotations);
+
+        Debug.Log($"[{GetType().Name}] Teleported {players.Length} players to spawn points");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SyncSpawnPositions(int[] playerIds, Vector3[] positions, Quaternion[] rotations)
+    {
+        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+
+        for (int i = 0; i < playerIds.Length; i++)
+        {
+            foreach (var player in players)
+            {
+                if (player.Object.InputAuthority.PlayerId != playerIds[i]) continue;
+
+                var cc = player.GetComponent<CharacterController>();
+                if (cc != null)
+                {
+                    cc.enabled = false;
+                    player.transform.position = positions[i];
+                    player.transform.rotation = rotations[i];
+                    cc.enabled = true;
+                }
+                else
+                {
+                    player.transform.position = positions[i];
+                    player.transform.rotation = rotations[i];
+                }
+                break;
+            }
+        }
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]

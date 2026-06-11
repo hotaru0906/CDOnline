@@ -55,6 +55,7 @@ public class BoardHUDController : MonoBehaviour
     public void OnItemUsed(int playerId, BoardItemEffect effect)
     {
         cardDisplay?.Show(effect);
+        inventoryPanel?.OnItemUsed(playerId); // thêm dòng này
     }
 
     public string GetPlayerName(int playerId)

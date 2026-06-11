@@ -577,7 +577,9 @@ public class BoardManager : NetworkBehaviour
             _eligibleItemTargets = new System.Collections.Generic.List<int>(eligibles);
             _targetSelectIndex = 0;
             _isSelectingTarget = true;
-            RPC_HighlightTarget(eligibles[0]); // highlight target đầu tiên
+
+            // Gọi trực tiếp thay vì RPC
+            BoardCameraController.Instance?.FocusOnPlayer(eligibles[0]);
         }
         Debug.Log($"[BoardManager] P{userId} chọn target cho {(BoardItemEffect)effectId}");
     }
@@ -604,7 +606,11 @@ public class BoardManager : NetworkBehaviour
         {
             _itemUsedThisTurn = true;
             _waitingForMyItemTarget = false;
+            _isSelectingTarget = false;
         }
+
+        // Camera về player vừa dùng item — tất cả clients đều thấy
+        BoardCameraController.Instance?.FocusOnPlayer(userId);
 
         BoardHUDController.Instance?.OnItemUsed(userId, effect);
         Debug.Log($"[BoardManager] {_lastTileMessage}");
@@ -629,8 +635,7 @@ public class BoardManager : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_FocusOnTargetForPushBack(int targetId)
     {
-        BoardCameraController.Instance?.FocusOnTarget(targetId, () =>
-            BoardCameraController.Instance?.ReturnToPreviousFocus());
+        BoardCameraController.Instance?.FocusOnPlayer(targetId);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -651,8 +656,8 @@ public class BoardManager : NetworkBehaviour
             _reactionLine = "(*_*) SWAPPED!";
         _reactionTimer = 2f;
 
-        BoardCameraController.Instance?.FocusOnTarget(targetId, () =>
-            BoardCameraController.Instance?.ReturnToPreviousFocus());
+        // Chỉ focus targetId, RPC_ItemUsed sẽ tự về userId
+        BoardCameraController.Instance?.FocusOnPlayer(targetId);
 
         Debug.Log($"[BoardManager] {_lastTileMessage}");
     }
@@ -865,7 +870,10 @@ public class BoardManager : NetworkBehaviour
         BoardState = BoardPhaseState.ResolvingTile;
         StealerPlayerId = -1;
         RPC_StealResult(stealerId, targetId, stolenEffect);
-        yield return new WaitForSeconds(tileResolveDuration);
+        yield return new WaitForSeconds(1f);
+        RPC_FocusBackToStealer(stealerId);
+
+        yield return new WaitForSeconds(tileResolveDuration - 1f);
     }
 
     private void ResolveToss(int playerId)
@@ -923,8 +931,8 @@ public class BoardManager : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_StealResult(int stealerId, int targetId, int itemEffect)
     {
-        BoardCameraController.Instance?.FocusOnTarget(targetId, () =>
-            BoardCameraController.Instance?.ReturnToPreviousFocus());
+        // Chỉ focus targetId
+        BoardCameraController.Instance?.FocusOnPlayer(targetId);
 
         string itemName = itemEffect >= 0
             ? (BoardItemPool.Current?.GetByEffect((BoardItemEffect)itemEffect)?.itemName ?? ((BoardItemEffect)itemEffect).ToString())
@@ -1096,6 +1104,12 @@ public class BoardManager : NetworkBehaviour
         for (int i = 0; i < 4; i++)
             if (tokens != null && i < tokens.Length && tokens[i] != null)
                 tokens[i].SnapToNode(slots[i]);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_FocusBackToStealer(int stealerId)
+    {
+        BoardCameraController.Instance?.FocusOnPlayer(stealerId);
     }
     #endregion
 

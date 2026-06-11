@@ -60,14 +60,17 @@ public class BoardInventoryUI : MonoBehaviour
         var bm = BoardManager.Instance;
         if (bm == null) return;
 
-        // Init lần đầu
         if (!_initialized)
         {
             InitializeHands();
             _initialized = true;
         }
 
-        // Refresh tất cả hands
+        // Reset item used flag cho tất cả hands
+        foreach (var h in hands)
+            h?.ResetItemUsed();
+
+        // Refresh tất cả hands từ inventory
         foreach (var h in hands)
             h?.RefreshHand();
 
@@ -79,6 +82,23 @@ public class BoardInventoryUI : MonoBehaviour
                 hands[i].Expand();
             else
                 hands[i].Collapse();
+        }
+    }
+
+    public void OnItemUsed(int playerId)
+    {
+        var bm = BoardManager.Instance;
+        if (bm == null) return;
+
+        for (int i = 0; i < hands.Length; i++)
+        {
+            if (hands[i] == null) continue;
+            if (bm.GetPlayerIDAtSlot(i) == playerId)
+            {
+                hands[i].SetItemUsed();
+                hands[i].RefreshHand(); // sync từ inventory
+                return;
+            }
         }
     }
 

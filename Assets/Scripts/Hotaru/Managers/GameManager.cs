@@ -993,16 +993,10 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
 
-        // Chuyển camera sang First Person trong Lobby và cho phép xoay
-        if (CameraManager.Instance != null)
-        {
-            CameraManager.Instance.SwitchToFirstPersonCamera();
-            CameraManager.Instance.SetCameraRotationLocked(false);
-        }
-
         // Hiện cursor trong lobby
         if (CursorManager.Instance != null)
         {
+            CursorManager.Instance.SetUIMode();
             CursorManager.Instance.ShowCursor();
         }
 

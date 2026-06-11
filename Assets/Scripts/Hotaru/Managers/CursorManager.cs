@@ -3,9 +3,6 @@ public class CursorManager : MonoBehaviour
 {
     public static CursorManager Instance { get; private set; }
 
-    [Header("Debug")]
-    [SerializeField] private bool showDebug = false;
-
     private bool _isVisible;
     private CursorLockMode _lockMode;
 
@@ -55,10 +52,8 @@ public class CursorManager : MonoBehaviour
         Cursor.visible = visible;
         Cursor.lockState = lockMode;
 
-        if (showDebug)
-        {
-            Debug.Log($"[CursorManager] Visible: {visible} | LockMode: {lockMode}");
-        }
+        Debug.Log($"[CursorManager] Visible: {visible} | LockMode: {lockMode}");
+
     }
     public void ShowCursor()
     {

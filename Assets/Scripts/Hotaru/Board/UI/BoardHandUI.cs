@@ -29,6 +29,7 @@ public class BoardHandUI : MonoBehaviour
     public int PlayerId { get; private set; } = -1;
     public bool IsLocalPlayer { get; private set; }
 
+    private bool _itemUsedThisTurn = false;
     private bool _isExpanded = false;
     private readonly List<BoardCardUI> _cards = new();
     private RectTransform _rect;
@@ -53,9 +54,19 @@ public class BoardHandUI : MonoBehaviour
     // =====================================================================
     // EXPAND / COLLAPSE
     // =====================================================================
+    public void SetItemUsed()
+    {
+        _itemUsedThisTurn = true;
+        Collapse();
+    }
 
+    public void ResetItemUsed()
+    {
+        _itemUsedThisTurn = false;
+    }
     public void Expand()
     {
+        if (_itemUsedThisTurn) return; // không expand nếu đã dùng item
         _isExpanded = true;
         ArrangeCards();
         ScaleTo(expandedScale);
@@ -195,10 +206,12 @@ public class BoardHandUI : MonoBehaviour
         var bm = BoardManager.Instance;
         if (bm == null) return;
 
-        // Block nếu đã dùng item hoặc không phải lượt mình
         if (bm.BoardState != BoardPhaseState.WaitingForRoll) return;
 
         bm.RequestUseItem(card.ItemSlot, card.Effect);
-        RemoveCard(card);
+
+        // KHÔNG RemoveCard ở đây — để RefreshHand tự sync từ inventory
+        // Collapse hand sau khi dùng item
+        Collapse();
     }
 }

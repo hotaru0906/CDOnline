@@ -17,26 +17,21 @@ public class MG2RacingFinishLine : BaseFinishLine
 
     protected override void HandlePlayerReachedFinish(PlayerController player)
     {
-        if (MG2RacingController.Instance == null)
-        {
-            Debug.LogError("[MG2RacingFinishLine] MG2RacingController not found in scene!");
-            return;
-        }
-
+        if (MG2RacingController.Instance == null) return;
         if (!MG2RacingController.Instance.IsGameStarted) return;
         if (MG2RacingController.Instance.IsGameEnded) return;
 
         var mgData = player.GetComponent<PlayerMinigameData>();
         if (mgData == null) return;
-        if (mgData.HasFinished) return;   // đã về đích rồi
-        if (mgData.IsEliminated) return;  // bị loại, không tính
+        if (mgData.HasFinished) return;
+        if (mgData.IsEliminated) return;
 
         Debug.Log($"[MG2RacingFinishLine] Player {player.Object.InputAuthority} crossed finish line!");
 
-        // Host ghi nhận rank (logic trong MG2RacingController)
-        MG2RacingController.Instance.PlayerFinished(player.Object.InputAuthority);
+        // Freeze player ngay khi về đích
+        player.SetFrozen(true);
 
-        // Phát hiệu ứng xuống tất cả client
+        MG2RacingController.Instance.PlayerFinished(player.Object.InputAuthority);
         RPC_PlayFinishEffect();
     }
 
