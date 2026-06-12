@@ -40,15 +40,15 @@ public class PlayerModelSwitcher : NetworkBehaviour
     public void SetCharacterModel(int index)
     {
         if (characterModels == null || characterModels.Length == 0) return;
-        
+
         int clampedIndex = Mathf.Clamp(index, 0, characterModels.Length - 1);
-        
+
         _currentIndex = clampedIndex;
         UpdateModelVisibility();
-        
+
         // Notify PlayerAnimator về model mới
         NotifyAnimator();
-        
+
         // Nếu là local player và đang ở First Person (KHÔNG phải Minigame), ẩn model
         if (Object != null && Object.HasInputAuthority && CameraManager.Instance != null)
         {
@@ -75,7 +75,7 @@ public class PlayerModelSwitcher : NetworkBehaviour
                 characterModels[i].SetActive(i == _currentIndex);
             }
         }
-        
+
         // Thêm debug chi tiết
         bool isLocal = Object != null && Object.HasInputAuthority;
         Debug.Log($"[PlayerModelSwitcher] Switched to model {_currentIndex} | IsLocal: {isLocal} | PlayerName: {gameObject.name}");
@@ -102,14 +102,14 @@ public class PlayerModelSwitcher : NetworkBehaviour
     {
         if (characterModels == null || _currentIndex < 0 || _currentIndex >= characterModels.Length)
             return null;
-        
+
         return characterModels[_currentIndex];
     }
 
     private void HideAllModels()
     {
         if (characterModels == null) return;
-        
+
         foreach (var model in characterModels)
         {
             if (model != null)
@@ -130,7 +130,7 @@ public class PlayerModelSwitcher : NetworkBehaviour
             Debug.Log($"[PlayerModelSwitcher] Skipping SetModelVisible for remote player");
             return;
         }
-        
+
         var activeModel = GetActiveModel();
         if (activeModel != null)
         {
@@ -140,7 +140,7 @@ public class PlayerModelSwitcher : NetworkBehaviour
             {
                 renderer.enabled = visible;
             }
-            
+
             Debug.Log($"[PlayerModelSwitcher] Local player model visibility set to: {visible}");
         }
     }
@@ -156,7 +156,7 @@ public class PlayerModelSwitcher : NetworkBehaviour
             SetLayerRecursively(activeModel, layer);
         }
     }
-    
+
     private void SetLayerRecursively(GameObject obj, int layer)
     {
         obj.layer = layer;
@@ -167,4 +167,23 @@ public class PlayerModelSwitcher : NetworkBehaviour
     }
 
     public int GetCurrentModelIndex() => _currentIndex;
+    public void HideCharacter()
+    {
+        var activeModel = GetActiveModel();
+        if (activeModel != null)
+        {
+            activeModel.SetActive(false);
+        }
+    }
+
+    public void ShowCharacter()
+    {
+        var activeModel = GetActiveModel();
+        if (activeModel != null)
+        {
+            activeModel.SetActive(true);
+        }
+
+        NotifyAnimator();
+    }
 }

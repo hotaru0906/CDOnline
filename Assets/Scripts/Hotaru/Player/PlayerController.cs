@@ -36,7 +36,7 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float groundBufferTime = 0.15f;
 
     [Header("Attack")]
-    [SerializeField] private float attackDuration = 0.7f;
+    [SerializeField] private float attackDuration = 2f;
 
     [Header("Crouch")]
     [SerializeField] private float crouchScale = 0.75f;
