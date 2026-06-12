@@ -32,39 +32,31 @@ public class PlayerMinigameData : NetworkBehaviour
     /// <summary>
     /// Player đã bị loại khỏi minigame (không được respawn)
     /// </summary>
-    [Networked]
-    public NetworkBool IsEliminated { get; private set; }
+    [Networked] public NetworkBool IsEliminated { get; private set; }
 
     // ----------------------------------------------------------------
     //  Ranking fields — dùng cho Racing và các mode có thứ hạng
     // ----------------------------------------------------------------
 
     /// <summary>Thứ hạng về đích: 1 = nhất, 2 = nhì... 0 = chưa về đích.</summary>
-    [Networked]
-    public int FinishRank { get; private set; }
+    [Networked] public int FinishRank { get; private set; }
 
     /// <summary>Đã về đích chưa.</summary>
-    [Networked]
-    public NetworkBool HasFinished { get; private set; }
+    [Networked] public NetworkBool HasFinished { get; private set; }
 
     /// <summary>Thời điểm về đích (giây kể từ khi game bắt đầu). 0 nếu chưa về.</summary>
-    [Networked]
-    public float FinishTime { get; private set; }
+    [Networked] public float FinishTime { get; private set; }
 
     /// <summary>
     /// Tiến độ khi chưa về đích — dùng để tính rank khi timeout.
     /// Gán từ MG2RacingController: checkpointIndex * 1000 + worldPos.
     /// </summary>
-    [Networked]
-    public float DistanceProgress { get; private set; }
+    [Networked] public float DistanceProgress { get; private set; }
 
     /// <summary>Điểm số — dùng cho Score mode sau này.</summary>
-    [Networked]
-    public int Score { get; private set; }
-
-    // Dùng TickTimer thay vì Coroutine
-    [Networked]
-    private TickTimer RespawnTimer { get; set; }
+    [Networked] public int Score { get; private set; }
+    [Networked] public int Lives { get; private set; } = 0;
+    [Networked] private TickTimer RespawnTimer { get; set; }
 
     [Networked]
     private TickTimer InvincibilityTimer { get; set; }
@@ -73,7 +65,7 @@ public class PlayerMinigameData : NetworkBehaviour
     private Color[] originalColors;
     private bool _lastInvincibleState; // Track để detect thay đổi
     private bool _lastEliminatedState;
-    
+
     // Event khi player bị loại
     public event System.Action<PlayerMinigameData> OnPlayerEliminated;
 
@@ -222,6 +214,34 @@ public class PlayerMinigameData : NetworkBehaviour
             RPC_RequestDeath();
         }
     }
+    public void SetLives(int lives)
+    {
+        if (!HasStateAuthority) return;
+        Lives = lives;
+    }
+    public void LoseLife()
+    {
+        if (!HasStateAuthority) return;
+        if (IsEliminated) return;
+
+        Lives = Mathf.Max(0, Lives - 1);
+        Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} lost a life — {Lives} remaining");
+
+        if (Lives <= 0)
+        {
+            IsEliminated = true;
+            IsDead = true;
+            if (playerController != null)
+                playerController.SetFrozen(true);
+            Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} ELIMINATED");
+        }
+        else
+        {
+            // Còn mạng — respawn bình thường
+            IsDead = true;
+            RespawnTimer = TickTimer.CreateFromSeconds(Runner, respawnDelay);
+        }
+    }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     private void RPC_RequestDeath()
@@ -238,13 +258,13 @@ public class PlayerMinigameData : NetworkBehaviour
 
         // Đọc allowRespawn từ synced Networked property (thay vì lookup MinigameData)
         bool canRespawn = true;
-        
+
         if (GameManager.Instance != null)
         {
             canRespawn = GameManager.Instance.MG_AllowRespawn;
             Debug.Log($"[PlayerMinigameData] MG_AllowRespawn from GameManager: {canRespawn}");
         }
-        
+
         if (canRespawn)
         {
             // Respawn bình thường
@@ -258,7 +278,7 @@ public class PlayerMinigameData : NetworkBehaviour
             Debug.Log($"[PlayerMinigameData] Player {Object.InputAuthority} eliminated!");
             IsDead = true;
             IsEliminated = true;
-            
+
             // Disable player input/movement
             if (playerController != null)
             {
@@ -316,7 +336,7 @@ public class PlayerMinigameData : NetworkBehaviour
         // TODO Phase 8: play respawn particle / flash / sound ở đây
         Debug.Log($"[PlayerMinigameData] RPC_OnRespawn → Player {playerRef}");
     }
-    
+
     /// <summary>
     /// Kích hoạt invincibility ngắn sau khi bị knockback
     /// Dùng để player không bị hit liên tục bởi trap
@@ -328,12 +348,12 @@ public class PlayerMinigameData : NetworkBehaviour
             RPC_TriggerKnockbackInvincibility(duration);
             return;
         }
-        
+
         IsInvincible = true;
         InvincibilityTimer = TickTimer.CreateFromSeconds(Runner, duration);
         Debug.Log($"[PlayerMinigameData] Knockback invincibility: {duration}s");
     }
-    
+
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     private void RPC_TriggerKnockbackInvincibility(float duration)
     {
@@ -352,13 +372,13 @@ public class PlayerMinigameData : NetworkBehaviour
             _lastInvincibleState = IsInvincible;
             UpdateVisual();
         }
-        
+
         // Check nếu IsEliminated thay đổi
         if (_lastEliminatedState != IsEliminated)
         {
             _lastEliminatedState = IsEliminated;
             UpdateVisual();
-            
+
             // Fire event khi player bị loại
             if (IsEliminated)
             {
@@ -392,7 +412,7 @@ public class PlayerMinigameData : NetworkBehaviour
             }
             return;
         }
-        
+
         // Apply target color
         for (int i = 0; i < playerRenderers.Length; i++)
         {
@@ -413,7 +433,7 @@ public class PlayerMinigameData : NetworkBehaviour
     {
         return !IsInvincible && !IsDead && !IsEliminated;
     }
-    
+
     /// <summary>
     /// Reset trạng thái cho round mới
     /// </summary>
