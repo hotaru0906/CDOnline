@@ -9,7 +9,7 @@ using UnityEngine;
 public class PlayerMinigameData : NetworkBehaviour
 {
     [Header("Respawn Settings")]
-    [SerializeField] private float respawnDelay = 0.5f;
+    [SerializeField] private float respawnDelay = 2f;
     [SerializeField] private float invincibilityTime = 2f;
 
     [Header("Visual Feedback")]
@@ -239,6 +239,11 @@ public class PlayerMinigameData : NetworkBehaviour
         {
             // Còn mạng — respawn bình thường
             IsDead = true;
+            var modelSwitcher = GetComponent<PlayerModelSwitcher>();
+            if (modelSwitcher != null)
+            {
+                modelSwitcher.HideCharacter();
+            }
             RespawnTimer = TickTimer.CreateFromSeconds(Runner, respawnDelay);
         }
     }
@@ -317,6 +322,11 @@ public class PlayerMinigameData : NetworkBehaviour
         }
 
         IsDead = false;
+        var modelSwitcher = GetComponent<PlayerModelSwitcher>();
+        if (modelSwitcher != null)
+        {
+            modelSwitcher.ShowCharacter();
+        }
         IsInvincible = true;
         InvincibilityTimer = TickTimer.CreateFromSeconds(Runner, invincibilityTime);
 
