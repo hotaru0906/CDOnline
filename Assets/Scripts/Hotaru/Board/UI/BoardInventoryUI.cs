@@ -1,78 +1,103 @@
+using System.Collections;
 using UnityEngine;
-using System.Collections.Generic;
-
-/// <summary>
-/// Hiện Board items của LOCAL player — nhóm theo loại item, hiện số lượng mỗi loại.
-/// Ví dụ: 2x PushBack + 1x EvenDice → slot0 = PushBack(x2), slot1 = EvenDice(x1), slot2-3 trống.
-///
-/// SETUP TRONG UNITY EDITOR:
-///   1. Tạo Panel "InventoryPanel" trong Canvas (góc dưới màn hình).
-///   2. Tạo 4 GameObject con từ prefab BoardItemSlotUI, gán vào mảng slots[0..3].
-///   3. Gắn script này vào InventoryPanel.
-///
-/// LƯU Ý: BoardItemPool.Current phải có giá trị (assign asset vào scene).
-/// </summary>
 public class BoardInventoryUI : MonoBehaviour
 {
-    [Header("References")]
-    [SerializeField] private BoardItemSlotUI[] slots = new BoardItemSlotUI[4];
-
-    // =====================================================================
-    // LIFECYCLE
-    // =====================================================================
-
-    private void Update()
+    [SerializeField] private BoardHandUI[] hands = new BoardHandUI[4];
+    private bool _initialized = false;
+    private void Start()
     {
-        Refresh();
+        StartCoroutine(WaitForBoardManager());
+    }
+
+    private IEnumerator WaitForBoardManager()
+    {
+        while (BoardManager.Instance == null)
+            yield return null;
+
+        BoardManager.Instance.OnTurnStarted += OnTurnStarted;
+        Debug.Log("[BoardInventoryUI] Subscribed to OnTurnStarted");
+    }
+
+    private void OnDestroy()
+    {
+        if (BoardManager.Instance != null)
+            BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
     }
 
     // =====================================================================
-    // REFRESH
+    // INIT
     // =====================================================================
 
-    /// <summary>
-    /// Nhóm Board items theo BoardItemEffect, hiện 1 slot/loại kèm count badge.
-    /// Có thể gọi thủ công từ BoardHUDController.
-    /// </summary>
-    public void Refresh()
+    private void InitializeHands()
     {
-        int myId = GetLocalPlayerId();
-        if (myId < 0) { ClearAll(); return; }
+        var bm = BoardManager.Instance;
+        if (bm == null) return;
 
-        var inv = PlayerItemInventory.GetForPlayer(myId);
-        if (inv == null) { ClearAll(); return; }
+        int localId = GetLocalPlayerId();
 
-        var pool = BoardItemPool.Current;
-
-        // Đếm số lượng theo từng BoardItemEffect, giữ thứ tự xuất hiện
-        var order    = new List<BoardItemEffect>();
-        var countMap = new Dictionary<BoardItemEffect, int>();
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < hands.Length; i++)
         {
-            int raw = inv.BoardItems.Get(i);
-            if (raw == -1) continue;
-            var eff = (BoardItemEffect)raw;
-            if (!countMap.ContainsKey(eff))
+            if (hands[i] == null) continue;
+
+            int pid = bm.GetPlayerIDAtSlot(i);
+            if (pid < 0)
             {
-                order.Add(eff);
-                countMap[eff] = 0;
+                hands[i].gameObject.SetActive(false);
+                continue;
             }
-            countMap[eff]++;
+
+            hands[i].gameObject.SetActive(true);
+            hands[i].Initialize(pid, pid == localId);
+        }
+    }
+
+    // =====================================================================
+    // TURN
+    // =====================================================================
+
+    private void OnTurnStarted(int playerId)
+    {
+        var bm = BoardManager.Instance;
+        if (bm == null) return;
+
+        if (!_initialized)
+        {
+            InitializeHands();
+            _initialized = true;
         }
 
-        for (int slotIdx = 0; slotIdx < slots.Length; slotIdx++)
-        {
-            if (slots[slotIdx] == null) continue;
+        // Reset item used flag cho tất cả hands
+        foreach (var h in hands)
+            h?.ResetItemUsed();
 
-            if (slotIdx < order.Count)
-            {
-                var effect = order[slotIdx];
-                var data   = pool?.GetByEffect(effect);
-                slots[slotIdx].SetItem(data, countMap[effect]);
-            }
+        // Refresh tất cả hands từ inventory
+        foreach (var h in hands)
+            h?.RefreshHand();
+
+        // Expand/collapse
+        for (int i = 0; i < hands.Length; i++)
+        {
+            if (hands[i] == null) continue;
+            if (bm.GetPlayerIDAtSlot(i) == playerId)
+                hands[i].Expand();
             else
+                hands[i].Collapse();
+        }
+    }
+
+    public void OnItemUsed(int playerId)
+    {
+        var bm = BoardManager.Instance;
+        if (bm == null) return;
+
+        for (int i = 0; i < hands.Length; i++)
+        {
+            if (hands[i] == null) continue;
+            if (bm.GetPlayerIDAtSlot(i) == playerId)
             {
-                slots[slotIdx].SetEmpty();
+                hands[i].SetItemUsed();
+                hands[i].RefreshHand(); // sync từ inventory
+                return;
             }
         }
     }
@@ -81,21 +106,16 @@ public class BoardInventoryUI : MonoBehaviour
     // HELPERS
     // =====================================================================
 
-    private int GetLocalPlayerId()
+    private void CollapseAll()
     {
-        var bm = BoardManager.Instance;
-        if (bm != null && bm.Runner != null && bm.Runner.LocalPlayer != Fusion.PlayerRef.None)
-            return bm.Runner.LocalPlayer.PlayerId;
-
-        if (PlayerNetworkData.Local != null && PlayerNetworkData.Local.Object != null)
-            return PlayerNetworkData.Local.Object.InputAuthority.PlayerId;
-
-        return -1;
+        foreach (var h in hands)
+            h?.Collapse();
     }
 
-    private void ClearAll()
+    private int GetLocalPlayerId()
     {
-        foreach (var s in slots)
-            s?.SetEmpty();
+        if (PlayerNetworkData.Local != null && PlayerNetworkData.Local.Object != null)
+            return PlayerNetworkData.Local.Object.InputAuthority.PlayerId;
+        return -1;
     }
 }

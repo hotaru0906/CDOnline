@@ -151,37 +151,29 @@ public class PlayerController : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        // Update attack timer
         if (AttackTimer > 0)
         {
             AttackTimer -= Runner.DeltaTime;
-
-            if (AttackTimer <= 0)
-            {
-                AttackTimer = 0;
-            }
+            if (AttackTimer <= 0) AttackTimer = 0;
         }
 
-        // External force decay
         UpdateExternalVelocity();
 
-        // Knockback timer countdown
         if (HasStateAuthority && KnockbackTimer > 0f)
-        {
             KnockbackTimer = Mathf.Max(0f, KnockbackTimer - Runner.DeltaTime);
-        }
 
-        // Input
         if (GetInput(out PlayerInputData input))
         {
-            // Attack luôn check riêng
-            HandleAttack(input);
-
-            // Không move khi attack
-            if (CurrentState != PlayerState.Attacking)
+            // Block toàn bộ input khi frozen
+            if (!_isFrozen)
             {
-                Move(input);
-                HandleJump(input);
+                HandleAttack(input);
+
+                if (CurrentState != PlayerState.Attacking)
+                {
+                    Move(input);
+                    HandleJump(input);
+                }
             }
         }
 
@@ -268,8 +260,10 @@ public class PlayerController : NetworkBehaviour
 
             GroundedTimer = 0;
 
-            // Đánh dấu đây là cú nhảy do người chơi bấm
             IsJumpingByInput = true;
+
+            // ép state Jump ngay lập tức
+            CurrentState = PlayerState.Jumping;
 
             Debug.Log("[PlayerController] JUMP!");
         }
@@ -321,8 +315,11 @@ public class PlayerController : NetworkBehaviour
         {
             GroundedTimer = groundBufferTime;
 
-            // Chạm đất => kết thúc trạng thái jump
-            IsJumpingByInput = false;
+            // Chỉ reset khi đã thực sự chạm đất
+            if (velocity.y <= 0.1f)
+            {
+                IsJumpingByInput = false;
+            }
         }
         else
         {
@@ -338,29 +335,32 @@ public class PlayerController : NetworkBehaviour
             UpdateCrouchHitbox(IsCrouching);
         }
 
-        // Jump/Fall
-        if (!isBufferedGrounded)
-        {
-            if (IsJumpingByInput && velocity.y > 0.2f)
-            {
-                CurrentState = PlayerState.Jumping;
-            }
-            else
-            {
-                CurrentState = PlayerState.Falling;
-            }
+        // ==========================================
+        // ƯU TIÊN TRẠNG THÁI TRÊN KHÔNG
+        // ==========================================
 
+        if (velocity.y > 0.2f)
+        {
+            CurrentState = PlayerState.Jumping;
             return;
         }
 
-        // Crouch
+        if (velocity.y < -0.2f && !isBufferedGrounded)
+        {
+            CurrentState = PlayerState.Falling;
+            return;
+        }
+
+        // ==========================================
+        // MẶT ĐẤT
+        // ==========================================
+
         if (IsCrouching)
         {
             CurrentState = PlayerState.Crouching;
             return;
         }
 
-        // Move
         if (IsMoving)
         {
             CurrentState =
@@ -371,7 +371,6 @@ public class PlayerController : NetworkBehaviour
             return;
         }
 
-        // Idle
         CurrentState = PlayerState.Idle;
     }
 
@@ -639,37 +638,34 @@ public class PlayerController : NetworkBehaviour
     private void CheckAttackHit()
     {
         Collider[] hits = Physics.OverlapSphere(
-            transform.position + transform.forward * 1.5f,
-            1f
-        );
+            transform.position + transform.forward * 1.5f, 1f);
 
         foreach (Collider hit in hits)
         {
-            // bỏ qua chính mình
-            if (hit.gameObject == gameObject)
-                continue;
+            if (hit.gameObject == gameObject) continue;
 
-            PlayerController other =
-                hit.GetComponent<PlayerController>();
+            var other = hit.GetComponent<PlayerController>();
+            if (other == null) continue;
 
-            if (other == null)
-                continue;
-
-            // tạo lực đẩy
-            Vector3 knockback =
-                transform.forward * 8f +
-                Vector3.up * 2f;
-
-            bool success =
-                other.TryApplyHit(knockback);
-
-            if (success)
+            // MG3 Brawl — delegate hit logic cho controller
+            if (MG3BrawlController.Instance != null &&
+                MG3BrawlController.Instance.IsGameStarted)
             {
-                other.ForceIdle();
+                Vector3 knockback = transform.forward * 8f + Vector3.up * 2f;
+                bool hit_success = other.TryApplyHit(knockback);
 
-                Debug.Log(
-                    $"[FUSION HIT] {Object.InputAuthority} hit {other.Object.InputAuthority}"
-                );
+                if (hit_success)
+                {
+                    other.ForceIdle();
+                    MG3BrawlController.Instance.OnPlayerHit(this, other);
+                }
+            }
+            else
+            {
+                // Default: chỉ knockback
+                Vector3 knockback = transform.forward * 8f + Vector3.up * 2f;
+                if (other.TryApplyHit(knockback))
+                    other.ForceIdle();
             }
         }
     }

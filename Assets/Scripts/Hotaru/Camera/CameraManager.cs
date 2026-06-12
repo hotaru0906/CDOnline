@@ -212,15 +212,6 @@ public class CameraManager : MonoBehaviour
         {
             ToggleCursor();
         }
-
-        // Toggle giữa First Person và Third Person với V
-        if (Input.GetKeyDown(KeyCode.V) && _localPlayerTransform != null)
-        {
-            if (_currentMode == CameraMode.FirstPerson)
-                SwitchToThirdPersonCamera();
-            else if (_currentMode == CameraMode.ThirdPerson)
-                SwitchToFirstPersonCamera();
-        }
     }
 
     private void LateUpdate()

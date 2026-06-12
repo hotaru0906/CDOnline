@@ -36,10 +36,10 @@ public class SeatInteractor : NetworkBehaviour
     {
         Debug.Log("[SeatInteractor] Requesting stand up (Jump pressed)");
 
-        if (SeatManager.Instance != null)
-        {
-            SeatManager.Instance.TryStandUp(Object.InputAuthority);
-        }
+        // if (SeatManager.Instance != null)
+        // {
+        //     SeatManager.Instance.TryStandUp(Object.InputAuthority);
+        // }
     }
 
     public void SetSeatIndex(int seatIndex)

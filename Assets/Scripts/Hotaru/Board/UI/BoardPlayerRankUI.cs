@@ -1,74 +1,105 @@
-using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
-/// <summary>
-/// Bảng xếp hạng 4 player theo vị trí trên bàn cờ — cập nhật mỗi frame.
-/// Player đứng xa nhất (nodeID lớn nhất) = Rank #1.
-///
-/// SETUP TRONG UNITY EDITOR:
-///   1. Tạo Panel "PlayerRankPanel" trong Canvas.
-///   2. Thêm Vertical Layout Group.
-///   3. (Optional) Thêm TMP_Text "PlayerRankTitle" làm tiêu đề.
-///   4. Tạo 4 child GameObject từ prefab BoardPlayerRankEntryUI, gán vào mảng entries[0..3].
-///   5. Gắn script này vào PlayerRankPanel.
-/// </summary>
 public class BoardPlayerRankUI : MonoBehaviour
 {
-    [Header("References")]
-    [SerializeField] private BoardPlayerRankEntryUI[] entries = new BoardPlayerRankEntryUI[4];
+    [SerializeField] private BoardPlayerEntryUI[] entries = new BoardPlayerEntryUI[4];
 
-    // =====================================================================
-    // LIFECYCLE
-    // =====================================================================
-
-    private void Update()
+    private static readonly Color[] SlotColors =
     {
+        new Color(0.9f, 0.2f, 0.2f),
+        new Color(0.2f, 0.4f, 0.9f),
+        new Color(0.2f, 0.8f, 0.2f),
+        new Color(0.95f, 0.8f, 0.1f)
+    };
+
+    private void Start()
+    {
+        StartCoroutine(WaitForBoardManager());
+    }
+
+    private void OnDestroy()
+    {
+        if (BoardManager.Instance != null)
+            BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
+    }
+
+    private IEnumerator WaitForBoardManager()
+    {
+        while (BoardManager.Instance == null)
+            yield return null;
+
+        BoardManager.Instance.OnTurnStarted += OnTurnStarted;
         Refresh();
+        Debug.Log("[BoardPlayerRankUI] Subscribed");
+    }
+
+    // =====================================================================
+    // EVENTS
+    // =====================================================================
+
+    private void OnTurnStarted(int playerId)
+    {
+        SetActiveTurn(playerId);
     }
 
     // =====================================================================
     // REFRESH
     // =====================================================================
 
-    /// <summary>
-    /// Đọc state từ BoardManager, sắp xếp theo nodeID giảm dần, cập nhật entries.
-    /// Có thể gọi thủ công (ví dụ từ BoardHUDController khi lượt mới bắt đầu).
-    /// </summary>
     public void Refresh()
     {
         var bm = BoardManager.Instance;
         if (bm == null) return;
 
-        // Xây dựng danh sách player kèm slot gốc để lấy màu token
         var list = new List<(int slot, int playerId, int nodeId)>();
         for (int i = 0; i < bm.ActivePlayerCount; i++)
         {
             int pid = bm.GetPlayerIDAtSlot(i);
-            if (pid >= 0)
-                list.Add((i, pid, bm.GetNodeIDAtSlot(i)));
+            if (pid >= 0) list.Add((i, pid, bm.GetNodeIDAtSlot(i)));
         }
-
-        // Sắp xếp theo nodeID giảm dần → người đi xa nhất lên đầu
         list.Sort((a, b) => b.nodeId.CompareTo(a.nodeId));
 
-        for (int rank = 0; rank < entries.Length; rank++)
+        var rankBySlot = new int[4];
+        for (int r = 0; r < list.Count; r++)
+            rankBySlot[list[r].slot] = r + 1;
+
+        for (int i = 0; i < entries.Length; i++)
         {
-            if (entries[rank] == null) continue;
+            if (entries[i] == null) continue;
 
-            if (rank < list.Count)
+            if (i >= bm.ActivePlayerCount)
             {
-                var (slot, pid, nodeId) = list[rank];
-                bool isCurrent = (pid == bm.CurrentPlayerID);
-                string name = BoardHUDController.Instance != null
-                    ? BoardHUDController.Instance.GetPlayerName(pid)
-                    : $"P{pid}";
+                entries[i].gameObject.SetActive(false);
+                continue;
+            }
 
-                entries[rank].SetData(rank + 1, slot, name, nodeId, isCurrent);
-            }
-            else
-            {
-                entries[rank].SetEmpty();
-            }
+            entries[i].gameObject.SetActive(true);
+
+            int    pid  = bm.GetPlayerIDAtSlot(i);
+            string name = BoardHUDController.Instance?.GetPlayerName(pid) ?? $"P{pid}";
+
+            entries[i].SetData(
+                playerName  : name,
+                rank        : rankBySlot[i],
+                slotColor   : SlotColors[i],
+                isActiveTurn: false
+            );
+        }
+    }
+
+    public void SetActiveTurn(int playerId)
+    {
+        Refresh();
+
+        var bm = BoardManager.Instance;
+        if (bm == null) return;
+
+        for (int i = 0; i < bm.ActivePlayerCount; i++)
+        {
+            if (entries[i] == null) continue;
+            entries[i].SetTurnActive(bm.GetPlayerIDAtSlot(i) == playerId);
         }
     }
 }

@@ -93,10 +93,10 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             _runner = gameObject.AddComponent<NetworkRunner>();
         }
-        
+
         // Đảm bảo runner được cấu hình đúng
         EnsureRunnerConfigured();
-        
+
         var sceneManager = GetComponent<NetworkSceneManagerDefault>();
         if (sceneManager == null)
         {
@@ -126,10 +126,10 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             _runner = gameObject.AddComponent<NetworkRunner>();
         }
-        
+
         // Đảm bảo runner được cấu hình đúng
         EnsureRunnerConfigured();
-        
+
         // Get or create scene manager
         var sceneManager = GetComponent<NetworkSceneManagerDefault>();
         if (sceneManager == null)
@@ -153,29 +153,29 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
             LoadingScreen.Hide();
         }
     }
-    
+
     /// <summary>
     /// Đảm bảo NetworkRunner được cấu hình đúng với ProvideInput và callbacks
     /// </summary>
     private void EnsureRunnerConfigured()
     {
         if (_runner == null) return;
-        
+
         // Quan trọng: ProvideInput = true cho phép client gửi input
         _runner.ProvideInput = true;
-        
+
         // Chỉ thêm callbacks nếu chưa thêm
         if (!_callbacksAdded)
         {
             _runner.AddCallbacks(this);
-            
+
             // Thêm PlayerInputHandler
             if (_inputHandler == null)
             {
                 _inputHandler = gameObject.AddComponent<PlayerInputHandler>();
             }
             _runner.AddCallbacks(_inputHandler);
-            
+
             _callbacksAdded = true;
             Debug.Log("[BasicSpawner] Runner configured with ProvideInput and callbacks");
         }
@@ -195,7 +195,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         Debug.Log("[BasicSpawner] Spawning GameManager...");
-        
+
         // Spawn với flags để không bị destroy khi đổi scene
         // Tất cả children (VotingManager, MinigameVotingManager) sẽ đi theo
         _gameManagerInstance = _runner.Spawn(
@@ -247,7 +247,11 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             // Track spawned players
             _spawnedPlayers[player] = playerObject;
-            
+
+            if (SeatManager.Instance != null)
+            {
+                SeatManager.Instance.AutoAssignAllPlayersToSeats();
+            }
             // Note: LoadingScreen.Hide() is called in PlayerNetworkData.Spawned()
             // to ensure it only hides when local player is fully ready
         }
@@ -471,7 +475,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
             }
         }
         _spawnedPlayers.Clear();
-        
+
         // Delay spawn để đợi scene objects (MinigameController, etc.) được khởi tạo
         StartCoroutine(DelayedSpawnPlayers());
     }
@@ -480,11 +484,16 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     {
         // Đợi 1 frame để scene objects Awake() chạy xong
         yield return null;
-        
+
         // Spawn all connected players
         foreach (var player in _runner.ActivePlayers)
         {
             SpawnPlayerForScene(player);
+        }
+        if (SeatManager.Instance != null)
+        {
+            SeatManager.Instance.ResetAllSeats();
+            SeatManager.Instance.AutoAssignAllPlayersToSeats();
         }
 
         // Hide loading after all players spawned
@@ -496,49 +505,49 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     /// Spawn a player for the current scene.
     /// </summary>
     private void SpawnPlayerForScene(PlayerRef player)
-{
-    if (!playerPrefab.IsValid)
     {
-        Debug.LogError("[BasicSpawner] Player prefab not assigned!");
-        return;
+        if (!playerPrefab.IsValid)
+        {
+            Debug.LogError("[BasicSpawner] Player prefab not assigned!");
+            return;
+        }
+
+        // Check if player already has an object
+        if (_spawnedPlayers.ContainsKey(player))
+        {
+            Debug.LogWarning($"[BasicSpawner] Player {player} already spawned!");
+            return;
+        }
+
+        Vector3 spawnPosition = GetSpawnPosition(player);
+        Quaternion spawnRotation = GetSpawnRotation(player);
+
+        NetworkObject playerObject = _runner.Spawn(
+            playerPrefab,
+            spawnPosition,
+            spawnRotation,
+            player
+        );
+
+        if (playerObject != null)
+        {
+            _spawnedPlayers[player] = playerObject;
+            Debug.Log($"[BasicSpawner] Spawned player {player} at {spawnPosition}");
+        }
     }
 
-    // Check if player already has an object
-    if (_spawnedPlayers.ContainsKey(player))
+    private MenuManager ResolveMenuManager()
     {
-        Debug.LogWarning($"[BasicSpawner] Player {player} already spawned!");
-        return;
+        if (menuManager == null)
+        {
+            menuManager = FindAnyObjectByType<MenuManager>();
+        }
+
+        return menuManager;
     }
 
-    Vector3 spawnPosition = GetSpawnPosition(player);
-    Quaternion spawnRotation = GetSpawnRotation(player);
-
-    NetworkObject playerObject = _runner.Spawn(
-        playerPrefab,
-        spawnPosition,
-        spawnRotation,
-        player
-    );
-
-    if (playerObject != null)
-    {
-        _spawnedPlayers[player] = playerObject;
-        Debug.Log($"[BasicSpawner] Spawned player {player} at {spawnPosition}");
-    }
-}
-
-private MenuManager ResolveMenuManager()
-{
-    if (menuManager == null)
+    private void HandleUnitySceneLoaded(Scene scene, LoadSceneMode mode)
     {
         menuManager = FindAnyObjectByType<MenuManager>();
     }
-
-    return menuManager;
-}
-
-private void HandleUnitySceneLoaded(Scene scene, LoadSceneMode mode)
-{
-    menuManager = FindAnyObjectByType<MenuManager>();
-}
 }

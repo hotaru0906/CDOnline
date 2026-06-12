@@ -10,35 +10,18 @@ public class SeatManager : NetworkBehaviour
     #endregion
 
     #region Constants
-    private const int MAX_SEATS = 8;
+    private const int MAX_SEATS = 4;
     private const int INVALID_SEAT = -1;
     #endregion
 
     #region Networked Properties
-    [Networked, Capacity(8)]
+    [Networked, Capacity(MAX_SEATS)]
     private NetworkArray<int> SeatOccupants => default;
-
-    [Networked, OnChangedRender(nameof(OnSeatedCountChanged))]
-    public int SeatedPlayerCount { get; private set; }
-
-    /// <summary>
-    /// Số ghế tối thiểu để auto-start
-    /// </summary>
-    [Networked]
-    public int MinPlayersToStart { get; private set; } = 2;
     #endregion
 
     #region Settings
-    [Header("Settings")]
-    [SerializeField] private int minPlayersToAutoStart = 2;
-    [SerializeField] private bool autoStartWhenReady = true;
-
     [Header("Seats (assign in Inspector)")]
     [SerializeField] private Seat[] seats;
-    #endregion
-
-    #region Events
-    public event Action OnAllPlayersSeated;
     #endregion
 
     #region Unity Lifecycle
@@ -58,8 +41,6 @@ public class SeatManager : NetworkBehaviour
 
         if (HasStateAuthority)
         {
-            MinPlayersToStart = minPlayersToAutoStart;
-
             for (int i = 0; i < MAX_SEATS; i++)
             {
                 SeatOccupants.Set(i, INVALID_SEAT);
@@ -78,6 +59,11 @@ public class SeatManager : NetworkBehaviour
                 seats[i].Initialize(i);
             }
         }
+        if (seats.Length != MAX_SEATS)
+        {
+            Debug.LogError(
+                $"[SeatManager] Expected {MAX_SEATS} seats but found {seats.Length}");
+        }
 
         Debug.Log($"[SeatManager] Found {seats.Length} seats");
     }
@@ -92,30 +78,42 @@ public class SeatManager : NetworkBehaviour
     #endregion
 
     #region Public Methods
-
-    public void TrySitDown(int seatIndex, PlayerRef playerRef)
+    public void AssignPlayerToSeat(PlayerRef playerRef, int seatIndex)
     {
         if (!HasStateAuthority)
+            return;
+
+        if (seatIndex < 0 || seatIndex >= MAX_SEATS)
+            return;
+
+        int playerSlot = GetPlayerSlot(playerRef);
+
+        if (playerSlot == INVALID_SEAT)
+            return;
+
+        // Check ghế đích trước
+        if (SeatOccupants.Get(seatIndex) != INVALID_SEAT)
         {
-            // Client gọi RPC để request
-            RPC_RequestSitDown(seatIndex);
+            Debug.LogWarning(
+                $"Seat {seatIndex} already occupied");
             return;
         }
 
-        SitDownInternal(seatIndex, playerRef);
-    }
-
-    public void TryStandUp(PlayerRef playerRef)
-    {
-        if (!HasStateAuthority)
+        // Remove khỏi ghế cũ
+        for (int i = 0; i < MAX_SEATS; i++)
         {
-            RPC_RequestStandUp();
-            return;
+            if (SeatOccupants.Get(i) == playerSlot)
+            {
+                SeatOccupants.Set(i, INVALID_SEAT);
+                break;
+            }
         }
 
-        StandUpInternal(playerRef);
-    }
+        SeatOccupants.Set(seatIndex, playerSlot);
 
+        Debug.Log(
+            $"[SeatManager] Assigned Player Slot {playerSlot} -> Seat {seatIndex}");
+    }
     public bool IsSeatAvailable(int seatIndex)
     {
         if (seatIndex < 0 || seatIndex >= MAX_SEATS) return false;
@@ -184,15 +182,8 @@ public class SeatManager : NetworkBehaviour
 
         for (int i = 0; i < MAX_SEATS; i++)
         {
-            int occupant = SeatOccupants.Get(i);
-            if (occupant != INVALID_SEAT)
-            {
-                UpdatePlayerSeatIndex(occupant, -1);
-                SeatOccupants.Set(i, INVALID_SEAT);
-            }
+            SeatOccupants.Set(i, INVALID_SEAT);
         }
-
-        SeatedPlayerCount = 0;
     }
 
     public void AutoAssignAllPlayersToSeats()
@@ -219,155 +210,39 @@ public class SeatManager : NetworkBehaviour
 
             if (seatIndex >= MAX_SEATS) break;
             SeatOccupants.Set(seatIndex, playerSlot);
-            SeatedPlayerCount++;
+            var networkCC = player.GetComponent<NetworkCharacterController>();
 
-            UpdatePlayerSeatIndex(playerSlot, seatIndex);
+            if (networkCC != null)
+            {
+                networkCC.Teleport(
+                    GetSeatPosition(seatIndex),
+                    GetSeatRotation(seatIndex));
+            }
+            else
+            {
+                player.transform.position =
+                    GetSeatPosition(seatIndex);
+
+                player.transform.rotation =
+                    GetSeatRotation(seatIndex);
+            }
         }
 
-        Debug.Log($"[SeatManager] Auto-assign complete. Total seated: {SeatedPlayerCount}");
+    }
+    public bool HasAssignedSeat(PlayerRef playerRef)
+    {
+        return GetPlayerSeatIndex(playerRef) != INVALID_SEAT;
     }
     #endregion
 
     #region Private Methods
-    private void SitDownInternal(int seatIndex, PlayerRef playerRef)
-    {
-        if (seatIndex >= seats.Length) return;
-        if (seatIndex < 0 || seatIndex >= MAX_SEATS) return;
-        if (SeatOccupants.Get(seatIndex) != INVALID_SEAT) return;
-
-        int playerSlot = GetPlayerSlot(playerRef);
-        if (playerSlot == INVALID_SEAT) return;
-
-        // Nếu đang ngồi chỗ khác → remove
-        int currentSeat = GetPlayerSeatIndex(playerRef);
-        if (currentSeat != INVALID_SEAT)
-        {
-            SeatOccupants.Set(currentSeat, INVALID_SEAT);
-            SeatedPlayerCount--;
-        }
-
-        // Set state
-        SeatOccupants.Set(seatIndex, playerSlot);
-        SeatedPlayerCount++;
-
-        if (seatIndex < seats.Length && seats[seatIndex] != null)
-            seats[seatIndex].OnSit();
-
-        Debug.Log($"[SeatManager] Player {playerSlot} → seat {seatIndex}");
-        UpdatePlayerSeatIndex(playerSlot, seatIndex);
-
-        CheckAutoStart();
-    }
-
-    private void StandUpInternal(PlayerRef playerRef)
-    {
-        int seatIndex = GetPlayerSeatIndex(playerRef);
-        if (seatIndex == INVALID_SEAT) return;
-
-        int playerSlot = SeatOccupants.Get(seatIndex);
-
-        SeatOccupants.Set(seatIndex, INVALID_SEAT);
-        SeatedPlayerCount--;
-
-        if (seatIndex < seats.Length && seats[seatIndex] != null)
-            seats[seatIndex].OnStandUp();
-
-        Debug.Log($"[SeatManager] Player {playerSlot} đứng dậy");
-
-        UpdatePlayerSeatIndex(playerSlot, -1);
-    }
-    private void UpdatePlayerSeatIndex(int playerSlot, int seatIndex)
-    {
-        var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
-
-        foreach (var player in players)
-        {
-            int slot = GetPlayerSlot(player.Object.InputAuthority);
-
-            if (slot == playerSlot)
-            {
-                var seatInteractor = player.GetComponent<SeatInteractor>();
-
-                if (seatInteractor != null)
-                {
-                    seatInteractor.SetSeatIndex(seatIndex);
-                }
-
-                return;
-            }
-        }
-
-        // ⚠️ fallback debug
-        Debug.LogWarning($"[SeatManager] Could not find player with slot {playerSlot} to update seat!");
-    }
-
     private int GetPlayerSlot(PlayerRef playerRef)
     {
-        // Thử lấy slot từ RouletteManager trước
-        if (RouletteManager.Instance != null)
-        {
-            int slot = RouletteManager.Instance.GetSlotFromPlayerRef(playerRef);
-            if (slot != INVALID_SEAT)
-            {
-                return slot;
-            }
-            // RouletteManager trả về -1, fallback sang PlayerId
-            Debug.Log($"[SeatManager] RouletteManager returned -1 for player {playerRef.PlayerId}, using PlayerId as slot");
-        }
-
-        // Fallback: use PlayerId
         return playerRef.PlayerId;
-    }
-
-    private void CheckAutoStart()
-    {
-        if (!autoStartWhenReady) return;
-        if (SeatedPlayerCount < MinPlayersToStart) return;
-
-        // Check if all seated players are ready
-        var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
-        int readyCount = 0;
-
-        foreach (var player in players)
-        {
-            int seatIndex = GetPlayerSeatIndex(player.Object.InputAuthority);
-            if (seatIndex != INVALID_SEAT && player.IsReady)
-            {
-                readyCount++;
-            }
-        }
-
-        // All seated players ready -> auto start
-        if (readyCount >= MinPlayersToStart && readyCount == SeatedPlayerCount)
-        {
-            Debug.Log($"[SeatManager] All {readyCount} seated players ready! Auto-starting...");
-            OnAllPlayersSeated?.Invoke();
-
-            if (GameManager.Instance != null && GameManager.Instance.CurrentState == GameState.Lobby)
-            {
-                GameManager.Instance.StartMatch();
-            }
-        }
-    }
-
-    private void OnSeatedCountChanged()
-    {
-        Debug.Log($"[SeatManager] Seated count changed to: {SeatedPlayerCount}");
     }
     #endregion
 
     #region RPCs
 
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_RequestSitDown(int seatIndex, RpcInfo info = default)
-    {
-        SitDownInternal(seatIndex, info.Source);
-    }
-
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_RequestStandUp(RpcInfo info = default)
-    {
-        StandUpInternal(info.Source);
-    }
     #endregion
 }

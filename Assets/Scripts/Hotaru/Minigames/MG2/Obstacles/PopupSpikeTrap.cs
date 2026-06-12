@@ -1,145 +1,128 @@
+using Fusion;
 using UnityEngine;
 
-/// <summary>
-/// C3 — Bẫy gai popup (Popup Spike Trap).
-/// Chu kỳ: Ẩn → Hiện ra (damage zone) → Ẩn lại.
-/// Khi player chạm vào: player die → respawn tại checkpoint.
-///
-/// Setup prefab:
-///   - Object gốc: base đứng yên + NetworkObject
-///   - spikePart: con có Collider isTrigger
-///     + Thêm ObstacleTriggerRelay → kéo root vào field 'obstacle'
-///   - Gắn component này lên object GỐC
-/// </summary>
 public class PopupSpikeTrap : BaseObstacle
 {
     [Header("Spike Part")]
-    [SerializeField] private Transform spikePart;       // phần gai di chuyển lên/xuống
-    [SerializeField] private Collider spikeCollider;    // Collider của spikePart
-    [SerializeField] private Vector3 hiddenLocalPos;    // vị trí ẩn (local)
-    [SerializeField] private Vector3 activeLocalPos;    // vị trí hiện ra (local)
-    [SerializeField] private float riseSpeed = 12f;
-    [SerializeField] private float retractSpeed = 8f;
+    [SerializeField] private Transform spikePart;
+    [SerializeField] private Collider  spikeCollider;
+    [SerializeField] private Vector3   hiddenLocalPos;
+    [SerializeField] private Vector3   activeLocalPos;
+    [SerializeField] private float     riseSpeed    = 12f;
+    [SerializeField] private float     retractSpeed = 8f;
 
     [Header("Timing")]
-    [SerializeField] private float activeDuration = 1.5f;
+    [SerializeField] private float activeDuration   = 1.5f;
     [SerializeField] private float cooldownDuration = 2.5f;
+    [Tooltip("Delay ban đầu — đặt khác nhau cho từng instance")]
+    [SerializeField] private float startDelay = 0f;
 
-    [Header("Visual")]
-    [SerializeField] private Renderer spikeRenderer;
-    [SerializeField] private Color activeColor = Color.red;
-    [SerializeField] private Color hiddenColor = Color.gray;
+    private enum TrapState : byte { Hidden, Rising, Active, Retracting }
 
-    [Header("Audio")]
-    [SerializeField] private AudioSource riseSound;
-    [SerializeField] private AudioSource hitAudioSource;
+    [Networked] private TrapState _state { get; set; }
+    [Networked] private float     _timer { get; set; }
 
-    private enum TrapState { Hidden, Rising, Active, Retracting }
-    private TrapState _state = TrapState.Hidden;
-    private float _stateTimer;
-
-    private void Start()
+    public override void Spawned()
     {
-        _stateTimer = cooldownDuration;
+        if (Object.HasStateAuthority)
+        {
+            _state = TrapState.Hidden;
+            _timer = cooldownDuration + startDelay;
+        }
 
-        if (spikePart != null)
-            spikePart.localPosition = hiddenLocalPos;
-
-        if (spikeCollider != null)
-            spikeCollider.enabled = false;
-
-        SetSpikeColor(hiddenColor);
+        spikePart.localPosition = hiddenLocalPos;
+        spikeCollider.enabled   = false;
     }
 
-    private void Update()
+    public override void FixedUpdateNetwork()
     {
-        _stateTimer -= Time.deltaTime;
+        if (!Object.HasStateAuthority) return;
+
+        _timer -= Runner.DeltaTime;
 
         switch (_state)
         {
             case TrapState.Hidden:
-                if (_stateTimer <= 0f)
+                if (_timer <= 0f)
                 {
                     _state = TrapState.Rising;
-                    if (spikeCollider != null) spikeCollider.enabled = false;
-                    if (riseSound != null) riseSound.Play();
+                    RPC_PlayHitEffects(); // phát sound khi popup
                 }
                 break;
 
             case TrapState.Rising:
-                if (spikePart != null)
+                if (MoveSpike(activeLocalPos, riseSpeed))
                 {
-                    spikePart.localPosition = Vector3.MoveTowards(
-                        spikePart.localPosition, activeLocalPos, riseSpeed * Time.deltaTime);
-
-                    if (Vector3.Distance(spikePart.localPosition, activeLocalPos) < 0.01f)
-                    {
-                        spikePart.localPosition = activeLocalPos;
-                        _state = TrapState.Active;
-                        _stateTimer = activeDuration;
-
-                        if (spikeCollider != null) spikeCollider.enabled = true;
-                        SetSpikeColor(activeColor);
-                        Debug.Log("[PopupSpike] ACTIVE");
-                    }
+                    _state = TrapState.Active;
+                    _timer = activeDuration;
+                    spikeCollider.enabled = true;
                 }
                 break;
 
             case TrapState.Active:
-                if (_stateTimer <= 0f)
+                if (_timer <= 0f)
                 {
                     _state = TrapState.Retracting;
-                    if (spikeCollider != null) spikeCollider.enabled = false;
+                    spikeCollider.enabled = false;
                 }
                 break;
 
             case TrapState.Retracting:
-                if (spikePart != null)
+                if (MoveSpike(hiddenLocalPos, retractSpeed))
                 {
-                    spikePart.localPosition = Vector3.MoveTowards(
-                        spikePart.localPosition, hiddenLocalPos, retractSpeed * Time.deltaTime);
-
-                    if (Vector3.Distance(spikePart.localPosition, hiddenLocalPos) < 0.01f)
-                    {
-                        spikePart.localPosition = hiddenLocalPos;
-                        _state = TrapState.Hidden;
-                        _stateTimer = cooldownDuration;
-                        SetSpikeColor(hiddenColor);
-                    }
+                    _state = TrapState.Hidden;
+                    _timer = cooldownDuration;
                 }
                 break;
         }
     }
 
+    public override void Render()
+    {
+        switch (_state)
+        {
+            case TrapState.Rising:
+            case TrapState.Active:
+                spikePart.localPosition = Vector3.MoveTowards(
+                    spikePart.localPosition, activeLocalPos, riseSpeed * Time.deltaTime);
+                break;
+
+            case TrapState.Hidden:
+            case TrapState.Retracting:
+                spikePart.localPosition = Vector3.MoveTowards(
+                    spikePart.localPosition, hiddenLocalPos, retractSpeed * Time.deltaTime);
+                break;
+        }
+    }
+
+    // =====================================================================
+    // INTERNAL
+    // =====================================================================
+
+    private bool MoveSpike(Vector3 target, float speed)
+    {
+        spikePart.localPosition = Vector3.MoveTowards(
+            spikePart.localPosition, target, speed * Runner.DeltaTime);
+        return Vector3.Distance(spikePart.localPosition, target) < 0.01f;
+    }
+
+    // =====================================================================
+    // DAMAGE
+    // =====================================================================
+
     protected override void HandleHit(PlayerController player)
     {
-        // Chỉ hit khi active
         if (_state != TrapState.Active) return;
+        if (!Object.HasStateAuthority)  return;
         base.HandleHit(player);
     }
 
     protected override void ApplyEffect(PlayerController player)
     {
-        // Cho player die → respawn tại checkpoint
         var mgData = GetMinigameData(player);
         if (mgData != null && mgData.CanTakeDamage())
             mgData.Die();
 
-        Debug.Log($"[PopupSpike] Killed {player.Object.InputAuthority} → respawn");
-    }
-
-    protected override void PlaySFX()
-    {
-        if (hitAudioSource != null)
-            hitAudioSource.Play();
-        else
-            base.PlaySFX();
-    }
-
-    private void SetSpikeColor(Color color)
-    {
-        if (spikeRenderer != null)
-            spikeRenderer.material.color = color;
+        Debug.Log($"[PopupSpikeTrap] Killed {player.Object.InputAuthority}");
     }
 }
-

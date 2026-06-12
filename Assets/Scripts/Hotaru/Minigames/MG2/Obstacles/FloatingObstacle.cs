@@ -1,31 +1,19 @@
 using UnityEngine;
+using Fusion;
 
-/// <summary>
-/// C2 — Vật di chuyển ngang (Floating Obstacle).
-/// Di chuyển qua lại theo trục X hoặc Z dùng Mathf.Sin.
-/// Có Collider trigger — knockback khi player chạm phải.
-///
-/// Setup prefab:
-///   - 1 GameObject với Collider isTrigger + NetworkObject
-///   - Gắn component này lên root
-///
-/// Để 2 vật không đồng pha (player phải chọn 1 trong 2):
-///   - Đặt phaseOffset = 0 cho vật 1
-///   - Đặt phaseOffset = 1.57 (~PI/2) cho vật 2
-/// </summary>
 public class FloatingObstacle : BaseObstacle
 {
     public enum FloatAxis { X, Z }
 
     [Header("Floating Motion")]
-    [SerializeField] private FloatAxis axis = FloatAxis.X;
-    [SerializeField] private float floatSpeed = 1.5f;
-    [SerializeField] private float floatAmplitude = 2f;
-    [SerializeField] private float phaseOffset = 0f;  // khác nhau giữa các instance
+    [SerializeField] private FloatAxis axis           = FloatAxis.X;
+    [SerializeField] private float     floatSpeed     = 1.5f;
+    [SerializeField] private float     floatAmplitude = 2f;
+    [SerializeField] private float     phaseOffset    = 0f;
 
     [Header("Knockback")]
-    [SerializeField] private float knockbackForce = 8f;
-    [SerializeField] private float upForce = 3f;
+    [SerializeField] private float knockbackForce    = 8f;
+    [SerializeField] private float upForce           = 3f;
     [SerializeField] private float knockbackDuration = 0.3f;
 
     private Vector3 _startPosition;
@@ -37,7 +25,9 @@ public class FloatingObstacle : BaseObstacle
 
     private void Update()
     {
-        float offset = Mathf.Sin((Time.time + phaseOffset) * floatSpeed) * floatAmplitude;
+        // Runner có sẵn từ NetworkBehaviour — SimulationTime sync cho tất cả clients
+        float time   = Runner != null ? (float)Runner.SimulationTime : Time.time;
+        float offset = Mathf.Sin((time + phaseOffset) * floatSpeed) * floatAmplitude;
 
         Vector3 pos = _startPosition;
         if (axis == FloatAxis.X) pos.x += offset;
