@@ -10,10 +10,11 @@ public class PlayerNetworkData : NetworkBehaviour
 
     [Networked] public int ColorID { get; set; }
     [Networked] public bool IsReady { get; set; }
-    
+
     [Networked, OnChangedRender(nameof(OnCharacterIndexChanged))]
-    public int CharacterIndex { get; set; }
-    
+    public int CharacterIndex { get; private set; }
+
+
     [Networked, OnChangedRender(nameof(OnScoreChanged))]
     public int Score { get; set; }
 
@@ -23,20 +24,17 @@ public class PlayerNetworkData : NetworkBehaviour
         if (Object.HasInputAuthority)
         {
             Local = this;
-            
-            // Hide loading screen when local player spawns
             LoadingScreen.Hide();
-            
-            // Load saved character selection từ CharacterSelectionData (PlayerPrefs)
+
             string savedName = CharacterSelectionData.PlayerName;
             int savedIndex = CharacterSelectionData.SelectedCharacterIndex;
-            
+
             // Nếu tên là mặc định "Player" thì dùng Player + ID
             if (savedName == "Player")
             {
                 savedName = $"Player {Object.InputAuthority.PlayerId}";
             }
-            
+
             // Sync lên network cho người khác thấy
             RPC_SetPlayerName(savedName);
             RPC_SetCharacterIndex(savedIndex);
@@ -51,14 +49,14 @@ public class PlayerNetworkData : NetworkBehaviour
                 PlayerName = $"Player {playerNumber}";
             }
         }
-        
+
         // Cập nhật model ngay sau khi spawn (vì OnChangedRender không trigger nếu giá trị không đổi)
         UpdateCharacterModel();
-        
+
         // Cập nhật tên hiển thị
         UpdateNameDisplay();
     }
-    
+
     /// <summary>
     /// Cập nhật model nhân vật - gọi trực tiếp khi cần
     /// </summary>
@@ -75,11 +73,11 @@ public class PlayerNetworkData : NetworkBehaviour
     {
         // Called when name changes on any client
         Debug.Log($"[PlayerNetworkData] Name changed to: {PlayerName}");
-        
+
         // Cập nhật UI hiển thị tên player
         UpdateNameDisplay();
     }
-    
+
     /// <summary>
     /// Cập nhật tên hiển thị trên World Space Canvas
     /// </summary>
@@ -106,7 +104,7 @@ public class PlayerNetworkData : NetworkBehaviour
     private void OnScoreChanged()
     {
         Debug.Log($"[PlayerNetworkData] {PlayerName} score changed to: {Score}");
-        
+
         // Notify ScoreboardManager to refresh
         if (ScoreboardManager.Instance != null)
         {

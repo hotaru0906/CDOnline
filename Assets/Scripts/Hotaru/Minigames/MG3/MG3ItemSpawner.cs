@@ -48,11 +48,7 @@ public class MG3ItemSpawner : NetworkBehaviour
             if (_occupied[i]) continue;
             if (spawnPoints[i] == null) continue;
 
-            var no = Runner.Spawn(
-                itemPrefab,
-                spawnPoints[i].position,
-                Quaternion.identity
-            );
+            var no = Runner.Spawn(itemPrefab, spawnPoints[i].position, spawnPoints[i].rotation, inputAuthority: null);
 
             var pickup = no.GetComponent<MG3ItemPickup>();
             if (pickup != null)

@@ -212,26 +212,12 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     }
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-        // Only Host spawns players
         if (!runner.IsServer) return;
 
-        // Check if player already spawned (avoid duplicate)
-        if (_spawnedPlayers.ContainsKey(player))
-        {
-            Debug.LogWarning($"[BasicSpawner] Player {player} already spawned, skipping.");
-            return;
-        }
+        if (_spawnedPlayers.ContainsKey(player)) return;
 
-        // Validate playerPrefab
-        if (!playerPrefab.IsValid)
-        {
-            Debug.LogError("[BasicSpawner] Player prefab not assigned! Cannot spawn player.");
-            return;
-        }
+        if (!playerPrefab.IsValid) return;
 
-        Debug.Log($"[BasicSpawner] Player {player} joined. Spawning...");
-
-        // Calculate spawn position
         Vector3 spawnPosition = GetSpawnPosition(player);
         Quaternion spawnRotation = GetSpawnRotation(player);
 
@@ -252,8 +238,6 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
             {
                 SeatManager.Instance.AutoAssignAllPlayersToSeats();
             }
-            // Note: LoadingScreen.Hide() is called in PlayerNetworkData.Spawned()
-            // to ensure it only hides when local player is fully ready
         }
         else
         {

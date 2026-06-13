@@ -48,20 +48,19 @@ public class MG3PlayerBrawlData : NetworkBehaviour
 
     private void OnHasItemChanged()
     {
-        // Refresh CharacterIndex nếu chưa có
-        if (_characterIndex < 0)
-        {
-            var netData = GetComponent<PlayerNetworkData>();
-            if (netData != null) _characterIndex = netData.CharacterIndex;
-        }
+        var netData = GetComponent<PlayerNetworkData>();
+        int characterIndex = netData != null ? netData.CharacterIndex : -1;
 
-        // Ẩn tất cả trước
         foreach (var obj in itemInHandObjects)
             if (obj != null) obj.SetActive(false);
 
-        // Hiện đúng model theo CharacterIndex
-        if (HasItem && _characterIndex >= 0 && _characterIndex < itemInHandObjects.Length)
-            if (itemInHandObjects[_characterIndex] != null)
-                itemInHandObjects[_characterIndex].SetActive(true);
+        if (HasItem && characterIndex >= 0 && characterIndex < itemInHandObjects.Length)
+        {
+            if (itemInHandObjects[characterIndex] != null)
+                itemInHandObjects[characterIndex].SetActive(true);
+        }
+
+        Debug.Log($"[MG3PlayerBrawlData] OnHasItemChanged → HasItem={HasItem}, CharacterIndex={characterIndex}");
     }
+
 }

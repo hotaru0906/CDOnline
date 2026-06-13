@@ -70,22 +70,11 @@ public abstract class BaseMinigameController : NetworkBehaviour
 
     #endregion
 
-    // ----------------------------------------------------------------
-    //  Scoreboard Event — UI hook
-    // ----------------------------------------------------------------
-
-    /// <summary>
-    /// Fires trên tất cả client khi Scoreboard phase bắt đầu.
-    /// UI subscribe để đọc ScoreboardResults và hiển thị bảng xếp hạng.
-    /// </summary>
+    public static event System.Action OnGameStarted;
     public static event System.Action OnScoreboardReady;
 
     protected MinigameData _minigameData;
 
-    /// <summary>
-    /// Danh sách thứ tự về đích — chỉ dùng trên Host.
-    /// Derived class (racing, score...) có thể dùng để tính rank.
-    /// </summary>
     protected List<PlayerRef> _finishOrder = new List<PlayerRef>();
 
     protected NetworkRunner _minigameRunner;
@@ -197,6 +186,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
             GameManager.Instance.HideMinigameCountdown();
 
         IsGameStarted = true;
+        OnGameStarted?.Invoke();
 
         if (HasStateAuthority)
         {
@@ -352,9 +342,14 @@ public abstract class BaseMinigameController : NetworkBehaviour
         if (GameTimer > 0f)
         {
             GameTimer -= Runner.DeltaTime;
+
+            // 🔑 Gọi update HUD mỗi tick
+            OnGameTimerChanged();
+
             if (GameTimer <= 0f)
             {
                 GameTimer = 0f;
+                OnGameTimerChanged(); // update lần cuối
                 OnTimeUp();
                 return;
             }
@@ -363,6 +358,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
         UpdateAlivePlayerCount();
         CheckWinCondition();
     }
+
 
     /// <summary>Callback khi GameTimer thay đổi — UI có thể subscribe để hiện timer.</summary>
     protected virtual void OnGameTimerChanged() { }

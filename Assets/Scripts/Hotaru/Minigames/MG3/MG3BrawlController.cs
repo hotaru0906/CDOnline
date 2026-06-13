@@ -39,15 +39,13 @@ public class MG3BrawlController : BaseMinigameController
     {
         if (!HasStateAuthority) return;
 
-        // Set lives cho tất cả players
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         foreach (var p in allData)
             p.SetLives(startingLives);
 
-        // Subscribe elimination event
         foreach (var p in allData)
             p.OnPlayerEliminated += HandlePlayerEliminated;
-
+        MinigameHUDController.Instance?.RefreshPlayers();
         Debug.Log($"[MG3BrawlController] Game started — {allData.Length} players, {startingLives} lives each");
     }
 
@@ -77,7 +75,7 @@ public class MG3BrawlController : BaseMinigameController
         if (targetMgData == null || !targetMgData.CanTakeDamage()) return;
 
         var attackerBrawl = attacker.GetComponent<MG3PlayerBrawlData>();
-        var targetBrawl   = target.GetComponent<MG3PlayerBrawlData>();
+        var targetBrawl = target.GetComponent<MG3PlayerBrawlData>();
 
         if (attackerBrawl != null && attackerBrawl.HasItem)
         {
@@ -153,6 +151,12 @@ public class MG3BrawlController : BaseMinigameController
             EndGame(lastAlive);
         }
     }
+
+    protected override void OnGameTimerChanged()
+    {
+        MinigameHUDController.Instance?.SetTime(GameTimer);
+    }
+
 
     protected override void OnTimeUp()
     {
@@ -235,7 +239,7 @@ public class MG3BrawlController : BaseMinigameController
     protected override void BuildScoreboardResults()
     {
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        var sorted  = new List<PlayerMinigameData>(allData);
+        var sorted = new List<PlayerMinigameData>(allData);
 
         sorted.Sort((a, b) => a.FinishRank.CompareTo(b.FinishRank));
 
@@ -247,10 +251,10 @@ public class MG3BrawlController : BaseMinigameController
             var p = sorted[i];
             ScoreboardResults.Set(i, new MinigameResultData
             {
-                Player    = p.Object.InputAuthority,
-                Rank      = p.FinishRank > 0 ? p.FinishRank : (i + 1),
-                Score     = p.Lives,
-                IsValid   = true
+                Player = p.Object.InputAuthority,
+                Rank = p.FinishRank > 0 ? p.FinishRank : (i + 1),
+                Score = p.Lives,
+                IsValid = true
             });
         }
     }
@@ -259,7 +263,7 @@ public class MG3BrawlController : BaseMinigameController
     {
         Debug.Log("========== SCOREBOARD (MG3 Brawl) ==========");
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        var sorted  = new List<PlayerMinigameData>(allData);
+        var sorted = new List<PlayerMinigameData>(allData);
         sorted.Sort((a, b) => a.FinishRank.CompareTo(b.FinishRank));
 
         foreach (var p in sorted)
