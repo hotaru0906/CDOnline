@@ -199,26 +199,27 @@ public class PlayerMinigameData : NetworkBehaviour
 
     public void LoseLife()
     {
-        if (!HasStateAuthority || IsEliminated) return;
+        if (!HasStateAuthority) return;
+        if (IsEliminated) return;
+        if (IsInvincible) return; // đang bất tử, không bị trừ thêm
 
         Lives = Mathf.Max(0, Lives - 1);
         Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} lost a life — {Lives} remaining");
 
-        // Fire host-side event so MG controller can react immediately on host
-        OnLivesChangedHost?.Invoke(Object.InputAuthority.PlayerId, Lives);
-
         if (Lives <= 0)
         {
+            // Hết mạng — die vĩnh viễn, không respawn
             IsEliminated = true;
             IsDead = true;
-            playerController?.SetFrozen(true);
+            if (playerController != null)
+                playerController.SetFrozen(true);
             Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} ELIMINATED");
         }
         else
         {
-            IsDead = true;
-            GetComponent<PlayerModelSwitcher>()?.HideCharacter();
-            RespawnTimer = TickTimer.CreateFromSeconds(Runner, respawnDelay);
+            // Còn mạng — không respawn, chỉ bất tử 3s
+            IsInvincible = true;
+            InvincibilityTimer = TickTimer.CreateFromSeconds(Runner, 3f);
         }
     }
 
