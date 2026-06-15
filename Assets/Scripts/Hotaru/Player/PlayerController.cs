@@ -36,7 +36,7 @@ public class PlayerController : NetworkBehaviour
     [SerializeField] private float groundBufferTime = 0.15f;
 
     [Header("Attack")]
-    [SerializeField] private float attackDuration = 0.7f;
+    [SerializeField] private float attackDuration = 2f;
 
     [Header("Crouch")]
     [SerializeField] private float crouchScale = 0.75f;
@@ -638,37 +638,34 @@ public class PlayerController : NetworkBehaviour
     private void CheckAttackHit()
     {
         Collider[] hits = Physics.OverlapSphere(
-            transform.position + transform.forward * 1.5f,
-            1f
-        );
+            transform.position + transform.forward * 1.5f, 1f);
 
         foreach (Collider hit in hits)
         {
-            // bỏ qua chính mình
-            if (hit.gameObject == gameObject)
-                continue;
+            if (hit.gameObject == gameObject) continue;
 
-            PlayerController other =
-                hit.GetComponent<PlayerController>();
+            var other = hit.GetComponent<PlayerController>();
+            if (other == null) continue;
 
-            if (other == null)
-                continue;
-
-            // tạo lực đẩy
-            Vector3 knockback =
-                transform.forward * 8f +
-                Vector3.up * 2f;
-
-            bool success =
-                other.TryApplyHit(knockback);
-
-            if (success)
+            // MG3 Brawl — delegate hit logic cho controller
+            if (MG3BrawlController.Instance != null &&
+                MG3BrawlController.Instance.IsGameStarted)
             {
-                other.ForceIdle();
+                Vector3 knockback = transform.forward * 8f + Vector3.up * 2f;
+                bool hit_success = other.TryApplyHit(knockback);
 
-                Debug.Log(
-                    $"[FUSION HIT] {Object.InputAuthority} hit {other.Object.InputAuthority}"
-                );
+                if (hit_success)
+                {
+                    other.ForceIdle();
+                    MG3BrawlController.Instance.OnPlayerHit(this, other);
+                }
+            }
+            else
+            {
+                // Default: chỉ knockback
+                Vector3 knockback = transform.forward * 8f + Vector3.up * 2f;
+                if (other.TryApplyHit(knockback))
+                    other.ForceIdle();
             }
         }
     }
