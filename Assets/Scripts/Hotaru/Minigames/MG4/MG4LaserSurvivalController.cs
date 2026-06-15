@@ -91,18 +91,14 @@ public class MG4LaserSurvivalController : BaseMinigameController
     private void StartPhase(int phase)
     {
         if (!HasStateAuthority) return;
-        if (phase == _lastPhase) return; // tránh gọi lại liên tục mỗi tick
+        if (phase == _lastPhase) return;
         _lastPhase = phase;
 
         Debug.Log($"[MG4LaserSurvival] StartPhase {phase}");
 
-        var hazards = FindObjectsByType<MG4LaserHazard>(FindObjectsSortMode.None);
-        foreach (var h in hazards)
-            h.SetPhase(phase, false);
-
-        var centers = FindObjectsByType<MG4CenterLaser>(FindObjectsSortMode.None);
-        foreach (var c in centers)
-            c.SetPhase(phase, false);
+        var tanks = FindObjectsByType<MG4Tank>(FindObjectsSortMode.None);
+        foreach (var t in tanks)
+            t.SetPhase(phase);
     }
 
     // ----------------------------------------------------------------
@@ -234,11 +230,11 @@ public class MG4LaserSurvivalController : BaseMinigameController
             var p = sorted[i];
             ScoreboardResults.Set(i, new MinigameResultData
             {
-                Player     = p.Object.InputAuthority,
-                Rank       = p.FinishRank > 0 ? p.FinishRank : (i + 1),
-                Score      = p.Lives,
+                Player = p.Object.InputAuthority,
+                Rank = p.FinishRank > 0 ? p.FinishRank : (i + 1),
+                Score = p.Lives,
                 FinishTime = p.FinishTime,
-                IsValid    = true
+                IsValid = true
             });
         }
     }
