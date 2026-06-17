@@ -1,15 +1,6 @@
 using Fusion;
 using UnityEngine;
 
-/// <summary>
-/// Bullet trong pool — Fire() để bắn, tự Deactivate sau travelTime.
-/// Không despawn — chỉ ẩn visual/collider để tái sử dụng.
-///
-/// SETUP prefab:
-///   - NetworkObject + Collider (isTrigger=true) trên root
-///   - Gắn script này
-///   - Assign visual = model con (mesh) để ẩn/hiện
-/// </summary>
 [RequireComponent(typeof(Collider))]
 public class MG4Bullet : NetworkBehaviour
 {
@@ -19,6 +10,9 @@ public class MG4Bullet : NetworkBehaviour
     [Networked, OnChangedRender(nameof(OnActiveChanged))]
     public NetworkBool IsActive { get; private set; }
 
+    [Networked, OnChangedRender(nameof(OnPositionChanged))]
+    private Vector3 NetworkedPosition { get; set; }
+
     [Networked] private Vector3   Direction { get; set; }
     [Networked] private float     Speed     { get; set; }
     [Networked] private TickTimer LifeTimer { get; set; }
@@ -27,25 +21,30 @@ public class MG4Bullet : NetworkBehaviour
 
     private void Awake()
     {
-        _collider = GetComponent<Collider>();
-        if (_collider != null) _collider.isTrigger = true;
+        _collider           = GetComponent<Collider>();
+        _collider.isTrigger = true;
+
+        if (visual    != null) visual.SetActive(false);
+        _collider.enabled = false;
     }
 
     public override void Spawned()
     {
-        OnActiveChanged(); // sync visual ban đầu (ẩn)
+        ApplyActiveState();
     }
 
-    /// <summary>Bắn bullet — chỉ gọi từ host (MG4Tank).</summary>
     public void Fire(Vector3 position, Vector3 direction, float speed, float travelTime)
     {
         if (!HasStateAuthority) return;
 
+        NetworkedPosition  = position;
         transform.position = position;
-        Direction = direction.normalized;
-        Speed     = speed;
-        LifeTimer = TickTimer.CreateFromSeconds(Runner, travelTime);
-        IsActive  = true;
+        Direction          = direction.normalized;
+        Speed              = speed;
+        LifeTimer          = TickTimer.CreateFromSeconds(Runner, travelTime);
+        IsActive           = true;
+
+        ApplyActiveState();
     }
 
     public override void FixedUpdateNetwork()
@@ -53,20 +52,33 @@ public class MG4Bullet : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (!IsActive) return;
 
-        transform.position += Direction * Speed * Runner.DeltaTime;
+        // Di chuyển qua Networked position để client sync được
+        NetworkedPosition += Direction * Speed * Runner.DeltaTime;
+        transform.position = NetworkedPosition;
 
         if (LifeTimer.Expired(Runner))
             Deactivate();
+    }
+
+    public override void Render()
+    {
+        // Client interpolate position mượt hơn
+        if (!HasStateAuthority && IsActive)
+            transform.position = NetworkedPosition;
     }
 
     private void OnTriggerEnter(Collider other)
     {
         if (!HasStateAuthority) return;
         if (!IsActive) return;
+        if (other.GetComponent<MG4Tank>() != null) return;
 
         var pm = other.GetComponent<PlayerMinigameData>();
         if (pm != null && pm.CanTakeDamage())
+        {
             pm.LoseLife();
+            RPC_OnHitPlayer(pm.Object.InputAuthority);
+        }
 
         Deactivate();
     }
@@ -74,12 +86,25 @@ public class MG4Bullet : NetworkBehaviour
     private void Deactivate()
     {
         if (!HasStateAuthority) return;
-        IsActive = false;
+        IsActive          = false;
+        NetworkedPosition = Vector3.zero;
+        ApplyActiveState();
     }
 
-    private void OnActiveChanged()
+    private void OnActiveChanged()  => ApplyActiveState();
+    private void OnPositionChanged() => transform.position = NetworkedPosition;
+
+    private void ApplyActiveState()
     {
         if (visual    != null) visual.SetActive(IsActive);
         if (_collider != null) _collider.enabled = IsActive;
+    }
+
+    // Broadcast hit để client play VFX/sound
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnHitPlayer(PlayerRef playerRef)
+    {
+        Debug.Log($"[MG4Bullet] Hit P{playerRef}");
+        // TODO: play hit VFX ở đây
     }
 }
