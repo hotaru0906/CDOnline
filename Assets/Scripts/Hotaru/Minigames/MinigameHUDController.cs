@@ -6,7 +6,7 @@ public class MinigameHUDController : MonoBehaviour
     public static MinigameHUDController Instance { get; private set; }
 
     [Header("Sub-panels")]
-    [SerializeField] private MinigameTimeUI      timePanel;
+    [SerializeField] private MinigameTimeUI timePanel;
     [SerializeField] private MinigamePlayerRankUI playerRankPanel;
 
     [Header("HUD Root")]
@@ -15,28 +15,59 @@ public class MinigameHUDController : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        Debug.Log("[HUD] Awake");
+
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         Instance = this;
 
         // Ẩn HUD ban đầu
-        if (hudRoot != null) hudRoot.SetActive(false);
-    }
-
-    private void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-        BaseMinigameController.OnGameStarted -= OnGameStarted;
+        if (hudRoot != null)
+        {
+            Debug.Log("[HUD] Hide HUD");
+            hudRoot.SetActive(false);
+        }
+        else
+        {
+            Debug.LogError("[HUD] hudRoot is NULL!");
+        }
     }
 
     private void Start()
     {
+        Debug.Log("[HUD] Start");
+
         BaseMinigameController.OnGameStarted += OnGameStarted;
+    }
+
+    private void OnDestroy()
+    {
+        Debug.Log("[HUD] OnDestroy");
+
+        if (Instance == this)
+            Instance = null;
+
+        BaseMinigameController.OnGameStarted -= OnGameStarted;
     }
 
     private void OnGameStarted()
     {
+        Debug.Log("[HUD] OnGameStarted");
+
         // Hiện HUD khi game bắt đầu
-        if (hudRoot != null) hudRoot.SetActive(true);
+        if (hudRoot != null)
+        {
+            Debug.Log("[HUD] Enable HUD");
+            hudRoot.SetActive(true);
+        }
+        else
+        {
+            Debug.LogError("[HUD] Cannot enable HUD because hudRoot is NULL!");
+        }
 
         playerRankPanel?.Refresh();
         StartCoroutine(AutoRefresh());
@@ -44,6 +75,8 @@ public class MinigameHUDController : MonoBehaviour
 
     private IEnumerator AutoRefresh()
     {
+        Debug.Log("[HUD] AutoRefresh Started");
+
         while (true)
         {
             yield return new WaitForSeconds(0.5f);
@@ -58,8 +91,23 @@ public class MinigameHUDController : MonoBehaviour
         }
     }
 
-    public void SetTime(float seconds)        => timePanel?.UpdateTime(seconds);
-    public void RefreshPlayers()              => playerRankPanel?.Refresh();
-    public void UpdatePlayerLives(int playerId, int lives) => playerRankPanel?.UpdateLivesForPlayer(playerId, lives);
-    public void MarkPlayerEliminated(int playerId)         => playerRankPanel?.MarkEliminated(playerId);
+    public void SetTime(float seconds)
+    {
+        timePanel?.UpdateTime(seconds);
+    }
+
+    public void RefreshPlayers()
+    {
+        playerRankPanel?.Refresh();
+    }
+
+    public void UpdatePlayerLives(int playerId, int lives)
+    {
+        playerRankPanel?.UpdateLivesForPlayer(playerId, lives);
+    }
+
+    public void MarkPlayerEliminated(int playerId)
+    {
+        playerRankPanel?.MarkEliminated(playerId);
+    }
 }
