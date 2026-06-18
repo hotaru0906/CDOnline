@@ -8,6 +8,7 @@ public class MinigamePlayerEntryUI : MonoBehaviour
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text livesText;
     [SerializeField] private GameObject eliminatedOverlay;
+    [SerializeField] private Image backgroundImage;
 
     // runtime id for lookup
     public int PlayerId { get; private set; } = -1;
@@ -28,7 +29,12 @@ public class MinigamePlayerEntryUI : MonoBehaviour
             livesText.text = lives.ToString();
 
         if (iconImage != null)
-            iconImage.color = slotColor;
+            iconImage.color = Color.white;;
+
+        if (backgroundImage != null)
+            backgroundImage.color = slotColor;
+
+
 
         SetEliminated(isEliminated);
     }
