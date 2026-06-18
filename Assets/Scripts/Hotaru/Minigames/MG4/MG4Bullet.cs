@@ -53,8 +53,8 @@ public class MG4Bullet : NetworkBehaviour
         if (!IsActive) return;
 
         // Di chuyển qua Networked position để client sync được
-        NetworkedPosition += Direction * Speed * Runner.DeltaTime;
-        transform.position = NetworkedPosition;
+        transform.position += Direction * Speed * Runner.DeltaTime;
+        NetworkedPosition = transform.position;
 
         if (LifeTimer.Expired(Runner))
             Deactivate();
