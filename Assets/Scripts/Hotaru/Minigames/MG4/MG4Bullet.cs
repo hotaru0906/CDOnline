@@ -39,6 +39,7 @@ public class MG4Bullet : NetworkBehaviour
 
         NetworkedPosition  = position;
         transform.position = position;
+        transform.forward = direction;
         Direction          = direction.normalized;
         Speed              = speed;
         LifeTimer          = TickTimer.CreateFromSeconds(Runner, travelTime);
