@@ -350,9 +350,9 @@ public class BoardManager : NetworkBehaviour
 
         _waitingForMyRoll = false;
 
-        int myId = PlayerNetworkData.Local != null
-            ? PlayerNetworkData.Local.Object.InputAuthority.PlayerId
-            : -1;
+        // Dùng Runner.LocalPlayer thay vì PlayerNetworkData.Local — luôn có giá trị đúng
+        int myId = Runner != null ? Runner.LocalPlayer.PlayerId : -1;
+        if (myId < 0) return;
 
         RPC_SubmitRollRequest(myId);
     }

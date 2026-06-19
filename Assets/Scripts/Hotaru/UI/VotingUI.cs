@@ -35,7 +35,7 @@ public class VotingUI : MonoBehaviour
             // Delay Setup nếu MinigameVotingManager hoặc VotingManager chưa ready
             bool minigameReady = MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady;
             bool votingReady = VotingManager.Instance != null && VotingManager.Instance.IsReady;
-            
+
             if (minigameReady && votingReady)
             {
                 Setup();
@@ -52,7 +52,7 @@ public class VotingUI : MonoBehaviour
             ResetUI();
         }
     }
-    
+
     private System.Collections.IEnumerator WaitForManagers()
     {
         // Đợi cả MinigameVotingManager và VotingManager ready
@@ -61,15 +61,15 @@ public class VotingUI : MonoBehaviour
         {
             yield return null;
         }
-        
+
         // Subscribe events
         SubscribeToEvents();
-        
+
         if (!isInitialized)
         {
             Setup();
         }
-        
+
         ResetUI();
     }
 
@@ -121,14 +121,14 @@ public class VotingUI : MonoBehaviour
         for (int i = 0; i < availableCount; i++)
         {
             var card = Instantiate(cardPrefab, cardContainer);
-            
+
             // Lấy minigame data từ MinigameVotingManager nếu có
             MinigameData minigameData = null;
             if (MinigameVotingManager.Instance != null)
             {
                 minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(i);
             }
-            
+
             if (minigameData != null)
             {
                 card.Setup(i, this, minigameData);
@@ -137,7 +137,7 @@ public class VotingUI : MonoBehaviour
             {
                 card.Setup(i, this);
             }
-            
+
             cards.Add(card);
         }
 
@@ -231,9 +231,31 @@ public class VotingUI : MonoBehaviour
     private void OnVotingStarted()
     {
         Debug.Log("[VotingUI] Voting started");
-        
-        // Re-setup cards khi bắt đầu voting mới
-        // (có thể có minigame mới hoặc loại bỏ minigame đã chơi)
+        StartCoroutine(SetupWhenAvailableCountReady());
+    }
+
+    private System.Collections.IEnumerator SetupWhenAvailableCountReady()
+    {
+        if (MinigameVotingManager.Instance == null) yield break;
+
+        // Chờ AvailableCount sync từ host — tối đa 2s
+        float timeout = 2f;
+        float elapsed = 0f;
+        int prevCount = -1;
+
+        while (elapsed < timeout)
+        {
+            int current = MinigameVotingManager.Instance.GetAvailableMinigameCount();
+
+            // Đợi khi count > 0 và ổn định (không thay đổi trong 1 frame)
+            if (current > 0 && current == prevCount)
+                break;
+
+            prevCount = current;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
         Setup();
         ResetUI();
     }

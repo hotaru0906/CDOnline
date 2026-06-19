@@ -2,12 +2,6 @@ using UnityEngine;
 using System.Collections.Generic;
 using Fusion;
 
-/// <summary>
-/// Quản lý các minigame đã chơi và minigame khả dụng cho lần vote tiếp theo
-/// - Track minigame đã chơi trong session
-/// - Loại bỏ minigame đã chơi khỏi danh sách vote
-/// - Reset khi tất cả minigame đã được chơi hoặc khi vào Roulette
-/// </summary>
 public class MinigameVotingManager : NetworkBehaviour
 {
     #region Singleton
@@ -16,8 +10,6 @@ public class MinigameVotingManager : NetworkBehaviour
 
     [Header("Minigame Configuration")]
     [SerializeField] private List<MinigameData> allMinigames = new List<MinigameData>();
-
-    // Track played minigames by SO reference for easier checking
     private HashSet<MinigameData> playedMinigameSO = new HashSet<MinigameData>();
 
     [Header("Settings")]
@@ -25,18 +17,13 @@ public class MinigameVotingManager : NetworkBehaviour
     [SerializeField] private bool shuffleMinigames = true;
 
     #region Networked Properties
-    /// <summary>
-    /// Danh sách index của các minigame đã chơi trong session này
-    /// </summary>
+
     [Networked, Capacity(20)]
     private NetworkArray<int> PlayedMinigameIndices => default;
 
     [Networked]
     private int PlayedCount { get; set; }
 
-    /// <summary>
-    /// Danh sách index của các minigame khả dụng cho lần vote hiện tại
-    /// </summary>
     [Networked, Capacity(10)]
     private NetworkArray<int> AvailableMinigameIndices => default;
 
@@ -47,11 +34,6 @@ public class MinigameVotingManager : NetworkBehaviour
     #region Events
     public event System.Action OnMinigameListUpdated;
     #endregion
-
-    /// <summary>
-    /// Kiểm tra xem manager đã spawn và sẵn sàng chưa
-    /// Phải kiểm tra trước khi truy cập Networked properties
-    /// </summary>
     public bool IsReady { get; private set; } = false;
 
     private void Awake()
@@ -62,8 +44,6 @@ public class MinigameVotingManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        // Không dùng DontDestroyOnLoad vì NetworkBehaviour cần được NetworkRunner quản lý
-        // Thay vào đó, MinigameVotingManager nên là child của GameManager prefab
     }
 
     private void OnDestroy()
@@ -76,7 +56,6 @@ public class MinigameVotingManager : NetworkBehaviour
     public override void Spawned()
     {
         IsReady = true;
-        Debug.Log($"[MinigameVotingManager] Spawned. Total minigames: {allMinigames.Count}");
 
         if (HasStateAuthority)
         {
@@ -86,9 +65,6 @@ public class MinigameVotingManager : NetworkBehaviour
     }
 
     #region Public Methods
-    /// <summary>
-    /// Lấy danh sách minigame data khả dụng cho voting
-    /// </summary>
     public List<MinigameData> GetAvailableMinigames()
     {
         List<MinigameData> available = new List<MinigameData>();
@@ -108,9 +84,6 @@ public class MinigameVotingManager : NetworkBehaviour
         return available;
     }
 
-    /// <summary>
-    /// Lấy số lượng minigame khả dụng
-    /// </summary>
     public int GetAvailableMinigameCount()
     {
         // Kiểm tra xem đã spawn chưa trước khi truy cập Networked property
@@ -118,9 +91,6 @@ public class MinigameVotingManager : NetworkBehaviour
         return AvailableCount;
     }
 
-    /// <summary>
-    /// Lấy MinigameData theo index trong danh sách available
-    /// </summary>
     public MinigameData GetMinigameByAvailableIndex(int availableIndex)
     {
         // Kiểm tra xem đã spawn chưa
@@ -137,20 +107,11 @@ public class MinigameVotingManager : NetworkBehaviour
         return null;
     }
 
-    /// <summary>
-    /// Đánh dấu minigame đã được chơi
-    /// </summary>
     public void MarkMinigamePlayed(int availableIndex)
     {
         if (!IsReady)
         {
             Debug.LogWarning("[MinigameVotingManager] Cannot mark played - not spawned yet");
-            return;
-        }
-
-        if (!HasStateAuthority)
-        {
-            RPC_RequestMarkPlayed(availableIndex);
             return;
         }
 
@@ -182,63 +143,21 @@ public class MinigameVotingManager : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Chuẩn bị danh sách minigame cho lần vote tiếp theo
-    /// Loại bỏ các minigame đã chơi
-    /// </summary>
     public void PrepareNextVotingRound()
     {
         if (!HasStateAuthority || !IsReady) return;
 
         Debug.Log("[MinigameVotingManager] Preparing next voting round...");
 
-        // Lấy danh sách minigame chưa chơi bằng SO
-        List<int> unplayedIndices = new List<int>();
+        // Hiện tất cả minigame, không shuffle, không track played
+        AvailableCount = allMinigames.Count;
         for (int i = 0; i < allMinigames.Count; i++)
-        {
-            if (!playedMinigameSO.Contains(allMinigames[i]))
-            {
-                unplayedIndices.Add(i);
-            }
-        }
+            AvailableMinigameIndices.Set(i, i);
 
-        Debug.Log($"[MinigameVotingManager] Unplayed minigames: {unplayedIndices.Count}");
-
-        // Nếu không còn minigame nào, reset danh sách
-        if (unplayedIndices.Count == 0)
-        {
-            Debug.Log("[MinigameVotingManager] All minigames played! Resetting...");
-            ResetPlayedMinigames();
-            for (int i = 0; i < allMinigames.Count; i++)
-            {
-                unplayedIndices.Add(i);
-            }
-        }
-
-        // Shuffle nếu cần
-        if (shuffleMinigames)
-        {
-            ShuffleList(unplayedIndices);
-        }
-
-        // Chọn số lượng minigame để hiển thị
-        int count = Mathf.Min(displayCount, unplayedIndices.Count);
-        AvailableCount = count;
-
-        for (int i = 0; i < count; i++)
-        {
-            AvailableMinigameIndices.Set(i, unplayedIndices[i]);
-            Debug.Log($"[MinigameVotingManager] Available slot {i}: Minigame {unplayedIndices[i]}");
-        }
-
-        // Notify clients
         RPC_NotifyMinigameListUpdated();
+        Debug.Log($"[MinigameVotingManager] Available: {AvailableCount} minigames");
     }
 
-    /// <summary>
-    /// Chuẩn bị danh sách minigame cho voting phase RouletteOrMinigame
-    /// Luôn chỉ lấy các minigame chưa chơi, không reset lại nếu hết (để tránh lặp lại)
-    /// </summary>
     public void PrepareNextVotingRoundForRoulette()
     {
         if (!HasStateAuthority || !IsReady) return;
@@ -338,11 +257,6 @@ public class MinigameVotingManager : NetworkBehaviour
     #endregion
 
     #region RPCs
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_RequestMarkPlayed(int availableIndex)
-    {
-        MarkMinigamePlayed(availableIndex);
-    }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_NotifyMinigameListUpdated()

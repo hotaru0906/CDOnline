@@ -8,16 +8,16 @@ public class BoardCameraController : MonoBehaviour
     [SerializeField] private Camera boardCamera;
 
     [Header("Overhead Settings")]
-    [SerializeField] private float cameraHeight   = 12f;
-    [SerializeField] private float overheadAngle  = 50f;
+    [SerializeField] private float cameraHeight = 12f;
+    [SerializeField] private float overheadAngle = 50f;
     [SerializeField] private float cameraDistance = 8f;
-    [SerializeField] private float cameraZOffset  = 10f;
+    [SerializeField] private float cameraZOffset = 10f;
 
     [Header("Pan Settings")]
     [SerializeField] private float panSpeed = 3f;
 
-    private Vector3   _desiredPosition;
-    private Vector3   _currentVelocity;
+    private Vector3 _desiredPosition;
+    private Vector3 _currentVelocity;
     private Transform _currentFocusToken;
     private Transform _previousFocusToken;
 
@@ -38,6 +38,10 @@ public class BoardCameraController : MonoBehaviour
             boardCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
             _desiredPosition = boardCamera.transform.position;
         }
+
+        // Hiện cursor suốt trong board
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
     private void LateUpdate()
@@ -54,6 +58,8 @@ public class BoardCameraController : MonoBehaviour
         );
 
         boardCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
     private void OnDestroy()

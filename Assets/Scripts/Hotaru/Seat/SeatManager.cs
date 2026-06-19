@@ -204,30 +204,53 @@ public class SeatManager : NetworkBehaviour
             if (GetPlayerSeatIndex(playerRef) != INVALID_SEAT) continue;
 
             while (seatIndex < MAX_SEATS && SeatOccupants.Get(seatIndex) != INVALID_SEAT)
-            {
                 seatIndex++;
-            }
 
             if (seatIndex >= MAX_SEATS) break;
-            SeatOccupants.Set(seatIndex, playerSlot);
-            var networkCC = player.GetComponent<NetworkCharacterController>();
 
+            SeatOccupants.Set(seatIndex, playerSlot);
+
+            var networkCC = player.GetComponent<NetworkCharacterController>();
             if (networkCC != null)
-            {
-                networkCC.Teleport(
-                    GetSeatPosition(seatIndex),
-                    GetSeatRotation(seatIndex));
-            }
+                networkCC.Teleport(GetSeatPosition(seatIndex), GetSeatRotation(seatIndex));
             else
             {
-                player.transform.position =
-                    GetSeatPosition(seatIndex);
+                player.transform.position = GetSeatPosition(seatIndex);
+                player.transform.rotation = GetSeatRotation(seatIndex);
+            }
 
-                player.transform.rotation =
-                    GetSeatRotation(seatIndex);
+            // Freeze player sau khi ngồi xuống ghế
+            var pc = player.GetComponent<PlayerController>();
+            if (pc != null) pc.SetFrozen(true);
+
+            seatIndex++;
+        }
+    }
+
+    /// <summary>Giải phóng ghế khi player thoát — gọi từ BasicSpawner.OnPlayerLeft.</summary>
+    public void FreeSeat(PlayerRef playerRef)
+    {
+        if (!HasStateAuthority) return;
+
+        int playerSlot = GetPlayerSlot(playerRef);
+
+        for (int i = 0; i < MAX_SEATS; i++)
+        {
+            if (SeatOccupants.Get(i) == playerSlot)
+            {
+                SeatOccupants.Set(i, INVALID_SEAT);
+                Debug.Log($"[SeatManager] Freed seat {i} from player slot {playerSlot}");
+                return;
             }
         }
+    }
+    public void UnfreezeAllPlayers()
+    {
+        if (!HasStateAuthority) return;
 
+        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        foreach (var p in players)
+            p.SetFrozen(false);
     }
     public bool HasAssignedSeat(PlayerRef playerRef)
     {

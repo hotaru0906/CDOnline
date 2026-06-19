@@ -117,7 +117,6 @@ public class PlayerController : NetworkBehaviour
         {
             if (crosshairUI != null)
                 crosshairUI.SetActive(false);
-
             return;
         }
 
@@ -125,7 +124,11 @@ public class PlayerController : NetworkBehaviour
         {
             CameraManager.Instance.RegisterLocalPlayer(transform);
 
-            CameraManager.Instance.SwitchToThirdPersonCamera();
+            // Chỉ switch camera nếu không phải Lobby
+            if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameState.Lobby)
+            {
+                CameraManager.Instance.SwitchToThirdPersonCamera();
+            }
 
             _cameraOrbit = CameraManager.Instance.CameraOrbit;
         }
@@ -137,7 +140,6 @@ public class PlayerController : NetworkBehaviour
         }
 
         _cameraTransform = Camera.main?.transform;
-
         UpdateCrosshairVisibility();
     }
 
@@ -186,6 +188,7 @@ public class PlayerController : NetworkBehaviour
         {
             _networkCC.Move(Vector3.zero);
             IsMoving = false;
+            IsRunning = false;
             return;
         }
 
@@ -495,19 +498,12 @@ public class PlayerController : NetworkBehaviour
     {
         _isFrozen = frozen;
 
-        if (frozen)
-        {
-            ResetVelocity();
-        }
     }
 
     public void ResetVelocity()
     {
         if (_networkCC != null)
-        {
             _networkCC.Move(Vector3.zero);
-        }
-
         ExternalVelocity = Vector3.zero;
     }
 

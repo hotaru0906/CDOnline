@@ -247,12 +247,22 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-        // Despawn player when they leave
+        // Free ghế trước khi despawn
+        if (SeatManager.Instance != null)
+            SeatManager.Instance.FreeSeat(player);
+
         if (_spawnedPlayers.TryGetValue(player, out NetworkObject playerObject))
         {
             runner.Despawn(playerObject);
             _spawnedPlayers.Remove(player);
             Debug.Log($"[BasicSpawner] Player {player} left. Despawned.");
+        }
+
+        // Re-assign tất cả player còn lại để lấp vào ghế trống
+        if (SeatManager.Instance != null)
+        {
+            SeatManager.Instance.ResetAllSeats();
+            SeatManager.Instance.AutoAssignAllPlayersToSeats();
         }
     }
 
@@ -485,38 +495,26 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         LoadingScreen.Hide();
     }
 
-    /// <summary>
-    /// Spawn a player for the current scene.
-    /// </summary>
     private void SpawnPlayerForScene(PlayerRef player)
     {
-        if (!playerPrefab.IsValid)
-        {
-            Debug.LogError("[BasicSpawner] Player prefab not assigned!");
-            return;
-        }
-
-        // Check if player already has an object
-        if (_spawnedPlayers.ContainsKey(player))
-        {
-            Debug.LogWarning($"[BasicSpawner] Player {player} already spawned!");
-            return;
-        }
+        if (!playerPrefab.IsValid) return;
+        if (_spawnedPlayers.ContainsKey(player)) return;
 
         Vector3 spawnPosition = GetSpawnPosition(player);
         Quaternion spawnRotation = GetSpawnRotation(player);
 
         NetworkObject playerObject = _runner.Spawn(
-            playerPrefab,
-            spawnPosition,
-            spawnRotation,
-            player
-        );
+            playerPrefab, spawnPosition, spawnRotation, player);
 
         if (playerObject != null)
         {
             _spawnedPlayers[player] = playerObject;
-            Debug.Log($"[BasicSpawner] Spawned player {player} at {spawnPosition}");
+
+            // Freeze player ngay khi spawn — unfreeze khi game bắt đầu
+            var pc = playerObject.GetComponent<PlayerController>();
+            if (pc != null) pc.SetFrozen(true);
+
+            Debug.Log($"[BasicSpawner] Spawned player {player} at {spawnPosition} (frozen)");
         }
     }
 
