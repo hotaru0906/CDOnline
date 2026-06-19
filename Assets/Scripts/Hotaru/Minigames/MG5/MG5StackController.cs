@@ -21,6 +21,12 @@ public class MG5StackController : BaseMinigameController
     [SerializeField] private MG5Lane[] lanes; // 4 lane
     private Dictionary<PlayerRef, MG5PlayerStackData> _playerData = new();
 
+        public override void Spawned()
+    {
+        if (HasStateAuthority)
+            OnGamePlayingStarted();
+    }
+
     // ----------------------------------------------------------------
     // Lifecycle
     // ----------------------------------------------------------------
