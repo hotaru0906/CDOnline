@@ -285,6 +285,21 @@ public class MG3BrawlController : BaseMinigameController
     private void RPC_OnHitWithItem(PlayerRef attackerId, PlayerRef targetId)
     {
         Debug.Log($"[MG3Brawl] P{attackerId} dealt damage to P{targetId}!");
-        // TODO: play hit VFX / sound ở đây
+        // Play hit sound (3D) at target position on all clients
+        if (SFXManager.Instance != null)
+        {
+            var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+            foreach (var p in allData)
+            {
+                if (p.Object.InputAuthority == targetId)
+                {
+                    var pos = p.transform.position;
+                    var clip = SFXManager.Instance.AttackSound;
+                    if (clip != null)
+                        SFXManager.Instance.PlaySFX3D(clip, pos, 1f);
+                    break;
+                }
+            }
+        }
     }
 }
