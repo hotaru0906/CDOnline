@@ -39,6 +39,7 @@ public class MG4Bullet : NetworkBehaviour
 
         NetworkedPosition  = position;
         transform.position = position;
+        transform.forward = direction;
         Direction          = direction.normalized;
         Speed              = speed;
         LifeTimer          = TickTimer.CreateFromSeconds(Runner, travelTime);
@@ -53,8 +54,8 @@ public class MG4Bullet : NetworkBehaviour
         if (!IsActive) return;
 
         // Di chuyển qua Networked position để client sync được
-        NetworkedPosition += Direction * Speed * Runner.DeltaTime;
-        transform.position = NetworkedPosition;
+        transform.position += Direction * Speed * Runner.DeltaTime;
+        NetworkedPosition = transform.position;
 
         if (LifeTimer.Expired(Runner))
             Deactivate();

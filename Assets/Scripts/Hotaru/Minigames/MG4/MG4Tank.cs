@@ -17,6 +17,9 @@ public class MG4Tank : NetworkBehaviour
     [SerializeField] private float bulletSpeed          = 6f;
     [SerializeField] private float bulletTravelDistance = 15f;
 
+    [Header("Audio")]
+    [SerializeField] private AudioClip shootSFX;
+
     [Networked, OnChangedRender(nameof(OnStateChanged))]
     private TankState _state { get; set; }
 
@@ -24,6 +27,8 @@ public class MG4Tank : NetworkBehaviour
 
     private float _windup;
     private float _cooldown;
+
+    private AudioSource _audioSource;
 
     public override void Spawned()
     {
@@ -91,6 +96,7 @@ public class MG4Tank : NetworkBehaviour
         float travelTime = bulletTravelDistance / bulletSpeed;
         bullet.Fire(origin, direction, bulletSpeed, travelTime);
 
+        RPC_PlayShootSound();
         Debug.Log($"[MG4Tank] {name} fired");
     }
 
@@ -111,5 +117,19 @@ public class MG4Tank : NetworkBehaviour
     {
         if (tankVisual != null)
             tankVisual.SetActive(_state == TankState.Aiming);
+    }
+
+    private void Awake()
+    {
+        _audioSource = gameObject.AddComponent<AudioSource>();
+
+        _audioSource.playOnAwake = false;
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayShootSound()
+    {
+        if (shootSFX != null)
+            _audioSource.PlayOneShot(shootSFX);
     }
 }
