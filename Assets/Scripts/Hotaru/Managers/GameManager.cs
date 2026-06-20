@@ -1208,6 +1208,8 @@ public class GameManager : NetworkBehaviour
         {
             Debug.LogError($"[GameManager] Invalid SceneRef for scene '{minigameData.sceneName}' index {sceneIndex}!");
         }
+        if (CursorManager.Instance != null)
+            CursorManager.Instance.ShowCursor();
     }
 
     protected virtual void HandlePlayingState()

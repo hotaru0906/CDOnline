@@ -9,7 +9,6 @@ public class RoomUI : MonoBehaviour
     [SerializeField] private TMP_Text roomNameText;
     [SerializeField] private TMP_Text playerCountText;
 
-    [SerializeField] private Button playerInfoButton;
     [SerializeField] private Button leaveRoomButton;
     [SerializeField] private Button readyGameButton;
     [SerializeField] private Button startGameButton;
@@ -18,7 +17,6 @@ public class RoomUI : MonoBehaviour
     [Header("Player Data")]
     [SerializeField] private PlayerInfoUI playerInfoUI;
     [SerializeField] private PlayerInfoItemUI playerInfoItemPrefab;
-    [SerializeField] private Button closePlayerListButton;
 
     [Header("Settings")]
     [SerializeField] private int defaultMaxPlayers = 4;
@@ -37,7 +35,6 @@ public class RoomUI : MonoBehaviour
 
     void Start()
     {
-        playerInfoButton.onClick.AddListener(OnPlayerInfoClicked);
         leaveRoomButton.onClick.AddListener(OnLeaveRoomClicked);
         readyGameButton.onClick.AddListener(OnReadyGameClicked);
         startGameButton.onClick.AddListener(OnStartGameClicked);
@@ -45,12 +42,6 @@ public class RoomUI : MonoBehaviour
 
         CursorManager.Instance.SetUIMode();
 
-        if (closePlayerListButton != null)
-        {
-            closePlayerListButton.onClick.AddListener(OnClosePlayerListClicked);
-        }
-
-        // Initialize with default or session values
         InitializeRoomInfo();
         UpdateButtons();
     }
@@ -143,41 +134,6 @@ public class RoomUI : MonoBehaviour
         startGameButton.gameObject.SetActive(isHost);
         readyGameButton.gameObject.SetActive(!isHost);
         forceStartButton.gameObject.SetActive(isHost);
-    }
-
-    private void OnPlayerInfoClicked()
-    {
-        if (playerInfoUI == null) return;
-
-        bool isActive = playerInfoUI.gameObject.activeSelf;
-
-        if (!isActive)
-        {
-            playerInfoUI.Show();
-        }
-        else
-        {
-            playerInfoUI.Hide();
-        }
-
-        // Show/hide close button with player list
-        if (closePlayerListButton != null)
-        {
-            closePlayerListButton.gameObject.SetActive(!isActive);
-        }
-    }
-
-    private void OnClosePlayerListClicked()
-    {
-        if (playerInfoUI != null)
-        {
-            playerInfoUI.Hide();
-        }
-
-        if (closePlayerListButton != null)
-        {
-            closePlayerListButton.gameObject.SetActive(false);
-        }
     }
 
     private async void OnLeaveRoomClicked()
