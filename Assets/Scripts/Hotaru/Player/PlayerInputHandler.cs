@@ -30,6 +30,7 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
 
     private void Update()
     {
+         Debug.Log($"[PlayerInputHandler] Update tick. InputEnabled={InputEnabled}");
         // Don't process input if disabled
         if (!InputEnabled)
         {
@@ -56,11 +57,21 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
         if (Input.GetMouseButtonDown(0))
             _buttons.Set(PlayerInputData.BUTTON_PUNCH, true);
 
+        // MG5 — Drop box (Space)
+        if (Input.GetKeyDown(KeyCode.Space))
+            _buttons.Set(PlayerInputData.BUTTON_DROP, true);
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            Debug.Log("[PlayerInputHandler] SPACE detected, setting BUTTON_DROP");
+            _buttons.Set(PlayerInputData.BUTTON_DROP, true);
+        }
+
         // Run dùng GetKey (giữ Left Shift) - lưu riêng
         _isRunning = Input.GetKey(KeyCode.LeftShift);
         
         // Crouch dùng GetKey (giữ C hoặc Left Ctrl)
         _isCrouching = Input.GetKey(KeyCode.C) || Input.GetKey(KeyCode.LeftControl);
+        
     }
 
     public void OnInput(NetworkRunner runner, NetworkInput input)
