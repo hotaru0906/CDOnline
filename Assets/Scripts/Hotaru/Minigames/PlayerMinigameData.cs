@@ -217,9 +217,17 @@ public class PlayerMinigameData : NetworkBehaviour
         }
         else
         {
-            // Còn mạng — không respawn, chỉ bất tử 3s
+            // Còn mạng — respawn về spawn point, bất tử 3s
+            if (playerController != null)
+            {
+                playerController.Teleport(CurrentRespawnPosition);
+                playerController.ResetVelocity();
+            }
+
             IsInvincible = true;
             InvincibilityTimer = TickTimer.CreateFromSeconds(Runner, 3f);
+
+            RPC_OnRespawn(Object.InputAuthority);
         }
     }
 
