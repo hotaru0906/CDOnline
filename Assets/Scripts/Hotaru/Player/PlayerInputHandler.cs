@@ -30,7 +30,6 @@ public class PlayerInputHandler : MonoBehaviour, INetworkRunnerCallbacks
 
     private void Update()
     {
-         Debug.Log($"[PlayerInputHandler] Update tick. InputEnabled={InputEnabled}");
         // Don't process input if disabled
         if (!InputEnabled)
         {

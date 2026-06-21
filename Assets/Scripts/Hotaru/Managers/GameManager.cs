@@ -1141,11 +1141,8 @@ public class GameManager : NetworkBehaviour
             CameraManager.Instance.SetCameraRotationLocked(true);
         }
 
-        // Hiện cursor cho tutorial
         if (CursorManager.Instance != null)
-        {
             CursorManager.Instance.ShowCursor();
-        }
 
         // Tạm thời disable player input (sẽ enable lại khi Playing)
         if (PlayerInputHandler.Instance != null)
@@ -1208,8 +1205,6 @@ public class GameManager : NetworkBehaviour
         {
             Debug.LogError($"[GameManager] Invalid SceneRef for scene '{minigameData.sceneName}' index {sceneIndex}!");
         }
-        if (CursorManager.Instance != null)
-            CursorManager.Instance.ShowCursor();
     }
 
     protected virtual void HandlePlayingState()
@@ -1251,10 +1246,6 @@ public class GameManager : NetworkBehaviour
             else
                 AudioManager.Instance.OnMinigameStart();
         }
-
-        // Scene đã được load trong Tutorial state
-        // MinigameController sẽ xử lý logic game
-        Debug.Log("[GameManager] Playing state active - game is now running");
     }
 
     /// <summary>

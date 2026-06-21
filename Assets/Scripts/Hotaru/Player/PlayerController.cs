@@ -111,8 +111,6 @@ public class PlayerController : NetworkBehaviour
 
     public override void Spawned()
     {
-        Debug.Log($"[PlayerController] Spawned - InputAuthority: {HasInputAuthority}");
-
         if (!HasInputAuthority)
         {
             if (crosshairUI != null)
@@ -124,8 +122,7 @@ public class PlayerController : NetworkBehaviour
         {
             CameraManager.Instance.RegisterLocalPlayer(transform);
 
-            // Chỉ switch camera nếu không phải Lobby
-            if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameState.Lobby)
+            if (GameManager.Instance == null || (GameManager.Instance.CurrentState != GameState.Tutorial && GameManager.Instance.CurrentState != GameState.Lobby))
             {
                 CameraManager.Instance.SwitchToThirdPersonCamera();
             }

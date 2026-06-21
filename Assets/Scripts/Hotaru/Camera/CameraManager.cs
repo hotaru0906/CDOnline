@@ -89,7 +89,7 @@ public class CameraManager : MonoBehaviour
     private void OnDestroy()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
-        
+
         if (Instance == this)
         {
             Instance = null;
@@ -405,9 +405,17 @@ public class CameraManager : MonoBehaviour
             mainCamera.cullingMask = -1; // Everything
         }
 
-        // Lock cursor
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        bool isPlaying = GameManager.Instance != null && GameManager.Instance.CurrentState == GameState.Playing;
+        if (isPlaying)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+        else
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
 
         // Hiện lại model của local player
         SetLocalPlayerModelVisible(true);
