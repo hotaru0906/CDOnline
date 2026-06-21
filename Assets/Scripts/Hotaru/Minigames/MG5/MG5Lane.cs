@@ -4,6 +4,7 @@ using UnityEngine;
 /// <summary>
 /// MG5 — Lane quản lý box chạy và stack.
 /// Mỗi lane có 5 spawn points cho 5 tầng.
+/// Mỗi lane thuộc về 1 Player (OwnerPlayer), được gán bởi Controller.
 /// </summary>
 public class MG5Lane : NetworkBehaviour
 {
@@ -16,7 +17,19 @@ public class MG5Lane : NetworkBehaviour
 
     [Networked] public int CurrentHeight { get; private set; } = 0;
 
+    // MỚI — Player sở hữu lane này
+    [Networked] public PlayerRef OwnerPlayer { get; set; }
+
     private NetworkObject _currentMovingBox;
+
+    /// <summary>
+    /// MỚI — Gọi bởi MG5StackController để gán Player cho lane này.
+    /// Phải gọi TRƯỚC SpawnNewBox().
+    /// </summary>
+    public void AssignOwner(PlayerRef player)
+    {
+        OwnerPlayer = player;
+    }
 
     /// <summary>
     /// Spawn box mới tại spawn point hiện tại.
@@ -30,14 +43,25 @@ public class MG5Lane : NetworkBehaviour
         var pos = spawnPoint.position;
         var rot = Quaternion.identity;
 
-        _currentMovingBox = Runner.Spawn(movingBoxPrefab, pos, rot, Object.InputAuthority);
+        _currentMovingBox = Runner.Spawn(movingBoxPrefab, pos, rot, OwnerPlayer);
         var mover = _currentMovingBox.GetComponent<MG5MovingBox>();
         if (mover != null)
         {
             mover.Initialize(this);
         }
 
-        Debug.Log($"[MG5Lane] Spawn new box at height {CurrentHeight}");
+        // MỚI — Tìm Player theo OwnerPlayer, forward box hiện tại cho nó
+        var allForwarders = FindObjectsByType<MG5PlayerInputForwarder>(FindObjectsSortMode.None);
+        foreach (var forwarder in allForwarders)
+        {
+            if (forwarder.Object.InputAuthority == OwnerPlayer)
+            {
+                forwarder.SetCurrentBox(mover);
+                break;
+            }
+        }
+
+        Debug.Log($"[MG5Lane] Spawn new box at height {CurrentHeight} for player {OwnerPlayer}");
     }
 
     /// <summary>
@@ -63,17 +87,23 @@ public class MG5Lane : NetworkBehaviour
         else
         {
             // Player đạt target height → báo controller
-            var playerData = GetComponentInParent<PlayerMinigameData>();
-            if (playerData != null)
+            // SỬA — tìm theo OwnerPlayer thay vì GetComponentInParent
+            // vì Lane và Player không còn quan hệ cha-con
+            var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+            foreach (var p in allPlayers)
             {
-                var stackData = playerData.GetComponent<MG5PlayerStackData>();
-                if (stackData != null)
+                if (p.Object.InputAuthority == OwnerPlayer)
                 {
-                    stackData.IncreaseHeight();
-                    if (stackData.CurrentStackHeight >= spawnPoints.Length)
+                    var stackData = p.GetComponent<MG5PlayerStackData>();
+                    if (stackData != null)
                     {
-                        MG5StackController.Instance?.PlayerFinished(playerData.Object.InputAuthority);
+                        stackData.IncreaseHeight();
+                        if (stackData.CurrentStackHeight >= spawnPoints.Length)
+                        {
+                            MG5StackController.Instance?.PlayerFinished(OwnerPlayer);
+                        }
                     }
+                    break;
                 }
             }
         }

@@ -12,6 +12,7 @@ public struct PlayerInputData : INetworkInput
     public const int BUTTON_PUNCH = 1;
     public const int BUTTON_SLIDE = 2;
     public const int BUTTON_CROUCH = 3;
+    public const int BUTTON_DROP = 4; // mới — dùng cho MG5
 
     public bool IsButtonPressed(int button) => Buttons.IsSet(button);
 }
