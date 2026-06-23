@@ -6,6 +6,9 @@ public class MG3ItemPickup : NetworkBehaviour
     [Header("Visual")]
     [SerializeField] private GameObject itemVisual;
 
+    [Header("Audio")]
+    [SerializeField] private AudioClip pickupSound;
+
     [Networked] public NetworkBool IsPickedUp { get; private set; } = false;
 
     public int SpawnPointIndex { get; set; } = -1;
@@ -43,6 +46,12 @@ public class MG3ItemPickup : NetworkBehaviour
         if (playerObj != null && playerObj.TryGetComponent(out MG3PlayerBrawlData brawlData))
         {
             brawlData.PickupItem(); // sẽ set HasItem = true và trigger OnHasItemChanged trên client
+        }
+
+        // Play pickup sound
+        if (pickupSound != null)
+        {
+            AudioSource.PlayClipAtPoint(pickupSound, transform.position);
         }
     }
 
