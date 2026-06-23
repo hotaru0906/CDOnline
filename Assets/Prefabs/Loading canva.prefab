@@ -129,9 +129,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 94c0d9dd5c0e72146b58f8311bfcdcd1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  canvas: {fileID: 464805151520366611}
   canvasGroup: {fileID: 2915445278333932564}
   loadingText: {fileID: 7420348506346526394}
+  loadingBar: {fileID: 0}
+  percentText: {fileID: 0}
   fadeSpeed: 3
+  barFillSpeed: 0.5
+  barFillSpeedFast: 2
+  delayBeforeHide: 3
+  sortingOrder: 32767
 --- !u!1 &525856282362624503
 GameObject:
   m_ObjectHideFlags: 0
@@ -218,7 +225,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 525856282362624503}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 077e5b6016efd2548b486b867f1e2552, type: 3}
   m_Name: 
@@ -433,7 +440,7 @@ VideoPlayer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3104247932284489901}
   m_Enabled: 1
-  m_VideoClip: {fileID: 32900000, guid: da449662e0d7cb449984f01062f7e049, type: 3}
+  m_VideoClip: {fileID: 0}
   m_TargetCameraAlpha: 1
   m_TargetCamera3DLayout: 0
   m_TargetCamera: {fileID: 0}

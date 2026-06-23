@@ -530,38 +530,41 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log($"[GameManager] State changed to: {CurrentState}");
 
-        // Tìm lại UI references (vì có thể scene đã thay đổi)
+        if (HasStateAuthority)
+        {
+            HandleStateChange();
+        }
+        else
+        {
+            // Client delay 1 frame để đảm bảo scene objects đã Awake()
+            StartCoroutine(DelayedHandleStateChange());
+        }
+    }
+
+    private IEnumerator DelayedHandleStateChange()
+    {
+        yield return null; // chờ 1 frame
+        FindUIReferences(); // tìm lại UI sau khi scene load
+        HandleStateChange();
+    }
+
+    private void HandleStateChange()
+    {
         FindUIReferences();
 
-        // Handle state-specific logic for all clients
         switch (CurrentState)
         {
-            case GameState.Lobby:
-                HandleLobbyState();
-                break;
-            case GameState.Voting:
-                HandleVotingState();
-                break;
+            case GameState.Lobby: HandleLobbyState(); break;
+            case GameState.Voting: HandleVotingState(); break;
             case GameState.Tutorial:
                 HandleTutorialState();
-                // Đảm bảo tutorial luôn hiện cho mọi client khi vào Tutorial state
                 ShowMinigameTutorial();
                 break;
-            case GameState.Playing:
-                HandlePlayingState();
-                break;
-            case GameState.Scoreboard:
-                HandleScoreboardState();
-                break;
-            case GameState.Board:
-                HandleBoardState();
-                break;
-            case GameState.Roulette:
-                HandleRouletteState();
-                break;
-            case GameState.Result:
-                HandleResultState();
-                break;
+            case GameState.Playing: HandlePlayingState(); break;
+            case GameState.Scoreboard: HandleScoreboardState(); break;
+            case GameState.Board: HandleBoardState(); break;
+            case GameState.Roulette: HandleRouletteState(); break;
+            case GameState.Result: HandleResultState(); break;
         }
     }
     #endregion
@@ -1077,7 +1080,6 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[GameManager] Entered Voting state");
 
-        // Ẩn tất cả UI trước
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
         SetActiveUI(scoreboardUI, false);
@@ -1085,42 +1087,25 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
 
-        // Hiện voting UI
         SetActiveUI(votingUI, true);
-        Debug.Log("[GameManager] Showing VotingUI");
-        // Chuẩn bị danh sách minigame cho voting
-        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady && HasStateAuthority)
-        {
-            MinigameVotingManager.Instance.PrepareNextVotingRound();
-        }
 
-        // Khóa xoay camera khi voting
+        // XÓA ĐOẠN NÀY:
+        // if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady && HasStateAuthority)
+        //     MinigameVotingManager.Instance.PrepareNextVotingRound();
+
         if (CameraManager.Instance != null)
-        {
             CameraManager.Instance.SetCameraRotationLocked(true);
-        }
 
-        // Ẩn player input trong voting phase
         if (PlayerInputHandler.Instance != null)
-        {
             PlayerInputHandler.Instance.InputEnabled = false;
-        }
 
-        // Hiện cursor để vote
         if (CursorManager.Instance != null)
-        {
             CursorManager.Instance.ShowCursor();
-        }
 
-        // Start voting (host only)
         if (HasStateAuthority && VotingManager.Instance != null)
-        {
             StartCoroutine(StartVotingWhenReady());
-        }
         else if (VotingManager.Instance == null)
-        {
             Debug.LogError("[GameManager] VotingManager.Instance is NULL!");
-        }
     }
     IEnumerator StartVotingWhenReady()
     {
@@ -1128,6 +1113,13 @@ public class GameManager : NetworkBehaviour
             VotingManager.Instance != null &&
             VotingManager.Instance.IsReady
         );
+
+        // Đảm bảo PrepareNextVotingRound chạy trước StartVoting
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+            MinigameVotingManager.Instance.PrepareNextVotingRound();
+
+        // Đợi 1 frame để AvailableCount được set và replicate
+        yield return null;
 
         VotingManager.Instance.StartVoting();
     }
@@ -1149,11 +1141,8 @@ public class GameManager : NetworkBehaviour
             CameraManager.Instance.SetCameraRotationLocked(true);
         }
 
-        // Hiện cursor cho tutorial
         if (CursorManager.Instance != null)
-        {
             CursorManager.Instance.ShowCursor();
-        }
 
         // Tạm thời disable player input (sẽ enable lại khi Playing)
         if (PlayerInputHandler.Instance != null)
@@ -1257,10 +1246,6 @@ public class GameManager : NetworkBehaviour
             else
                 AudioManager.Instance.OnMinigameStart();
         }
-
-        // Scene đã được load trong Tutorial state
-        // MinigameController sẽ xử lý logic game
-        Debug.Log("[GameManager] Playing state active - game is now running");
     }
 
     /// <summary>

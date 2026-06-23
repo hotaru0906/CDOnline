@@ -49,6 +49,10 @@ public class PlayerController : NetworkBehaviour
     [Header("Hit Cooldown")]
     [SerializeField] private float hitCooldownDuration = 0.5f;
 
+    [Header("Stun")]
+    [SerializeField] private GameObject dizzyVFX; // Gắn object dizzy trong prefab, ban đầu inactive
+    [SerializeField] private float stunDuration = 1f;
+
     [Header("UI")]
     [SerializeField] private GameObject crosshairUI;
 
@@ -65,10 +69,10 @@ public class PlayerController : NetworkBehaviour
     [Networked] private NetworkBool IsJumpingByInput { get; set; }
     [Networked] private TickTimer HitCooldownTimer { get; set; }
 
-    /// <summary>
-    /// Đếm ngược thời gian knockback. Khi > 0, player không tự điều khiển được.
-    /// Set bởi ApplyExternalForce(force, duration, overrideInput: true).
-    /// </summary>
+    [Networked, OnChangedRender(nameof(OnStunChanged))]
+    public NetworkBool IsStunned { get; private set; }
+
+    [Networked] private TickTimer StunTimer { get; set; }
     [Networked] private float KnockbackTimer { get; set; }
 
     public bool IsInHitCooldown =>
@@ -91,9 +95,10 @@ public class PlayerController : NetworkBehaviour
     private Vector3 _normalScale;
     private Vector3 _crouchScale;
 
-    private bool _isFrozen;
+    [Networked, OnChangedRender(nameof(OnFrozenChanged))]
+    public NetworkBool IsFrozenNetworked { get; private set; }
 
-    public bool IsFrozen => _isFrozen;
+    public bool IsFrozen => IsFrozenNetworked;
 
     private void Awake()
     {
@@ -111,13 +116,10 @@ public class PlayerController : NetworkBehaviour
 
     public override void Spawned()
     {
-        Debug.Log($"[PlayerController] Spawned - InputAuthority: {HasInputAuthority}");
-
         if (!HasInputAuthority)
         {
             if (crosshairUI != null)
                 crosshairUI.SetActive(false);
-
             return;
         }
 
@@ -125,7 +127,10 @@ public class PlayerController : NetworkBehaviour
         {
             CameraManager.Instance.RegisterLocalPlayer(transform);
 
-            CameraManager.Instance.SwitchToThirdPersonCamera();
+            if (GameManager.Instance == null || (GameManager.Instance.CurrentState != GameState.Tutorial && GameManager.Instance.CurrentState != GameState.Lobby))
+            {
+                CameraManager.Instance.SwitchToThirdPersonCamera();
+            }
 
             _cameraOrbit = CameraManager.Instance.CameraOrbit;
         }
@@ -137,7 +142,6 @@ public class PlayerController : NetworkBehaviour
         }
 
         _cameraTransform = Camera.main?.transform;
-
         UpdateCrosshairVisibility();
     }
 
@@ -162,10 +166,12 @@ public class PlayerController : NetworkBehaviour
         if (HasStateAuthority && KnockbackTimer > 0f)
             KnockbackTimer = Mathf.Max(0f, KnockbackTimer - Runner.DeltaTime);
 
+        if (HasStateAuthority && IsStunned && StunTimer.Expired(Runner))
+            IsStunned = false;
+
         if (GetInput(out PlayerInputData input))
         {
-            // Block toàn bộ input khi frozen
-            if (!_isFrozen)
+            if (!IsFrozen && !IsStunned) // THÊM: && !IsStunned
             {
                 HandleAttack(input);
 
@@ -182,10 +188,11 @@ public class PlayerController : NetworkBehaviour
 
     private void Move(PlayerInputData input)
     {
-        if (_isFrozen)
+        if (IsFrozen)
         {
             _networkCC.Move(Vector3.zero);
             IsMoving = false;
+            IsRunning = false;
             return;
         }
 
@@ -493,21 +500,18 @@ public class PlayerController : NetworkBehaviour
 
     public void SetFrozen(bool frozen)
     {
-        _isFrozen = frozen;
-
-        if (frozen)
-        {
-            ResetVelocity();
-        }
+        if (!HasStateAuthority) return; // THÊM: chỉ host set
+        IsFrozenNetworked = frozen;
+    }
+    private void OnFrozenChanged()
+    {
+        // Có thể thêm visual feedback sau
     }
 
     public void ResetVelocity()
     {
         if (_networkCC != null)
-        {
             _networkCC.Move(Vector3.zero);
-        }
-
         ExternalVelocity = Vector3.zero;
     }
 
@@ -571,7 +575,6 @@ public class PlayerController : NetworkBehaviour
 
         return true;
     }
-
     public void ResetHitCooldown()
     {
         if (HasStateAuthority)
@@ -635,6 +638,25 @@ public class PlayerController : NetworkBehaviour
         };
     }
 
+    public bool TryApplyStun()
+    {
+        if (!HasStateAuthority) return false;
+
+        if (!HitCooldownTimer.ExpiredOrNotRunning(Runner)) return false;
+
+        IsStunned = true;
+        StunTimer = TickTimer.CreateFromSeconds(Runner, stunDuration);
+        HitCooldownTimer = TickTimer.CreateFromSeconds(Runner, hitCooldownDuration);
+
+        return true;
+    }
+
+    private void OnStunChanged()
+    {
+        if (dizzyVFX != null)
+            dizzyVFX.SetActive(IsStunned);
+    }
+
     private void CheckAttackHit()
     {
         Collider[] hits = Physics.OverlapSphere(
@@ -647,25 +669,15 @@ public class PlayerController : NetworkBehaviour
             var other = hit.GetComponent<PlayerController>();
             if (other == null) continue;
 
-            // MG3 Brawl — delegate hit logic cho controller
+            bool hitSuccess = other.TryApplyStun(); // SỬA: dùng stun thay knockback
+            if (!hitSuccess) continue;
+
+            other.ForceIdle();
+
             if (MG3BrawlController.Instance != null &&
                 MG3BrawlController.Instance.IsGameStarted)
             {
-                Vector3 knockback = transform.forward * 8f + Vector3.up * 2f;
-                bool hit_success = other.TryApplyHit(knockback);
-
-                if (hit_success)
-                {
-                    other.ForceIdle();
-                    MG3BrawlController.Instance.OnPlayerHit(this, other);
-                }
-            }
-            else
-            {
-                // Default: chỉ knockback
-                Vector3 knockback = transform.forward * 8f + Vector3.up * 2f;
-                if (other.TryApplyHit(knockback))
-                    other.ForceIdle();
+                MG3BrawlController.Instance.OnPlayerHit(this, other);
             }
         }
     }

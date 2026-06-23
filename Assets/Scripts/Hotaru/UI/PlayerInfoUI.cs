@@ -4,7 +4,7 @@ using TMPro;
 using System.Collections.Generic;
 
 /// <summary>
-/// UI hiển thị thông tin tất cả người chơi khi giữ Tab
+/// UI hiển thị thông tin tất cả người chơi trong lobby
 /// </summary>
 public class PlayerInfoUI : MonoBehaviour
 {
@@ -13,35 +13,34 @@ public class PlayerInfoUI : MonoBehaviour
     [SerializeField] private CanvasGroup canvasGroup;
     [SerializeField] private Transform contentParent;
     [SerializeField] private PlayerInfoItemUI itemPrefab;
-    
-    [Header("Header")]
-    [SerializeField] private TMP_Text headerText;
-    [SerializeField] private TMP_Text roomNameText;
-    
+
     [Header("Animation")]
     [SerializeField] private float fadeSpeed = 10f;
-    
+
     private List<PlayerInfoItemUI> _items = new List<PlayerInfoItemUI>();
     private bool _isVisible;
     private float _targetAlpha;
-    
+    private int _lastPlayerCount = -1;
+
     private static PlayerInfoUI _instance;
     public static PlayerInfoUI Instance => _instance;
 
     private void Awake()
     {
         _instance = this;
-        
+
         if (canvas == null)
             canvas = GetComponent<Canvas>();
         if (canvasGroup == null)
             canvasGroup = GetComponent<CanvasGroup>();
-        
-        // Start hidden
+
         if (canvasGroup != null)
             canvasGroup.alpha = 0f;
-        
-        gameObject.SetActive(false);
+    }
+
+    private void Start()
+    {
+        Show();
     }
 
     private void OnDestroy()
@@ -56,16 +55,22 @@ public class PlayerInfoUI : MonoBehaviour
         if (canvasGroup != null)
         {
             canvasGroup.alpha = Mathf.MoveTowards(canvasGroup.alpha, _targetAlpha, fadeSpeed * Time.deltaTime);
-            
+
             if (!_isVisible && canvasGroup.alpha < 0.01f)
             {
                 gameObject.SetActive(false);
             }
         }
-        
-        // Update data if visible
+
         if (_isVisible)
         {
+            // Tự refresh khi có người vào/rời lobby
+            int currentCount = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None).Length;
+            if (currentCount != _lastPlayerCount)
+            {
+                RefreshPlayerList();
+            }
+
             UpdatePlayerData();
         }
     }
@@ -78,9 +83,9 @@ public class PlayerInfoUI : MonoBehaviour
         gameObject.SetActive(true);
         _isVisible = true;
         _targetAlpha = 1f;
-        
+
         RefreshPlayerList();
-        
+
         Debug.Log("[PlayerInfoUI] Showing player info");
     }
 
@@ -91,7 +96,7 @@ public class PlayerInfoUI : MonoBehaviour
     {
         _isVisible = false;
         _targetAlpha = 0f;
-        
+
         Debug.Log("[PlayerInfoUI] Hiding player info");
     }
 
@@ -100,22 +105,15 @@ public class PlayerInfoUI : MonoBehaviour
     /// </summary>
     private void RefreshPlayerList()
     {
-        // Clear old items
         foreach (var item in _items)
         {
             if (item != null)
                 Destroy(item.gameObject);
         }
         _items.Clear();
-        
-        // Find all players
+
         var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
-        
-        // Update header
-        if (headerText != null)
-            headerText.text = $"Players ({players.Length})";
-        
-        // Create items
+
         foreach (var player in players)
         {
             if (itemPrefab != null && contentParent != null)
@@ -125,7 +123,9 @@ public class PlayerInfoUI : MonoBehaviour
                 _items.Add(item);
             }
         }
-        
+
+        _lastPlayerCount = players.Length;
+
         // Debug mode - show text if no prefab
         if (itemPrefab == null)
         {
@@ -145,7 +145,6 @@ public class PlayerInfoUI : MonoBehaviour
     /// </summary>
     private void UpdatePlayerData()
     {
-        // Cập nhật từng item
         foreach (var item in _items)
         {
             if (item != null)

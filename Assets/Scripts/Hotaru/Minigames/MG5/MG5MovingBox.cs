@@ -44,14 +44,14 @@ public class MG5MovingBox : NetworkBehaviour
         transform.position = pos;
 
         // Input: Space để drop
-        if (GetInput(out PlayerInputData input))
-        {
+        //if (GetInput(out PlayerInputData input))
+        //{
             //if (input.IsButtonPressed(PlayerInputData.BUTTON_INTERACT) ||
-            if (Input.GetKeyDown(KeyCode.Space)) // fallback local input
-            {
-                Drop();
-            }
-        }
+            //if (Input.GetKeyDown(KeyCode.Space)) // fallback local input
+            //{
+                //Drop();
+            //}
+        //}
     }
 
     /// <summary>

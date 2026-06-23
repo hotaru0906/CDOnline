@@ -58,12 +58,6 @@ public class CameraOrbit : MonoBehaviour
     {
         _targetDistance = distance;
         _currentDistance = distance;
-        
-        if (lockCursorOnStart && !holdRightClickToRotate)
-        {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
-        }
 
         // Initialize rotation from current camera position
         if (target != null)

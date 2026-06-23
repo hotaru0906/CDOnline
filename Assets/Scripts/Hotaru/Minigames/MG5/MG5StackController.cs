@@ -21,18 +21,34 @@ public class MG5StackController : BaseMinigameController
     [SerializeField] private MG5Lane[] lanes; // 4 lane
     private Dictionary<PlayerRef, MG5PlayerStackData> _playerData = new();
 
+    public override void Spawned()
+    {
+        if (HasStateAuthority)
+            StartCoroutine(DelayedStart());
+    }
+
+    private System.Collections.IEnumerator DelayedStart()
+    {
+        yield return new WaitForSeconds(1f);
+        OnGamePlayingStarted();
+    }
     // ----------------------------------------------------------------
     // Lifecycle
     // ----------------------------------------------------------------
 
     protected override void OnGamePlayingStarted()
     {
-        if (!HasStateAuthority) return;
+    if (!HasStateAuthority) return;
+
+        // Ép bật lại input cho scene test riêng — GameManager có thể đã khóa input
+        // từ state Tutorial mà scene test này bỏ qua không đi qua Playing state thật
+        if (PlayerInputHandler.Instance != null)
+            PlayerInputHandler.Instance.InputEnabled = true;
 
         _finishOrder.Clear();
         _playerData.Clear();
-
         var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        int laneIndex = 0;
         foreach (var p in allPlayers)
         {
             var stackData = p.GetComponent<MG5PlayerStackData>();
@@ -40,17 +56,23 @@ public class MG5StackController : BaseMinigameController
             {
                 stackData.ResetData();
                 _playerData[p.Object.InputAuthority] = stackData;
+
+                // MỚI — Gán Lane cho Player theo thứ tự vào
+                if (laneIndex < lanes.Length)
+                {
+                    lanes[laneIndex].AssignOwner(p.Object.InputAuthority);
+                    laneIndex++;
+                }
             }
         }
 
-        // Spawn box đầu tiên cho mỗi lane
+        // Spawn box đầu tiên cho mỗi lane (đã có OwnerPlayer)
         foreach (var lane in lanes)
             lane.SpawnNewBox();
 
         GameTimer = timeLimit;
         Debug.Log("[MG5StackController] Game started!");
     }
-
     protected override void OnGameOver()
     {
         Debug.Log("[MG5StackController] Game Over!");
