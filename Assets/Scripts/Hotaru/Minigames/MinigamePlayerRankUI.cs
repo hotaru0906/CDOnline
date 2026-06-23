@@ -69,6 +69,12 @@ public class MinigamePlayerRankUI : MonoBehaviour
                 slotColor: SlotColors[i],
                 isEliminated: p.IsEliminated
             );
+
+            if (net != null)
+            {
+                entries[i].SetCharacterAvatar(net.CharacterIndex);
+            }
+
         }
     }
 

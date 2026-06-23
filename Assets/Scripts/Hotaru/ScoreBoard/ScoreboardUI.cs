@@ -43,7 +43,7 @@ public class ScoreboardUI : MonoBehaviour
 
     private void OnDisable()
     {
-        ReleaseAllPortraits();
+        
     }
 
     /// <summary>
@@ -59,9 +59,6 @@ public class ScoreboardUI : MonoBehaviour
 
         Debug.Log("Player count = " + rankedPlayers.Count);
 
-        ReleaseAllPortraits();
-
-        Debug.Log("Before ClearEntries");
 
         ClearEntries();
 
@@ -105,11 +102,7 @@ public class ScoreboardUI : MonoBehaviour
 
     private void ReleaseAllPortraits()
     {
-        foreach (var entry in _activeEntries)
-        {
-            if (entry != null)
-                entry.ReleasePortrait();
-        }
+        //khong can lam gi nua
     }
 
     private void ClearEntries()

@@ -5,6 +5,7 @@ using TMPro;
 public class MinigamePlayerEntryUI : MonoBehaviour
 {
     [SerializeField] private Image iconImage;
+    [SerializeField] private Sprite[] characterAvatars;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text livesText;
     [SerializeField] private GameObject eliminatedOverlay;
@@ -52,5 +53,17 @@ public class MinigamePlayerEntryUI : MonoBehaviour
 
         if (nameText != null)
             nameText.color = eliminated ? Color.gray : Color.white;
+    }
+
+    public void SetCharacterAvatar(int characterIndex)
+    {
+        if (iconImage == null)
+            return;
+
+        if (characterIndex < 0 ||
+            characterIndex >= characterAvatars.Length)
+            return;
+
+        iconImage.sprite = characterAvatars[characterIndex];
     }
 }

@@ -16,7 +16,8 @@ public class ScoreboardEntry : MonoBehaviour
 {
     [Header("UI References")]
     [SerializeField] private TMP_Text rankText;
-    [SerializeField] private RawImage portraitImage;
+    [SerializeField] private Image portraitImage;
+    [SerializeField] private Sprite[] characterAvatars;
     [SerializeField] private TMP_Text playerNameText;
 
     [Header("Rank Colors (optional)")]
@@ -52,18 +53,10 @@ public class ScoreboardEntry : MonoBehaviour
                 ? playerData.PlayerName.ToString()
                 : $"Player {rank}";
         }
-
-        // --- Portrait ---
-        if (portraitImage != null)
+        
+        if (playerData != null)
         {
-            if (playerData != null)
-            {
-                SetupPortrait(playerData);
-            }
-            else if (placeholderTexture != null)
-            {
-                portraitImage.texture = placeholderTexture;
-            }
+            SetCharacterAvatar(playerData.CharacterIndex);
         }
     }
 
@@ -78,36 +71,24 @@ public class ScoreboardEntry : MonoBehaviour
             _portraitCamera = playerData.gameObject.AddComponent<PlayerPortraitCamera>();
             Debug.Log($"[ScoreboardEntry] Added PlayerPortraitCamera to {playerData.gameObject.name}");
         }
-
-        // Đảm bảo camera đã được setup và bật lên
-        _portraitCamera.SetupPortraitCamera();
-        _portraitCamera.SetPortraitActive(true);
-
-        // Gán texture vào UI
-        if (_portraitCamera.PortraitTexture != null)
-        {
-            portraitImage.texture = _portraitCamera.PortraitTexture;
-        }
-        else if (placeholderTexture != null)
-        {
-            portraitImage.texture = placeholderTexture;
-        }
+   
     }
 
+    private void SetCharacterAvatar(int characterIndex)
+    {
+        if (portraitImage == null)
+            return;
+
+        if (characterIndex < 0 ||
+            characterIndex >= characterAvatars.Length)
+            return;
+
+        portraitImage.sprite = characterAvatars[characterIndex];
+    }
     /// <summary>
     /// Tắt portrait camera khi entry bị ẩn (tiết kiệm tài nguyên)
     /// </summary>
-    public void ReleasePortrait()
-    {
-        if (_portraitCamera != null)
-        {
-            _portraitCamera.SetPortraitActive(false);
-            _portraitCamera = null;
-        }
-
-        if (portraitImage != null)
-            portraitImage.texture = placeholderTexture;
-    }
+   
 
     private Color GetRankColor(int rank)
     {
