@@ -126,7 +126,7 @@ public class AudioManager : MonoBehaviour
     public void PlayBGM(AudioClip clip)
     {
         if (clip == null || bgmSource == null) return;
-        
+
         bgmSource.clip = clip;
         bgmSource.volume = bgmVolume;
         bgmSource.Play();
@@ -191,6 +191,7 @@ public class AudioManager : MonoBehaviour
 
         if (customMinigameBGM != null)
         {
+            bgmSource.loop = true; // THÊM: loop minigame BGM
             bgmSource.clip = customMinigameBGM;
             bgmSource.time = 0f;
             FadeInBGM();
@@ -210,19 +211,16 @@ public class AudioManager : MonoBehaviour
 
     private IEnumerator TransitionToLobbyBGM()
     {
-        // Fade out minigame BGM
         yield return StartCoroutine(FadeOutCoroutine());
 
-        // Khôi phục lobby BGM từ vị trí đã lưu
         isPlayingMinigameBGM = false;
+        bgmSource.loop = false; // THÊM: tắt loop khi về lobby
 
         if (bgmList != null && bgmList.Length > 0)
         {
             currentBGMIndex = savedLobbyBGMIndex;
             bgmSource.clip = bgmList[currentBGMIndex];
             bgmSource.time = savedLobbyBGMTime;
-
-            // Fade in lobby BGM
             FadeInBGM();
         }
     }
