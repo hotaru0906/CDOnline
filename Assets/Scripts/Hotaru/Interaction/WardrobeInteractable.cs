@@ -41,7 +41,7 @@ public class WardrobeInteractable : InteractableObject
         _isCustomizing = true;
         
         // Mở UI customization
-        customizationManager.OpenCustomizationUI();
+        //customizationManager.OpenCustomizationUI();
         
         Debug.Log("[WardrobeInteractable] Opening customization UI");
     }
