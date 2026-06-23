@@ -17,6 +17,8 @@ public class MG4Bullet : NetworkBehaviour
     [Networked] private float     Speed     { get; set; }
     [Networked] private TickTimer LifeTimer { get; set; }
 
+    [Networked] private Quaternion NetworkedRotation { get; set;}
+
     private Collider _collider;
 
     private void Awake()
@@ -40,6 +42,9 @@ public class MG4Bullet : NetworkBehaviour
         NetworkedPosition  = position;
         transform.position = position;
         transform.forward = direction;
+        Quaternion rot = Quaternion.LookRotation(direction);
+        transform.rotation = rot;
+        NetworkedRotation = rot;
         Direction          = direction.normalized;
         Speed              = speed;
         LifeTimer          = TickTimer.CreateFromSeconds(Runner, travelTime);
@@ -65,7 +70,10 @@ public class MG4Bullet : NetworkBehaviour
     {
         // Client interpolate position mượt hơn
         if (!HasStateAuthority && IsActive)
+        {
             transform.position = NetworkedPosition;
+            transform.rotation = NetworkedRotation;
+        }
     }
 
     private void OnTriggerEnter(Collider other)

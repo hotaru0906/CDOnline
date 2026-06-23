@@ -267,9 +267,30 @@ public class MG4LaserSurvivalController : BaseMinigameController
 
     protected override int[] BuildBoardRanking(PlayerRef winner)
     {
+        var allData = FindObjectsByType<PlayerMinigameData>(
+            FindObjectsSortMode.None);
+
+        var sorted = new List<PlayerMinigameData>(allData);
+
+        //rank nho hon = xep hang cao hon
+        sorted.Sort((a, b) =>
+            a.FinishRank.CompareTo(b.FinishRank));
+
         var ranking = new List<int>();
-        for (int i = _eliminationOrder.Count - 1; i >= 0; i--)
-            ranking.Add(_eliminationOrder[i].PlayerId);
+
+        foreach (var p in sorted)
+        {
+            if (p.Object != null)
+            {
+                ranking.Add(
+                    p.Object.InputAuthority.PlayerId);
+            }
+        }
+
+        Debug.Log(
+            "[MG4] Ranking = " +
+            string.Join(", ", ranking));
+        
         return ranking.ToArray();
     }
 

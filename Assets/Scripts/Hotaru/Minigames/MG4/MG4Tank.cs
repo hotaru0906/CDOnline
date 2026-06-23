@@ -3,7 +3,7 @@ using UnityEngine;
 
 public class MG4Tank : NetworkBehaviour
 {
-    private enum TankState : byte { Inactive, Hidden, Aiming }
+    private enum TankState : byte { Inactive, Hidden, Aiming, Firing }
 
     [Header("References")]
     [SerializeField] private GameObject tankVisual;
@@ -19,6 +19,7 @@ public class MG4Tank : NetworkBehaviour
 
     [Header("Audio")]
     [SerializeField] private AudioClip shootSFX;
+    [SerializeField] private GameObject muzzleFlashPrefab;
 
     [Networked, OnChangedRender(nameof(OnStateChanged))]
     private TankState _state { get; set; }
@@ -41,6 +42,7 @@ public class MG4Tank : NetworkBehaviour
         OnStateChanged();
     }
 
+    
     /// <summary>
     /// Gọi từ controller khi muốn tank bắt đầu cycle.
     /// phaseDelay: delay ngẫu nhiên để lệch pha với các tank khác trong cùng batch.
@@ -77,8 +79,21 @@ public class MG4Tank : NetworkBehaviour
 
             case TankState.Aiming:
                 Fire();
-                _state = TankState.Hidden;
-                _timer = TickTimer.CreateFromSeconds(Runner, _cooldown);
+                _state = TankState.Firing;
+                _timer = TickTimer.CreateFromSeconds(Runner, 0.15f);
+                break;
+
+            case TankState.Firing:
+
+                if (_timer.Expired(Runner))
+                {
+                    _state = TankState.Hidden;
+
+                    _timer = TickTimer.CreateFromSeconds(
+                        Runner,
+                        _cooldown);
+                }
+
                 break;
         }
     }
@@ -97,7 +112,9 @@ public class MG4Tank : NetworkBehaviour
         bullet.Fire(origin, direction, bulletSpeed, travelTime);
 
         RPC_PlayShootSound();
-        Debug.Log($"[MG4Tank] {name} fired");
+
+        RPC_PlayMuzzleFlash();
+
     }
 
     public void SetPhase(int phase)
@@ -116,7 +133,11 @@ public class MG4Tank : NetworkBehaviour
     private void OnStateChanged()
     {
         if (tankVisual != null)
-            tankVisual.SetActive(_state == TankState.Aiming);
+        {
+            tankVisual.SetActive(
+                _state == TankState.Aiming ||
+                _state == TankState.Firing);
+        }
     }
 
     private void Awake()
@@ -131,5 +152,19 @@ public class MG4Tank : NetworkBehaviour
     {
         if (shootSFX != null)
             _audioSource.PlayOneShot(shootSFX);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayMuzzleFlash()
+    {
+        if (muzzleFlashPrefab == null || firePoint == null)
+            return;
+
+        GameObject fx = Instantiate(
+            muzzleFlashPrefab,
+            firePoint.position,
+            firePoint.rotation);
+
+        Destroy(fx, 2f);
     }
 }

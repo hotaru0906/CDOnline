@@ -29,8 +29,15 @@ public class ScoreboardUI : MonoBehaviour
     // Cache các entry đang active
     private readonly List<ScoreboardEntry> _activeEntries = new();
 
+
+    private void Start()
+    {
+        Debug.Log("SCOREBOARD START");
+    }
+
     private void OnEnable()
     {
+        Debug.Log("SCOREBOARD ENABLE");
         UpdateScoreboard();
     }
 
@@ -44,31 +51,38 @@ public class ScoreboardUI : MonoBehaviour
     /// </summary>
     public void UpdateScoreboard()
     {
-        // --- Title ---
-        if (titleText != null && GameManager.Instance != null)
-        {
-            var mgData = GameManager.Instance.CurrentMinigameData;
-            titleText.text = mgData != null ? mgData.minigameName : "Results";
-        }
+        Debug.Log("=== UPDATE SCOREBOARD ===");
 
-        // --- Lấy danh sách player đã rank ---
         var rankedPlayers = ScoreboardManager.Instance != null
             ? ScoreboardManager.Instance.GetRankedPlayers()
             : new List<PlayerNetworkData>();
 
-        // --- Clear entries cũ ---
+        Debug.Log("Player count = " + rankedPlayers.Count);
+
         ReleaseAllPortraits();
+
+        Debug.Log("Before ClearEntries");
+
         ClearEntries();
 
-        // --- Tạo entry mới ---
+        Debug.Log("After ClearEntries");
+
         for (int i = 0; i < rankedPlayers.Count; i++)
         {
+            Debug.Log("Loop " + i);
+
+            Debug.Log("Spawning row for " + rankedPlayers[i].name);
+
             SpawnEntry(i + 1, rankedPlayers[i]);
         }
+
+        Debug.Log("END UPDATE SCOREBOARD");
     }
 
     private void SpawnEntry(int rank, PlayerNetworkData playerData)
     {
+        Debug.Log("SPAWN ENTRY");
+        
         if (entryPrefab == null || entriesContainer == null)
         {
             Debug.LogError("[ScoreboardUI] entryPrefab hoặc entriesContainer chưa được gán!");

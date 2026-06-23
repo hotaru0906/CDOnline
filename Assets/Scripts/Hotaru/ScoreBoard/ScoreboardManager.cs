@@ -32,6 +32,7 @@ public class ScoreboardManager : MonoBehaviour
     /// </summary>
     public List<PlayerNetworkData> GetRankedPlayers()
     {
+        Debug.Log("GET RANKED PLAYERS CALLED");
         var result = new List<PlayerNetworkData>();
 
         if (GameManager.Instance == null)
@@ -85,4 +86,5 @@ public class ScoreboardManager : MonoBehaviour
         if (ui != null && ui.gameObject.activeInHierarchy)
             ui.UpdateScoreboard();
     }
+
 }
