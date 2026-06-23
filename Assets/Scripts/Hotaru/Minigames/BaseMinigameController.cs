@@ -121,6 +121,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
         while (true)
         {
             var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+            Debug.Log($"[{GetType().Name}] Found {players.Length} players, need {_minigameData.minPlayers}"); // thêm dòng này
             if (players.Length >= _minigameData.minPlayers)
             {
                 Debug.Log($"[{GetType().Name}] All players ready!");
@@ -468,7 +469,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
             var player = players[i];
             var spawnPoint = spawnPoints[i % spawnPoints.Length];
 
-            // Dùng Teleport thay vì set transform.position trực tiếp
+            Debug.Log($"[Spawn] Player {players[i].Object.InputAuthority.PlayerId} → SpawnPoint {i} at {spawnPoints[i % spawnPoints.Length].position}");
             player.Teleport(spawnPoint.position);
             player.transform.rotation = spawnPoint.rotation;
 

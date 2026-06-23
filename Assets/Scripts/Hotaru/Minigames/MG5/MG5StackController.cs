@@ -38,18 +38,21 @@ public class MG5StackController : BaseMinigameController
 
     protected override void OnGamePlayingStarted()
     {
-    if (!HasStateAuthority) return;
-
-        // Ép bật lại input cho scene test riêng — GameManager có thể đã khóa input
-        // từ state Tutorial mà scene test này bỏ qua không đi qua Playing state thật
+        if (!HasStateAuthority) return;
         if (PlayerInputHandler.Instance != null)
             PlayerInputHandler.Instance.InputEnabled = true;
 
         _finishOrder.Clear();
         _playerData.Clear();
         var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+
+        // Sort theo PlayerId để thứ tự lane ổn định
+        var sortedPlayers = new System.Collections.Generic.List<PlayerMinigameData>(allPlayers);
+        sortedPlayers.Sort((a, b) =>
+            a.Object.InputAuthority.PlayerId.CompareTo(b.Object.InputAuthority.PlayerId));
+
         int laneIndex = 0;
-        foreach (var p in allPlayers)
+        foreach (var p in sortedPlayers)
         {
             var stackData = p.GetComponent<MG5PlayerStackData>();
             if (stackData != null)
@@ -57,7 +60,6 @@ public class MG5StackController : BaseMinigameController
                 stackData.ResetData();
                 _playerData[p.Object.InputAuthority] = stackData;
 
-                // MỚI — Gán Lane cho Player theo thứ tự vào
                 if (laneIndex < lanes.Length)
                 {
                     lanes[laneIndex].AssignOwner(p.Object.InputAuthority);
@@ -66,9 +68,11 @@ public class MG5StackController : BaseMinigameController
             }
         }
 
-        // Spawn box đầu tiên cho mỗi lane (đã có OwnerPlayer)
         foreach (var lane in lanes)
-            lane.SpawnNewBox();
+        {
+            if (lane.OwnerPlayer != PlayerRef.None)
+                lane.SpawnNewBox();
+        }
 
         GameTimer = timeLimit;
         Debug.Log("[MG5StackController] Game started!");

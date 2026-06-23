@@ -9,48 +9,69 @@ using UnityEngine;
 public class MG5Lane : NetworkBehaviour
 {
     [Header("Lane Setup")]
-    [SerializeField] private Transform[] spawnPoints; // 5 điểm spawn cho 5 tầng
-    [SerializeField] private Transform stackRoot;     // gốc stack (dùng để snap box)
+    [SerializeField] private Transform[] spawnPoints;
+    [SerializeField] private Transform stackRoot;
 
     [Header("Prefabs")]
     [SerializeField] private NetworkObject movingBoxPrefab;
 
+    [Header("Speed Settings")]
+    [SerializeField] private float baseSpeed = 3f;
+    [SerializeField] private float speedPerFloor = 0.8f;
+
+    [Header("Lane Visuals")]
+    [SerializeField] private GameObject[] visualObjects;
+
     [Networked] public int CurrentHeight { get; private set; } = 0;
 
-    // MỚI — Player sở hữu lane này
-    [Networked] public PlayerRef OwnerPlayer { get; set; }
+    [Networked, OnChangedRender(nameof(OnOwnerChanged))]
+    public PlayerRef OwnerPlayer { get; set; }
+
+    [Networked] private int _lastPlacedCell { get; set; } = 0;
+    [Networked] private NetworkBool _hasPlacedFirst { get; set; } = false;
+    [Networked, Capacity(10)] private NetworkArray<int> _cellHeights { get; }
 
     private NetworkObject _currentMovingBox;
 
-    /// <summary>
-    /// MỚI — Gọi bởi MG5StackController để gán Player cho lane này.
-    /// Phải gọi TRƯỚC SpawnNewBox().
-    /// </summary>
+    public override void Spawned()
+    {
+        SetVisualsActive(false);
+        if (OwnerPlayer != PlayerRef.None)
+            SetVisualsActive(true);
+    }
+
     public void AssignOwner(PlayerRef player)
     {
         OwnerPlayer = player;
     }
 
-    /// <summary>
-    /// Spawn box mới tại spawn point hiện tại.
-    /// </summary>
+    private void OnOwnerChanged()
+    {
+        bool hasOwner = OwnerPlayer != PlayerRef.None;
+        SetVisualsActive(hasOwner);
+    }
+
+    private void SetVisualsActive(bool active)
+    {
+        foreach (var obj in visualObjects)
+            if (obj != null) obj.SetActive(active);
+    }
+
     public void SpawnNewBox()
     {
         if (!HasStateAuthority) return;
-        if (CurrentHeight >= spawnPoints.Length) return; // đã đủ tầng
+        if (CurrentHeight >= spawnPoints.Length) return;
 
         var spawnPoint = spawnPoints[CurrentHeight];
-        var pos = spawnPoint.position;
-        var rot = Quaternion.identity;
+        _currentMovingBox = Runner.Spawn(movingBoxPrefab, spawnPoint.position, Quaternion.identity, OwnerPlayer);
 
-        _currentMovingBox = Runner.Spawn(movingBoxPrefab, pos, rot, OwnerPlayer);
         var mover = _currentMovingBox.GetComponent<MG5MovingBox>();
         if (mover != null)
         {
-            mover.Initialize(this);
+            float speed = baseSpeed + CurrentHeight * speedPerFloor;
+            mover.Initialize(this, speed);
         }
 
-        // MỚI — Tìm Player theo OwnerPlayer, forward box hiện tại cho nó
         var allForwarders = FindObjectsByType<MG5PlayerInputForwarder>(FindObjectsSortMode.None);
         foreach (var forwarder in allForwarders)
         {
@@ -61,51 +82,70 @@ public class MG5Lane : NetworkBehaviour
             }
         }
 
-        Debug.Log($"[MG5Lane] Spawn new box at height {CurrentHeight} for player {OwnerPlayer}");
+        Debug.Log($"[MG5Lane] Spawn box tầng {CurrentHeight}, speed = {baseSpeed + CurrentHeight * speedPerFloor}");
     }
 
-    /// <summary>
-    /// Gọi khi box được đặt thành công.
-    /// Snap box vào stackRoot theo CurrentHeight.
-    /// </summary>
     public void PlaceBox(NetworkObject box)
     {
         if (!HasStateAuthority) return;
 
-        var targetY = CurrentHeight;
-        var snapPos = stackRoot.position + Vector3.up * targetY;
-        box.transform.position = new Vector3(stackRoot.position.x, snapPos.y, stackRoot.position.z);
-
-        CurrentHeight++;
-        Debug.Log($"[MG5Lane] Box placed. Height = {CurrentHeight}");
-
-        // Spawn box mới nếu chưa đủ tầng
-        if (CurrentHeight < spawnPoints.Length)
+        if (CurrentHeight >= spawnPoints.Length)
         {
+            Runner.Despawn(box);
+            return;
+        }
+
+        var mover = box.GetComponent<MG5MovingBox>();
+        int droppedCell = mover != null ? mover.CurrentCell : 0;
+
+        int cellHeight = _cellHeights.Get(droppedCell);
+
+        if (cellHeight >= spawnPoints.Length)
+        {
+            Runner.Despawn(box);
             SpawnNewBox();
+            return;
+        }
+
+        // Snap box xuống đúng Y của cell đó
+        var snapPos = stackRoot.position + Vector3.up * cellHeight;
+        box.transform.position = new Vector3(stackRoot.position.x, snapPos.y, box.transform.position.z);
+        _cellHeights.Set(droppedCell, cellHeight + 1);
+
+        // Tầng đầu pass hết, từ tầng 2 phải match cell trước
+        bool isCorrect = !_hasPlacedFirst || droppedCell == _lastPlacedCell;
+        if (isCorrect)
+        {
+            _hasPlacedFirst = true;
+            _lastPlacedCell = droppedCell;
+            CurrentHeight++;
+            Debug.Log($"[MG5Lane] Correct! Cell {droppedCell}. Height = {CurrentHeight}");
+
+            if (CurrentHeight >= spawnPoints.Length)
+            {
+                var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+                foreach (var p in allPlayers)
+                {
+                    if (p.Object.InputAuthority == OwnerPlayer)
+                    {
+                        var stackData = p.GetComponent<MG5PlayerStackData>();
+                        if (stackData != null)
+                        {
+                            stackData.IncreaseHeight();
+                            if (stackData.CurrentStackHeight >= spawnPoints.Length)
+                                MG5StackController.Instance?.PlayerFinished(OwnerPlayer);
+                        }
+                        break;
+                    }
+                }
+                return;
+            }
         }
         else
         {
-            // Player đạt target height → báo controller
-            // SỬA — tìm theo OwnerPlayer thay vì GetComponentInParent
-            // vì Lane và Player không còn quan hệ cha-con
-            var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-            foreach (var p in allPlayers)
-            {
-                if (p.Object.InputAuthority == OwnerPlayer)
-                {
-                    var stackData = p.GetComponent<MG5PlayerStackData>();
-                    if (stackData != null)
-                    {
-                        stackData.IncreaseHeight();
-                        if (stackData.CurrentStackHeight >= spawnPoints.Length)
-                        {
-                            MG5StackController.Instance?.PlayerFinished(OwnerPlayer);
-                        }
-                    }
-                    break;
-                }
-            }
+            Debug.Log($"[MG5Lane] Wrong cell {droppedCell}, expected {_lastPlacedCell}.");
         }
+
+        SpawnNewBox();
     }
 }
