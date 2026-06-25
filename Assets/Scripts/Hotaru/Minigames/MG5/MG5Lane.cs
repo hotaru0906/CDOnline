@@ -62,6 +62,8 @@ public class MG5Lane : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (CurrentHeight >= spawnPoints.Length) return;
 
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameState.Playing) return;
+
         var spawnPoint = spawnPoints[CurrentHeight];
         _currentMovingBox = Runner.Spawn(movingBoxPrefab, spawnPoint.position, Quaternion.identity, OwnerPlayer);
 

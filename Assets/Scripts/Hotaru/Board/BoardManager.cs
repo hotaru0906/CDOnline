@@ -1128,6 +1128,19 @@ public class BoardManager : NetworkBehaviour
     {
         BoardCameraController.Instance?.FocusOnPlayer(stealerId);
     }
+
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_CardHoverEnter(int playerId, int itemSlot)
+    {
+        BoardInventoryUI.Instance?.OnCardHoverEnter(playerId, itemSlot);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    public void RPC_CardHoverExit(int playerId, int itemSlot)
+    {
+        BoardInventoryUI.Instance?.OnCardHoverExit(playerId, itemSlot);
+    }
+    
     #endregion
 
     #region Callbacks

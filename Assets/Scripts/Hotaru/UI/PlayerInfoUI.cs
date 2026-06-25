@@ -14,6 +14,10 @@ public class PlayerInfoUI : MonoBehaviour
     [SerializeField] private Transform contentParent;
     [SerializeField] private PlayerInfoItemUI itemPrefab;
 
+    [Header("Character Icons")]
+    [Tooltip("4 sprite — index khớp CharacterIndex 0-3")]
+    [SerializeField] private Sprite[] characterIcons = new Sprite[4];
+
     [Header("Animation")]
     [SerializeField] private float fadeSpeed = 10f;
 
@@ -119,7 +123,7 @@ public class PlayerInfoUI : MonoBehaviour
             if (itemPrefab != null && contentParent != null)
             {
                 var item = Instantiate(itemPrefab, contentParent);
-                item.SetData(player);
+                item.SetData(player, characterIcons); // truyền icons
                 _items.Add(item);
             }
         }

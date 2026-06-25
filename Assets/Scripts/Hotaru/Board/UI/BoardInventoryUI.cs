@@ -1,12 +1,30 @@
 using System.Collections;
 using UnityEngine;
+
 public class BoardInventoryUI : MonoBehaviour
 {
+    public static BoardInventoryUI Instance { get; private set; }
+
     [SerializeField] private BoardHandUI[] hands = new BoardHandUI[4];
+
     private bool _initialized = false;
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        Instance = this;
+    }
+
     private void Start()
     {
         StartCoroutine(WaitForBoardManager());
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+        if (BoardManager.Instance != null)
+            BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
     }
 
     private IEnumerator WaitForBoardManager()
@@ -16,12 +34,6 @@ public class BoardInventoryUI : MonoBehaviour
 
         BoardManager.Instance.OnTurnStarted += OnTurnStarted;
         Debug.Log("[BoardInventoryUI] Subscribed to OnTurnStarted");
-    }
-
-    private void OnDestroy()
-    {
-        if (BoardManager.Instance != null)
-            BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
     }
 
     // =====================================================================
@@ -66,15 +78,12 @@ public class BoardInventoryUI : MonoBehaviour
             _initialized = true;
         }
 
-        // Reset item used flag cho tất cả hands
         foreach (var h in hands)
             h?.ResetItemUsed();
 
-        // Refresh tất cả hands từ inventory
         foreach (var h in hands)
             h?.RefreshHand();
 
-        // Expand/collapse
         for (int i = 0; i < hands.Length; i++)
         {
             if (hands[i] == null) continue;
@@ -96,20 +105,41 @@ public class BoardInventoryUI : MonoBehaviour
             if (bm.GetPlayerIDAtSlot(i) == playerId)
             {
                 hands[i].SetItemUsed();
-                hands[i].RefreshHand(); // sync từ inventory
+                hands[i].RefreshHand();
                 return;
             }
         }
     }
 
     // =====================================================================
+    // HOVER — nhận từ RPC BoardManager
+    // =====================================================================
+
+    public void OnCardHoverEnter(int playerId, int itemSlot)
+    {
+        GetHandForPlayer(playerId)?.SetCardHover(itemSlot, true);
+    }
+
+    public void OnCardHoverExit(int playerId, int itemSlot)
+    {
+        GetHandForPlayer(playerId)?.SetCardHover(itemSlot, false);
+    }
+
+    // =====================================================================
     // HELPERS
     // =====================================================================
 
-    private void CollapseAll()
+    private BoardHandUI GetHandForPlayer(int playerId)
     {
-        foreach (var h in hands)
-            h?.Collapse();
+        var bm = BoardManager.Instance;
+        if (bm == null) return null;
+
+        for (int i = 0; i < hands.Length; i++)
+        {
+            if (hands[i] == null) continue;
+            if (bm.GetPlayerIDAtSlot(i) == playerId) return hands[i];
+        }
+        return null;
     }
 
     private int GetLocalPlayerId()

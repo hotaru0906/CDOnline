@@ -122,9 +122,20 @@ public class BoardHandUI : MonoBehaviour
         var card = go.GetComponent<BoardCardUI>();
         if (card == null) return;
 
-        card.Initialize(data, effect, slot, IsLocalPlayer);
+        card.Initialize(data, effect, slot, PlayerId, IsLocalPlayer); // thêm PlayerId
         card.OnCardClicked += OnCardClicked;
         _cards.Add(card);
+    }
+
+    public void SetCardHover(int itemSlot, bool hovered)
+    {
+        foreach (var card in _cards)
+        {
+            if (card == null || card.ItemSlot != itemSlot) continue;
+            if (hovered) card.AnimateHoverEnter();
+            else card.AnimateHoverExit();
+            return;
+        }
     }
 
     public void RemoveCard(BoardCardUI card)

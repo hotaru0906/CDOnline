@@ -132,16 +132,17 @@ public class BoardPlayerToken : MonoBehaviour
 
     private bool TryBuildPlayerVisual()
     {
-        if (!usePlayerModelVisual)
-            return true;
+        if (!usePlayerModelVisual) return true;
 
         var playerData = FindPlayerData(ownerPlayerId);
-        if (playerData == null)
-        {
-            return false;
-        }
+        if (playerData == null) return false;
 
-        int characterIndex = Mathf.Clamp(playerData.CharacterIndex, 0, 3);
+        string name = playerData.PlayerName.ToString();
+        if (string.IsNullOrEmpty(name) || name == "0") return false;
+
+        int characterIndex = Mathf.Clamp(playerData.CharacterIndex, 0,
+            fallbackCharacterModels != null ? fallbackCharacterModels.Length - 1 : 0);
+
         if (_spawnedModelVisual != null && _currentCharacterIndex == characterIndex)
             return true;
 
@@ -168,23 +169,20 @@ public class BoardPlayerToken : MonoBehaviour
         var parent = modelAnchor != null ? modelAnchor : transform;
         GameObject source = null;
 
+        // Thử lấy từ PlayerModelSwitcher trước
         var switcher = playerData.GetComponent<PlayerModelSwitcher>();
         if (switcher != null)
             source = switcher.GetActiveModel();
 
-        if (source == null)
-        {
-            playerData.UpdateCharacterModel();
-            if (switcher != null)
-                source = switcher.GetActiveModel();
-        }
-
-        if (source == null && fallbackCharacterModels != null && characterIndex < fallbackCharacterModels.Length)
+        // Fallback: dùng thẳng fallbackCharacterModels theo characterIndex
+        // Không gọi UpdateCharacterModel() — tránh side effect trên object của player khác
+        if (source == null
+            && fallbackCharacterModels != null
+            && characterIndex < fallbackCharacterModels.Length)
             source = fallbackCharacterModels[characterIndex];
 
         if (source == null)
         {
-            _spawnedModelVisual = null;
             _currentCharacterIndex = -1;
             return false;
         }
@@ -199,6 +197,7 @@ public class BoardPlayerToken : MonoBehaviour
         _currentCharacterIndex = characterIndex;
         ShowTokenVisual(!hideTokenWhenModelLoaded);
 
+        Debug.Log($"[BoardPlayerToken] Built visual for P{ownerPlayerId} (char {characterIndex}) source={source.name}");
         return true;
     }
 

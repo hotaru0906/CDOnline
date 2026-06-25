@@ -75,7 +75,15 @@ public class MG5StackController : BaseMinigameController
         }
 
         GameTimer = timeLimit;
+        RPC_EnableInput();
         Debug.Log("[MG5StackController] Game started!");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_EnableInput()
+    {
+        if (PlayerInputHandler.Instance != null)
+            PlayerInputHandler.Instance.InputEnabled = true;
     }
     protected override void OnGameOver()
     {

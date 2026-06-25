@@ -31,8 +31,31 @@ public class BoardPlayerRankUI : MonoBehaviour
             yield return null;
 
         BoardManager.Instance.OnTurnStarted += OnTurnStarted;
+
+        // Chờ thêm đến khi ít nhất có đủ PlayerNetworkData đã spawn và có tên
+        var bm = BoardManager.Instance;
+        float timeout = 5f;
+        float elapsed = 0f;
+        while (elapsed < timeout)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+
+            int readyCount = 0;
+            var allPlayers = Object.FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+            foreach (var p in allPlayers)
+            {
+                if (p.Object == null) continue;
+                string name = p.PlayerName.ToString();
+                if (!string.IsNullOrEmpty(name) && name != "0") readyCount++;
+            }
+
+            if (readyCount >= bm.ActivePlayerCount && bm.ActivePlayerCount > 0)
+                break;
+        }
+
         Refresh();
-        Debug.Log("[BoardPlayerRankUI] Subscribed");
+        Debug.Log("[BoardPlayerRankUI] Subscribed + Refreshed after player data ready");
     }
 
     // =====================================================================
@@ -41,6 +64,7 @@ public class BoardPlayerRankUI : MonoBehaviour
 
     private void OnTurnStarted(int playerId)
     {
+        Refresh();
         SetActiveTurn(playerId);
     }
 
@@ -77,13 +101,13 @@ public class BoardPlayerRankUI : MonoBehaviour
 
             entries[i].gameObject.SetActive(true);
 
-            int    pid  = bm.GetPlayerIDAtSlot(i);
+            int pid = bm.GetPlayerIDAtSlot(i);
             string name = BoardHUDController.Instance?.GetPlayerName(pid) ?? $"P{pid}";
 
             entries[i].SetData(
-                playerName  : name,
-                rank        : rankBySlot[i],
-                slotColor   : SlotColors[i],
+                playerName: name,
+                rank: rankBySlot[i],
+                slotColor: SlotColors[i],
                 isActiveTurn: false
             );
         }
@@ -91,8 +115,6 @@ public class BoardPlayerRankUI : MonoBehaviour
 
     public void SetActiveTurn(int playerId)
     {
-        Refresh();
-
         var bm = BoardManager.Instance;
         if (bm == null) return;
 

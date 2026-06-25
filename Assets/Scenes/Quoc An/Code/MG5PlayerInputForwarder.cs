@@ -27,7 +27,7 @@ public class MG5PlayerInputForwarder : NetworkBehaviour
     }
     public override void FixedUpdateNetwork()
     {
-        if (!HasStateAuthority) return;
+        if (!HasInputAuthority) return;
 
         if (GetInput(out PlayerInputData input))
         {
@@ -36,6 +36,10 @@ public class MG5PlayerInputForwarder : NetworkBehaviour
                 if (_currentBox != null)
                     _currentBox.Drop();
             }
+        }
+        else
+        {
+            Debug.Log($"[MG5PlayerInputForwarder] No input received");
         }
     }
 }
