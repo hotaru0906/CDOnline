@@ -15,6 +15,7 @@ public class BoardPlayerToken : MonoBehaviour
     [Header("Visual")]
     [SerializeField] private Renderer tokenRenderer;
     [SerializeField] private Transform modelAnchor;
+    [SerializeField] private Transform diceAnchor;
     [SerializeField] private bool usePlayerModelVisual = true;
     [SerializeField] private bool hideTokenWhenModelLoaded = true;
     [SerializeField] private GameObject[] fallbackCharacterModels;
@@ -30,6 +31,8 @@ public class BoardPlayerToken : MonoBehaviour
 
     public int CurrentNodeID { get; private set; } = 0;
     public bool IsMoving { get; private set; } = false;
+
+    public Transform DiceAnchor => diceAnchor;
 
     // Callback khi animation di chuyển xong
     public System.Action<BoardPlayerToken> OnMoveFinished;
