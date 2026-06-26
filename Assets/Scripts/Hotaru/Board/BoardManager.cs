@@ -327,6 +327,8 @@ public class BoardManager : NetworkBehaviour
 
         var token = GetTokenByPlayerId(playerId);
 
+        Debug.Log($"[DICE] Player={playerId} Token={(token != null ? token.name : "NULL")}");
+
         if (token != null)
         {
             BoardDiceVisual.Instance?.ShowAt(token.DiceAnchor);
@@ -390,13 +392,27 @@ public class BoardManager : NetworkBehaviour
     {
         // 1. Jump
         RPC_TriggerTokenJump(slot);
-        yield return new WaitForSeconds(0.4f); // chờ jump xong
+        yield return new WaitForSeconds(0.4f);
 
-        // 2. Hiện dice UI
+        // 2. Dice bắt đầu quay
+        RPC_StartDiceSpin();
+
+        // Quay khoảng 0.8 giây
+        yield return new WaitForSeconds(0.8f);
+
+        // 3. Hiện số
         RPC_ShowDiceResult(playerId, result);
-        yield return new WaitForSeconds(1.8f); // chờ dice display hiện xong (khớp với displayDuration)
 
-        // 3. Di chuyển
+        // Giữ thêm 1 giây
+        yield return new WaitForSeconds(1.0f);
+
+        // 4. Dice dừng quay
+        RPC_StopDiceSpin();
+
+        // 5. Ẩn xúc xắc
+        RPC_HideDice();
+
+        // 6. Di chuyển
         yield return StartCoroutine(ExecuteMovement(slot, playerId, result));
     }
 
@@ -412,6 +428,24 @@ public class BoardManager : NetworkBehaviour
     {
         BoardHUDController.Instance?.OnDiceResult(playerId, result);
         Debug.Log($"[BoardManager] Player {playerId} rolled {result}");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_HideDice()
+    {
+        BoardDiceVisual.Instance?.Hide();
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_StartDiceSpin()
+    {
+        BoardDiceVisual.Instance?.StartSpin();
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_StopDiceSpin()
+    {
+        BoardDiceVisual.Instance?.StopSpin();
     }
     #endregion
 
