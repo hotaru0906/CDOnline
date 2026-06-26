@@ -324,6 +324,14 @@ public class BoardManager : NetworkBehaviour
         }
 
         BoardCameraController.Instance?.FocusOnPlayer(playerId);
+
+        var token = GetTokenByPlayerId(playerId);
+
+        if (token != null)
+        {
+            BoardDiceVisual.Instance?.ShowAt(token.DiceAnchor);
+        }
+
         Debug.Log($"[BoardManager] >>> Lượt của Player {playerId}");
     }
 
@@ -1112,6 +1120,23 @@ public class BoardManager : NetworkBehaviour
 
         RPC_SnapTokensToSavedPositions(nodeSlots[0], nodeSlots[1], nodeSlots[2], nodeSlots[3]);
         Debug.Log($"[BoardManager] Restored: [{string.Join(", ", nodeSlots)}]");
+    }
+
+    public BoardPlayerToken GetTokenByPlayerId(int playerId)
+    {
+        if (tokens == null)
+            return null;
+
+        foreach (var token in tokens)
+        {
+            if (token == null)
+            continue;
+
+            if (token.ownerPlayerId == playerId)
+                return token;
+        }
+
+        return null;
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]

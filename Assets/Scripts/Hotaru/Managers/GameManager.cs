@@ -73,6 +73,9 @@ public class GameManager : NetworkBehaviour
     public int CurrentRound { get; private set; } = 0;
 
     [Networked]
+    public NetworkBool IsFirstBoard { get; private set; } = true;
+
+    [Networked]
     public int TotalRounds { get; private set; } = 3;
 
     [Networked]
@@ -605,8 +608,9 @@ public class GameManager : NetworkBehaviour
             MinigameVotingManager.Instance.PrepareNextVotingRound();
         }
 
-        // Vote chọn minigame ngay từ đầu
-        StartVoting(VotingType.MinigameOnly);
+        // Bat dau game bang Board dau tien
+        IsFirstBoard = true;
+        StartBoard();
     }
 
     /// <summary>
