@@ -64,6 +64,8 @@ public class BoardManager : NetworkBehaviour
 
     #region Local State
     private int _completedThisRound = 0;
+
+
     private bool _waitingForMyRoll = false;
 
     // Per-slot host state
@@ -222,6 +224,8 @@ public class BoardManager : NetworkBehaviour
     #endregion
 
     #region Start Board Phase
+
+
     public void StartBoardPhase(int[] rankOrder)
     {
         if (!HasStateAuthority) return;
@@ -271,7 +275,13 @@ public class BoardManager : NetworkBehaviour
         }
 
         for (int i = 0; i < count; i++)
-            if (tokens[i] != null) tokens[i].Initialize(playerIds[i], i, 0);
+        {
+            if (tokens[i] == null)
+                continue;
+
+            tokens[i].Initialize(playerIds[i], i, 0);
+        }
+        
     }
     #endregion
 
@@ -781,6 +791,7 @@ public class BoardManager : NetworkBehaviour
         }
 
         _completedThisRound++;
+
         if (_completedThisRound >= ActivePlayerCount) CompleteBoardPhase();
         else AdvanceTurn();
     }
@@ -1188,6 +1199,25 @@ public class BoardManager : NetworkBehaviour
         BoardCameraController.Instance?.FocusOnPlayer(stealerId);
     }
     #endregion
+
+    public int GetPlayerCountOnNode(int nodeID)
+    {
+        int count = 0;
+
+        if (tokens == null)
+            return 0;
+
+        foreach (var token in tokens)
+        {
+            if (token == null)
+                continue;
+
+            if (token.CurrentNodeID == nodeID)
+                count++;
+        }
+
+        return count;
+    }
 
     #region Callbacks
     private void OnBoardStateChanged()

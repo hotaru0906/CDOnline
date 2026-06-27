@@ -94,9 +94,13 @@ public class BoardPlayerToken : MonoBehaviour
     public void SnapToNode(int nodeID)
     {
         CurrentNodeID = nodeID;
+
         var node = BoardNodePath.Instance?.GetNodeByID(nodeID);
+
         if (node != null)
-            transform.position = node.WorldPosition + Vector3.up * 0.5f;
+        {
+            transform.position = node.GetSpawnPosition(playerSlotIndex) + Vector3.up * 0.5f;
+        }
     }
 
     /// <summary>
@@ -233,6 +237,31 @@ public class BoardPlayerToken : MonoBehaviour
     {
         IsMoving = true;
 
+        var currentNode = BoardNodePath.Instance?.GetNodeByID(CurrentNodeID);
+
+    if (currentNode != null)
+    {
+        Vector3 start = transform.position;
+        Vector3 center = currentNode.GetCenterPosition() + Vector3.up * 0.5f;
+
+        float elapsed = 0f;
+        const float duration = 0.15f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+
+            transform.position = Vector3.Lerp(
+                start,
+                center,
+                elapsed / duration);
+
+            yield return null;
+        }
+
+        transform.position = center;
+    }
+
         foreach (int nodeID in pathNodeIDs)
         {
             var node = BoardNodePath.Instance?.GetNodeByID(nodeID);
@@ -264,10 +293,28 @@ public class BoardPlayerToken : MonoBehaviour
             yield return new WaitForSeconds(0.08f); // pause nhỏ giữa mỗi ô
         }
 
-        IsMoving = false;
-        _moveRoutine = null;
-        OnMoveFinished?.Invoke(this);
+        var finalNode = BoardNodePath.Instance?.GetNodeByID(CurrentNodeID);
+
+        if (finalNode != null)
+        {
+            int count = BoardManager.Instance.GetPlayerCountOnNode(CurrentNodeID);
+
+            if (count <= 1)
+            {
+                transform.position =
+                    finalNode.GetCenterPosition()
+                    + Vector3.up * 0.5f;
+            }
+            else
+            {
+                transform.position =
+                    finalNode.GetSpawnPosition(playerSlotIndex)
+                    + Vector3.up * 0.5f;
+            }
+        }
     }
+
+    
     public void PlayJumpAnimation()
     {
         StartCoroutine(JumpRoutine());
@@ -292,6 +339,7 @@ public class BoardPlayerToken : MonoBehaviour
         transform.position = origin;
     }
 
+    
     private void OnGUI()
     {
         if (!showLabel || Camera.main == null) return;
