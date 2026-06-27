@@ -66,11 +66,11 @@ public class PlayerAnimator : NetworkBehaviour
         bool isRunning = state == PlayerState.Running;
         bool isCrouching = state == PlayerState.Crouching;
         bool isJumping = state == PlayerState.Jumping;
-        bool isAttacking = state == PlayerState.Attacking;
+        bool isAttacking = _playerController.IsAttacking;
 
         // WALK / RUN / CROUCH
-        animator.SetBool(isWalkingParam, isWalking && !isAttacking);
-        animator.SetBool(isRunningParam, isRunning && !isAttacking);
+        animator.SetBool(isWalkingParam, isWalking);
+        animator.SetBool(isRunningParam, isRunning);
         animator.SetBool(isSittingParam, isCrouching);
 
         // JUMP

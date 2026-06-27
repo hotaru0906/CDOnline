@@ -400,14 +400,14 @@ public class BoardManager : NetworkBehaviour
         // Quay khoảng 0.8 giây
         yield return new WaitForSeconds(0.8f);
 
-        // 3. Hiện số
-        RPC_ShowDiceResult(playerId, result);
-
         // Giữ thêm 1 giây
         yield return new WaitForSeconds(1.0f);
 
         // 4. Dice dừng quay
         RPC_StopDiceSpin();
+
+        // 3. Hiện số
+        RPC_ShowDiceResult(playerId, result);
 
         // 5. Ẩn xúc xắc
         RPC_HideDice();

@@ -61,6 +61,9 @@ public class PlayerController : NetworkBehaviour
     [Networked] private Vector3 ExternalVelocity { get; set; }
     [Networked] private float AttackTimer { get; set; }
 
+    [Networked]
+    public NetworkBool IsAttacking { get; private set; }
+
     [Networked] private NetworkBool IsRunning { get; set; }
     [Networked] private NetworkBool IsCrouching { get; set; }
     [Networked] private NetworkBool IsMoving { get; set; }
@@ -158,7 +161,12 @@ public class PlayerController : NetworkBehaviour
         if (AttackTimer > 0)
         {
             AttackTimer -= Runner.DeltaTime;
-            if (AttackTimer <= 0) AttackTimer = 0;
+            
+            if (AttackTimer <= 0)
+            {
+                AttackTimer = 0;
+                IsAttacking = false;
+            }
         }
 
         UpdateExternalVelocity();
@@ -175,11 +183,9 @@ public class PlayerController : NetworkBehaviour
             {
                 HandleAttack(input);
 
-                if (CurrentState != PlayerState.Attacking)
-                {
-                    Move(input);
-                    HandleJump(input);
-                }
+                Move(input);
+
+                HandleJump(input);
             }
         }
 
@@ -284,7 +290,7 @@ public class PlayerController : NetworkBehaviour
         if (IsKnockbacked) return;
 
         // Không spam attack
-        if (CurrentState == PlayerState.Attacking)
+        if (IsAttacking)
             return;
 
         bool canAttack =
@@ -293,7 +299,7 @@ public class PlayerController : NetworkBehaviour
 
         if (input.IsButtonPressed(PlayerInputData.BUTTON_PUNCH) && canAttack)
         {
-            CurrentState = PlayerState.Attacking;
+            IsAttacking = true;
 
             AttackTimer = attackDuration;
 
@@ -304,15 +310,7 @@ public class PlayerController : NetworkBehaviour
 
     private void UpdateState()
     {
-        // Giữ attack state
-        if (CurrentState == PlayerState.Attacking)
-        {
-            if (AttackTimer > 0)
-                return;
-
-            CurrentState = PlayerState.Idle;
-        }
-
+        
         bool isGrounded = _networkCC.Grounded;
 
         Vector3 velocity = _networkCC.Velocity;
@@ -450,8 +448,8 @@ public class PlayerController : NetworkBehaviour
         {
             if (
                 IsMoving &&
-                _targetMoveDirection.sqrMagnitude > 0.01f &&
-                CurrentState != PlayerState.Attacking
+                _targetMoveDirection.sqrMagnitude > 0.01f
+                
             )
             {
                 RotateTowards(_targetMoveDirection);
@@ -687,7 +685,7 @@ public class PlayerController : NetworkBehaviour
         if (!HasStateAuthority)
             return;
 
-        CurrentState = PlayerState.Idle;
+        IsAttacking = false;
 
         AttackTimer = 0;
     }
