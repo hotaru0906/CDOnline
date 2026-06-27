@@ -7,7 +7,9 @@ public enum UIPanelType
     Scoreboard,
     Result,
     MinigameTutorial,   // Tutorial trong minigame scene (mỗi scene khác nhau)
-    MinigameCountdown   // Countdown UI chính (dùng chung, không theo scene)
+    MinigameCountdown,   // Countdown UI chính (dùng chung, không theo scene)
+    MinigameSetting,    // MỚI — Setting panel trong minigame
+    MinigamePlayerHUD   // MỚI — Player info HUD dưới màn hình
 }
 
 /// <summary>
