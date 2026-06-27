@@ -53,7 +53,12 @@ public class BoardDiceVisual : MonoBehaviour
 
         if (isSpinning)
         {
-            pivot.Rotate(Vector3.up, spinSpeed * Time.deltaTime, Space.Self);
+            Vector3 spinAxis = new Vector3(1f, 0.3f, 0.8f).normalized;
+
+            pivot.Rotate(
+                spinAxis,
+                spinSpeed * Time.deltaTime,
+                Space.Self);
         }
     }
 
