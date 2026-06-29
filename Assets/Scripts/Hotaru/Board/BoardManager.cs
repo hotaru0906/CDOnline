@@ -33,6 +33,11 @@ public class BoardManager : NetworkBehaviour
 
     [Header("Debug")]
     [SerializeField] private bool showDebugPanel = true;
+    [SerializeField] private bool useDebugRoll = false;
+
+    [SerializeField]
+    [Range(1, 12)]
+    private int debugRollValue = 1;
     #endregion
 
     #region Networked State
@@ -390,7 +395,16 @@ public class BoardManager : NetworkBehaviour
 
         BoardState = BoardPhaseState.Rolling;
         int slot = CurrentSlot;
-        int result = dice != null ? dice.Roll() : Random.Range(2, 13);
+        int result;
+
+        if (useDebugRoll)
+        {
+            result = debugRollValue;
+        }
+        else
+        {
+            result = dice != null ? dice.Roll() : Random.Range(2, 13);
+        }
 
         result += _bonusSteps[slot];
         _bonusSteps[slot] = 0;
@@ -800,10 +814,26 @@ public class BoardManager : NetworkBehaviour
     {
         if (boardItemPool == null) return;
         var inv = PlayerItemInventory.GetForPlayer(playerId);
+
+        Debug.Log($"ResolveItem -> playerId = {playerId}");
+        Debug.Log($"Inventory NULL = {inv == null}");
         var item = boardItemPool.GetRandom();
         if (inv == null || item == null) return;
 
-        if (!inv.AddBoardItem(item.effectType))
+        bool ok = inv.AddBoardItem(item.effectType);
+
+        Debug.Log($"AddBoardItem returned = {ok}");
+
+        if (ok)
+        {
+            var ui = FindFirstObjectByType<BoardInventoryUI>();
+            if (ui != null)
+            {
+                ui.RefreshAfterRestore();
+            }
+        }
+
+        if (!ok)
             RPC_TileMessage(playerId, "[BOARD ITEMS FULL]");
         else
             RPC_TileMessage(playerId, $"GOT: {item.itemName} [{item.rarity}]");
@@ -1056,6 +1086,12 @@ public class BoardManager : NetworkBehaviour
 
             var inv = PlayerItemInventory.GetForPlayer(pid);
             if (inv == null) continue;
+
+            Debug.Log($"SAVE SLOT {i}: [{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
+
+            Debug.Log(
+            $"Before Save P{i}: " +
+            $"[{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
 
             GameManager.Instance?.SaveBoardItems(i,
                 inv.BoardItems.Get(0),

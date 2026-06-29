@@ -484,14 +484,33 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         {
             SpawnPlayerForScene(player);
         }
+
         if (SeatManager.Instance != null)
         {
             SeatManager.Instance.ResetAllSeats();
             SeatManager.Instance.AutoAssignAllPlayersToSeats();
         }
 
-        // Hide loading after all players spawned
-        yield return null; // Wait one more frame to ensure spawn completes
+        // Đợi player spawn xong
+        yield return null;
+
+        // Restore inventory nếu đang vào Board
+        if (GameManager.Instance != null &&
+            GameManager.Instance.CurrentState == GameState.Board)
+        {
+            GameManager.Instance.RestoreBoardItems();
+        }
+
+        // Đợi thêm 1 frame để PlayerNetworkData.Local được gán
+        yield return null;
+
+        // Refresh UI SAU KHI Local đã có
+        var ui = FindFirstObjectByType<BoardInventoryUI>();
+        if (ui != null)
+        {
+            ui.RefreshAfterRestore();
+        }
+
         LoadingScreen.Hide();
     }
 
