@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Audio; // THÊM
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -14,6 +15,9 @@ public class SFXManager : MonoBehaviour
 
     [Header("Audio Source")]
     [SerializeField] private AudioSource sfxSource;
+
+    [Header("Audio Mixer")] // THÊM
+    [SerializeField] private AudioMixer audioMixer; // kéo GameAudioMixer vào
 
     [Header("UI SFX Clips")]
     [SerializeField] private AudioClip buttonClickSound;
@@ -33,7 +37,9 @@ public class SFXManager : MonoBehaviour
     [SerializeField] private float minDistance3D = 1f;
     [SerializeField] private float maxDistance3D = 20f;
 
-    // Public properties for clips (để NetworkSFXController truy cập)
+    // Cache SFX Group để không tìm lại mỗi lần
+    private UnityEngine.Audio.AudioMixerGroup _sfxGroup; // THÊM
+
     public AudioClip WalkSound => walkSound;
     public AudioClip RunSound => runSound;
     public AudioClip JumpSound => jumpSound;
@@ -73,16 +79,12 @@ public class SFXManager : MonoBehaviour
             RegisterAllButtons();
     }
 
-    /// <summary>
-    /// Tự động thêm sound click cho tất cả Button trong scene
-    /// </summary>
     private void RegisterAllButtons()
     {
         Button[] allButtons = FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
         foreach (Button btn in allButtons)
         {
-            // Bỏ qua nếu button đã có UIButtonSound (custom sound)
             if (btn.GetComponent<UIButtonSound>() != null)
                 continue;
 
@@ -101,32 +103,38 @@ public class SFXManager : MonoBehaviour
             sfxSource.loop = false;
             sfxSource.playOnAwake = false;
         }
+
+        // THÊM — cache SFX Group và route sfxSource qua mixer
+        if (audioMixer != null)
+        {
+            var groups = audioMixer.FindMatchingGroups("SFX");
+            if (groups.Length > 0)
+            {
+                _sfxGroup = groups[0];
+                sfxSource.outputAudioMixerGroup = _sfxGroup;
+            }
+        }
+
+        // THÊM — volume AudioSource luôn 1, mixer tự quản lý
+        sfxSource.volume = 1f;
     }
 
     #region Local SFX Play Methods
 
-    /// <summary>
-    /// Phát SFX clip (local, 2D)
-    /// </summary>
     public void PlaySFX(AudioClip clip, float volumeScale = 1f)
     {
         if (!IsSFXEnabled() || clip == null || sfxSource == null) return;
-        sfxSource.PlayOneShot(clip, GetSFXVolume() * volumeScale);
+        // SỬA — volume = 1f vì mixer đã lo, chỉ dùng volumeScale để điều chỉnh tương đối
+        sfxSource.PlayOneShot(clip, volumeScale);
     }
 
-    /// <summary>
-    /// Phát SFX theo tên
-    /// </summary>
     public void PlaySFX(string soundName, float volumeScale = 1f)
     {
         AudioClip clip = GetSFXByName(soundName);
         if (clip != null)
-        {
             PlaySFX(clip, volumeScale);
-        }
     }
 
-    // UI Sounds
     public void PlayButtonClick() => PlaySFX(buttonClickSound);
     public void PlayButtonCancel() => PlaySFX(buttonCancelSound);
 
@@ -134,27 +142,20 @@ public class SFXManager : MonoBehaviour
 
     #region 3D Audio Methods
 
-    /// <summary>
-    /// Phát SFX 3D tại vị trí cụ thể (simple version)
-    /// </summary>
     public void PlaySFX3D(AudioClip clip, Vector3 position, float volumeScale = 1f)
     {
         if (!IsSFXEnabled() || clip == null) return;
-        AudioSource.PlayClipAtPoint(clip, position, GetSFXVolume() * volumeScale);
+        // SỬA — AudioSource.PlayClipAtPoint không support mixer
+        // Dùng PlaySFX3DAdvanced thay thế để route qua SFX Group
+        PlaySFX3DAdvanced(clip, position, volumeScale);
     }
 
-    /// <summary>
-    /// Phát SFX 3D theo tên tại vị trí cụ thể
-    /// </summary>
     public void PlaySFX3D(string soundName, Vector3 position, float volumeScale = 1f)
     {
         AudioClip clip = GetSFXByName(soundName);
         PlaySFX3D(clip, position, volumeScale);
     }
 
-    /// <summary>
-    /// Phát SFX 3D với kiểm soát distance chi tiết
-    /// </summary>
     public void PlaySFX3DAdvanced(AudioClip clip, Vector3 position, float volumeScale = 1f, bool loop = false)
     {
         if (!IsSFXEnabled() || clip == null) return;
@@ -164,23 +165,23 @@ public class SFXManager : MonoBehaviour
 
         AudioSource audioSource = tempAudio.AddComponent<AudioSource>();
         audioSource.clip = clip;
-        audioSource.volume = GetSFXVolume() * volumeScale;
+        audioSource.volume = volumeScale; // SỬA — mixer lo volume chính
         audioSource.spatialBlend = 1f;
         audioSource.minDistance = minDistance3D;
         audioSource.maxDistance = maxDistance3D;
         audioSource.rolloffMode = AudioRolloffMode.Linear;
         audioSource.loop = loop;
+
+        // THÊM — route qua SFX Group
+        if (_sfxGroup != null)
+            audioSource.outputAudioMixerGroup = _sfxGroup;
+
         audioSource.Play();
 
         if (!loop)
-        {
             Destroy(tempAudio, clip.length + 0.1f);
-        }
     }
 
-    /// <summary>
-    /// Tạo AudioSource 3D gắn vào object (cho looping sound như footsteps)
-    /// </summary>
     public AudioSource CreateAttached3DAudioSource(Transform parent, AudioClip clip, bool loop = true)
     {
         GameObject audioObj = new GameObject("Attached3DAudio");
@@ -189,13 +190,17 @@ public class SFXManager : MonoBehaviour
 
         AudioSource source = audioObj.AddComponent<AudioSource>();
         source.clip = clip;
-        source.volume = GetSFXVolume();
+        source.volume = 1f; // SỬA — mixer lo volume
         source.spatialBlend = 1f;
         source.minDistance = minDistance3D;
         source.maxDistance = maxDistance3D;
         source.rolloffMode = AudioRolloffMode.Linear;
         source.loop = loop;
         source.playOnAwake = false;
+
+        // THÊM — route qua SFX Group
+        if (_sfxGroup != null)
+            source.outputAudioMixerGroup = _sfxGroup;
 
         return source;
     }
