@@ -28,18 +28,23 @@ public class BoardInventoryUI : MonoBehaviour
     // INIT
     // =====================================================================
 
-    private void InitializeHands()
+    public void InitializeHands()
     {
         var bm = BoardManager.Instance;
         if (bm == null) return;
 
         int localId = GetLocalPlayerId();
 
+        Debug.Log($"[BoardInventoryUI] LocalId = {localId}");
+
         for (int i = 0; i < hands.Length; i++)
         {
             if (hands[i] == null) continue;
 
             int pid = bm.GetPlayerIDAtSlot(i);
+
+            Debug.Log($"[BoardInventoryUI] slot={i} pid={pid} isLocal={pid == localId}");
+            
             if (pid < 0)
             {
                 hands[i].gameObject.SetActive(false);
@@ -49,6 +54,18 @@ public class BoardInventoryUI : MonoBehaviour
             hands[i].gameObject.SetActive(true);
             hands[i].Initialize(pid, pid == localId);
         }
+    }
+
+    public void RefreshAfterRestore()
+    {
+        if (!_initialized)
+        {
+            InitializeHands();
+            _initialized = true;
+        }
+
+        foreach (var h in hands)
+            h?.RefreshHand();
     }
 
     // =====================================================================

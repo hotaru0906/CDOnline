@@ -33,6 +33,11 @@ public class BoardManager : NetworkBehaviour
 
     [Header("Debug")]
     [SerializeField] private bool showDebugPanel = true;
+    [SerializeField] private bool useDebugRoll = false;
+
+    [SerializeField]
+    [Range(1, 12)]
+    private int debugRollValue = 1;
     #endregion
 
     #region Networked State
@@ -64,6 +69,8 @@ public class BoardManager : NetworkBehaviour
 
     #region Local State
     private int _completedThisRound = 0;
+
+
     private bool _waitingForMyRoll = false;
 
     // Per-slot host state
@@ -222,6 +229,8 @@ public class BoardManager : NetworkBehaviour
     #endregion
 
     #region Start Board Phase
+
+
     public void StartBoardPhase(int[] rankOrder)
     {
         if (!HasStateAuthority) return;
@@ -271,7 +280,13 @@ public class BoardManager : NetworkBehaviour
         }
 
         for (int i = 0; i < count; i++)
-            if (tokens[i] != null) tokens[i].Initialize(playerIds[i], i, 0);
+        {
+            if (tokens[i] == null)
+                continue;
+
+            tokens[i].Initialize(playerIds[i], i, 0);
+        }
+        
     }
     #endregion
 
@@ -380,7 +395,16 @@ public class BoardManager : NetworkBehaviour
 
         BoardState = BoardPhaseState.Rolling;
         int slot = CurrentSlot;
-        int result = dice != null ? dice.Roll() : Random.Range(2, 13);
+        int result;
+
+        if (useDebugRoll)
+        {
+            result = debugRollValue;
+        }
+        else
+        {
+            result = dice != null ? dice.Roll() : Random.Range(2, 13);
+        }
 
         result += _bonusSteps[slot];
         _bonusSteps[slot] = 0;
@@ -781,6 +805,7 @@ public class BoardManager : NetworkBehaviour
         }
 
         _completedThisRound++;
+
         if (_completedThisRound >= ActivePlayerCount) CompleteBoardPhase();
         else AdvanceTurn();
     }
@@ -789,10 +814,26 @@ public class BoardManager : NetworkBehaviour
     {
         if (boardItemPool == null) return;
         var inv = PlayerItemInventory.GetForPlayer(playerId);
+
+        Debug.Log($"ResolveItem -> playerId = {playerId}");
+        Debug.Log($"Inventory NULL = {inv == null}");
         var item = boardItemPool.GetRandom();
         if (inv == null || item == null) return;
 
-        if (!inv.AddBoardItem(item.effectType))
+        bool ok = inv.AddBoardItem(item.effectType);
+
+        Debug.Log($"AddBoardItem returned = {ok}");
+
+        if (ok)
+        {
+            var ui = FindFirstObjectByType<BoardInventoryUI>();
+            if (ui != null)
+            {
+                ui.RefreshAfterRestore();
+            }
+        }
+
+        if (!ok)
             RPC_TileMessage(playerId, "[BOARD ITEMS FULL]");
         else
             RPC_TileMessage(playerId, $"GOT: {item.itemName} [{item.rarity}]");
@@ -1046,6 +1087,12 @@ public class BoardManager : NetworkBehaviour
             var inv = PlayerItemInventory.GetForPlayer(pid);
             if (inv == null) continue;
 
+            Debug.Log($"SAVE SLOT {i}: [{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
+
+            Debug.Log(
+            $"Before Save P{i}: " +
+            $"[{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
+
             GameManager.Instance?.SaveBoardItems(i,
                 inv.BoardItems.Get(0),
                 inv.BoardItems.Get(1),
@@ -1188,6 +1235,25 @@ public class BoardManager : NetworkBehaviour
         BoardCameraController.Instance?.FocusOnPlayer(stealerId);
     }
     #endregion
+
+    public int GetPlayerCountOnNode(int nodeID)
+    {
+        int count = 0;
+
+        if (tokens == null)
+            return 0;
+
+        foreach (var token in tokens)
+        {
+            if (token == null)
+                continue;
+
+            if (token.CurrentNodeID == nodeID)
+                count++;
+        }
+
+        return count;
+    }
 
     #region Callbacks
     private void OnBoardStateChanged()

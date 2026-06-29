@@ -137,6 +137,9 @@ public class GameManager : NetworkBehaviour
     public void SaveBoardItems(int slot, int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;
+
+        Debug.Log($"[GameManager] SAVE PlayerSlot={slot} [{s0}, {s1}, {s2}, {s3}]");
+
         switch (slot)
         {
             case 0: BoardItem_P0_S0 = s0; BoardItem_P0_S1 = s1; BoardItem_P0_S2 = s2; BoardItem_P0_S3 = s3; break;
@@ -853,56 +856,128 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        // Lấy ranking từ minigame vừa xong
         int[] ranking = GetLastMinigameRanking();
 
-        // Nếu chưa có ranking (round đầu tiên) thì dùng thứ tự ngẫu nhiên
         if (ranking.Length == 0)
         {
-            // Dùng Runner.ActivePlayers để lấy tất cả player đang kết nối
-            // (FindObjectsByType<PlayerNetworkData> không hoạt động khi ở scene khác)
             var playerList = new System.Collections.Generic.List<int>();
             foreach (var playerRef in Runner.ActivePlayers)
                 playerList.Add(playerRef.PlayerId);
 
             ranking = playerList.ToArray();
 
-            // Shuffle để random thứ tự lượt đầu
             for (int i = ranking.Length - 1; i > 0; i--)
             {
                 int j = UnityEngine.Random.Range(0, i + 1);
                 (ranking[i], ranking[j]) = (ranking[j], ranking[i]);
             }
+
             Debug.Log($"[GameManager] No ranking found — random order for first board: [{string.Join(", ", ranking)}]");
+            Debug.Log($"Board Number = {CurrentRound}");
         }
 
-        BoardManager.Instance.StartBoardPhase(ranking);
+        StartCoroutine(StartBoardWhenReady(ranking));
+    }
+
+    private IEnumerator StartBoardWhenReady(int[] ranking)
+    {
+        while (PlayerNetworkData.Local == null)
+            yield return null;
+
+        Debug.Log("[GameManager] Local Player ready -> Start Board");
+
         BoardManager.Instance.StartBoardPhase(ranking);
 
-        // Restore vị trí nếu đã từng chơi board trước đó
         int[] saved = GetBoardPositions();
         if (saved[0] != 0 || saved[1] != 0 || saved[2] != 0 || saved[3] != 0)
             BoardManager.Instance.RestoreBoardPositions(saved);
+    }
+
+    private void SaveCurrentBoardItems()
+    {
+        if (!HasStateAuthority) return;
+        if (BoardManager.Instance == null) return;
+
+        Debug.Log("========== SAVE CURRENT BOARD ITEMS ==========");
+
+        for (int slot = 0; slot < BoardManager.Instance.ActivePlayerCount; slot++)
+        {
+            int playerId = BoardManager.Instance.GetPlayerIDAtSlot(slot);
+            if (playerId < 0)
+                continue;
+
+            var inv = PlayerItemInventory.GetForPlayer(playerId);
+            if (inv == null)
+            {
+                Debug.LogWarning($"No inventory for Player {playerId}");
+                continue;
+            }
+
+            SaveBoardItems(
+                slot,
+                inv.BoardItems.Get(0),
+                inv.BoardItems.Get(1),
+                inv.BoardItems.Get(2),
+                inv.BoardItems.Get(3));
+
+            Debug.Log(
+                $"Saved Slot {slot}: " +
+                $"[{inv.BoardItems.Get(0)}, " +
+                $"{inv.BoardItems.Get(1)}, " +
+                $"{inv.BoardItems.Get(2)}, " +
+                $"{inv.BoardItems.Get(3)}]");
+        }
+    }
+
+    public void RestoreBoardItems()
+    {
+        Debug.Log($"Restore HasStateAuthority = {HasStateAuthority}");
+
         for (int i = 0; i < 4; i++)
         {
             int pid = BoardManager.Instance.GetPlayerIDAtSlot(i);
             if (pid < 0) continue;
 
             var inv = PlayerItemInventory.GetForPlayer(pid);
+            
+            if (inv != null)
+            {
+                Debug.Log($"Restore uses InstanceID={inv.GetInstanceID()}");
+            }
+
             if (inv == null) continue;
 
+            // <<< THÊM DÒNG NÀY
+            Debug.Log($"Inventory HasStateAuthority = {inv.HasStateAuthority}");
+
             int[] savedi = GetBoardItems(i);
+
             bool hasAny = false;
-            foreach (var v in savedi) if (v != -1) { hasAny = true; break; }
+            foreach (var v in savedi)
+                if (v != -1)
+                {
+                    hasAny = true;
+                    break;
+                }
+
             if (!hasAny) continue;
 
-            // Clear inventory trước rồi restore
+            // Clear inventory
             for (int s = 0; s < 4; s++)
                 inv.RemoveBoardItem(s);
 
+            // Restore inventory
             for (int s = 0; s < 4; s++)
+            {
                 if (savedi[s] != -1)
-                    inv.AddBoardItem((BoardItemEffect)savedi[s]);
+                {
+                    // <<< THAY DÒNG NÀY
+                    bool ok = inv.AddBoardItem((BoardItemEffect)savedi[s]);
+
+                    // <<< THÊM DÒNG NÀY
+                    Debug.Log($"Restore Add returned = {ok}");
+                }
+            }
 
             Debug.Log($"[GameManager] Restored Board items slot {i}: [{string.Join(", ", savedi)}]");
         }
@@ -1203,6 +1278,9 @@ public class GameManager : NetworkBehaviour
         if (sceneRef.IsValid)
         {
             Debug.Log($"[GameManager] Loading minigame scene: {minigameData.sceneName} (index {sceneIndex})");
+
+            SaveCurrentBoardItems();
+
             Runner.LoadScene(sceneRef);
         }
         else
