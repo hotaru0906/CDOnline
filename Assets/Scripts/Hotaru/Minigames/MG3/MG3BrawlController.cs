@@ -193,44 +193,40 @@ public class MG3BrawlController : BaseMinigameController
 
     private void FinalizeRanks()
     {
-        // eliminationOrder: index 0 = chết đầu tiên = rank cuối
-        // Rank 1 = người cuối cùng trong list (sống lâu nhất)
         int total = _eliminationOrder.Count;
-
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
 
         for (int i = 0; i < _eliminationOrder.Count; i++)
         {
-            int rank = total - i; // index 0 → rank cao nhất (last alive), index cuối → rank 1 thấp nhất
-
-            // Đảo ngược: người chết đầu tiên = rank cao nhất số (4th)
-            // người sống cuối = rank 1
-            rank = i + 1; // index 0 (chết đầu) = rank 4, index cuối (sống lâu) = rank 1
-            rank = total - i; // 1st = sống lâu nhất
+            // eliminationOrder[0] = chết đầu tiên = rank cao nhất số = rank total (VD: 4th)
+            // eliminationOrder[last] = sống lâu nhất = rank 1
+            int rank = total - i;
 
             foreach (var p in allData)
             {
                 if (p.Object.InputAuthority == _eliminationOrder[i])
                 {
-                    p.SetFinished(total - i, 0f);
+                    p.SetFinished(rank, 0f);
                     break;
                 }
             }
         }
+
+        ApplyHiddenScores(); // ← thêm dòng này
     }
 
-    protected override int[] BuildBoardRanking(PlayerRef winner)
-    {
-        // Rank board: người thắng đi trước
-        var ranking = new List<int>();
+    // protected override int[] BuildBoardRanking(PlayerRef winner)
+    // {
+    //     // Rank board: người thắng đi trước
+    //     var ranking = new List<int>();
 
-        // eliminationOrder cuối cùng = winner (rank 1)
-        // Đảo ngược để rank 1 lên đầu
-        for (int i = _eliminationOrder.Count - 1; i >= 0; i--)
-            ranking.Add(_eliminationOrder[i].PlayerId);
+    //     // eliminationOrder cuối cùng = winner (rank 1)
+    //     // Đảo ngược để rank 1 lên đầu
+    //     for (int i = _eliminationOrder.Count - 1; i >= 0; i--)
+    //         ranking.Add(_eliminationOrder[i].PlayerId);
 
-        return ranking.ToArray();
-    }
+    //     return ranking.ToArray();
+    // }
 
     // ----------------------------------------------------------------
     //  Scoreboard

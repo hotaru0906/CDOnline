@@ -196,6 +196,7 @@ public class MG2RacingController : BaseMinigameController
             Debug.Log($"[MG2RacingController] DNF rank {nextRank} → Player {p.Object.InputAuthority} (progress: {p.DistanceProgress:F0})");
             nextRank++;
         }
+        ApplyHiddenScores();
     }
 
     // ----------------------------------------------------------------
@@ -262,18 +263,18 @@ public class MG2RacingController : BaseMinigameController
         Debug.Log($"[MG2RacingController] ScoreboardResults built — {sorted.Count} entries.");
     }
 
-    protected override int[] BuildBoardRanking(PlayerRef winner)
-    {
-        if (_finishOrder != null && _finishOrder.Count > 0)
-        {
-            var ranking = new int[_finishOrder.Count];
-            for (int i = 0; i < _finishOrder.Count; i++)
-                ranking[i] = _finishOrder[i].PlayerId;
-            return ranking;
-        }
+    // protected override int[] BuildBoardRanking(PlayerRef winner)
+    // {
+    //     if (_finishOrder != null && _finishOrder.Count > 0)
+    //     {
+    //         var ranking = new int[_finishOrder.Count];
+    //         for (int i = 0; i < _finishOrder.Count; i++)
+    //             ranking[i] = _finishOrder[i].PlayerId;
+    //         return ranking;
+    //     }
 
-        return base.BuildBoardRanking(winner);
-    }
+    //     return base.BuildBoardRanking(winner);
+    // }
 
     protected override void LogScoreboardInfo()
     {

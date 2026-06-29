@@ -252,41 +252,6 @@ public abstract class BaseMinigameController : NetworkBehaviour
     /// </summary>
     protected virtual void BuildScoreboardResults() { }
 
-    /// <summary>
-    /// Tạo thứ tự player sẽ đi board phase.
-    /// Default: winner đi trước, các player còn lại theo PlayerId tăng dần.
-    /// </summary>
-    protected virtual int[] BuildBoardRanking(PlayerRef winner)
-    {
-        var ranking = new List<int>();
-
-        if (winner != PlayerRef.None)
-            ranking.Add(winner.PlayerId);
-
-        if (Runner == null)
-            return ranking.ToArray();
-
-        var playerIds = new List<int>();
-        foreach (var playerRef in Runner.ActivePlayers)
-        {
-            int playerId = playerRef.PlayerId;
-            if (playerId >= 0 && !playerIds.Contains(playerId))
-                playerIds.Add(playerId);
-        }
-
-        playerIds.Sort();
-
-        foreach (var playerId in playerIds)
-        {
-            if (playerId == winner.PlayerId)
-                continue;
-
-            ranking.Add(playerId);
-        }
-
-        return ranking.ToArray();
-    }
-
     // ----------------------------------------------------------------
     //  Countdown — managed by GameManager
     // ----------------------------------------------------------------
@@ -405,9 +370,50 @@ public abstract class BaseMinigameController : NetworkBehaviour
     protected virtual bool CheckGameEnd() { return false; }
 
     /// <summary>
-    /// Kết thúc game.
-    /// Derived class set Winner/rank trước, rồi gọi base.EndGame(winner).
+    /// Rank 1 = 20pt, 2 = 10pt, 3 = 5pt, 4+ = 0pt.
     /// </summary>
+    protected static int RankToHiddenScore(int rank) => rank switch
+    {
+        1 => 20,
+        2 => 10,
+        3 => 5,
+        _ => 0
+    };
+
+    /// <summary>
+    /// Gán HiddenScore cho tất cả players dựa theo FinishRank đã được set.
+    /// Gọi ở cuối FinalizeRanks() trong từng derived class.
+    /// </summary>
+    protected void ApplyHiddenScores()
+    {
+        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        foreach (var p in allData)
+            p.SetHiddenScore(RankToHiddenScore(p.FinishRank));
+    }
+
+    /// <summary>
+    /// BuildBoardRanking mặc định: sort theo HiddenScore giảm dần.
+    /// Derived class KHÔNG cần override nữa — chỉ cần gọi ApplyHiddenScores()
+    /// trong FinalizeRanks() là đủ.
+    /// </summary>
+    protected virtual int[] BuildBoardRanking(PlayerRef winner)
+    {
+        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        var sorted = new List<PlayerMinigameData>(allData);
+
+        // Sort HiddenScore cao → thấp (rank 1 lên đầu)
+        sorted.Sort((a, b) => b.HiddenScore.CompareTo(a.HiddenScore));
+
+        var ranking = new List<int>();
+        foreach (var p in sorted)
+        {
+            if (p.Object != null)
+                ranking.Add(p.Object.InputAuthority.PlayerId);
+        }
+
+        Debug.Log($"[{GetType().Name}] BoardRanking (by HiddenScore): [{string.Join(", ", ranking)}]");
+        return ranking.ToArray();
+    }
     protected virtual void EndGame(PlayerRef winner)
     {
         if (IsGameEnded) return;

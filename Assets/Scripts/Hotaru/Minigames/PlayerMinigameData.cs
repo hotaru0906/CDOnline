@@ -32,6 +32,7 @@ public class PlayerMinigameData : NetworkBehaviour
     [Networked] public float FinishTime { get; private set; }
     [Networked] public float DistanceProgress { get; private set; }
     [Networked] public int Score { get; private set; }
+    [Networked] public int HiddenScore { get; private set; }
 
     // Thêm OnChangedRender để client nhận callback khi Lives thay đổi
     [Networked, OnChangedRender(nameof(OnLivesChangedRender))]
@@ -107,7 +108,11 @@ public class PlayerMinigameData : NetworkBehaviour
     #endregion
 
     #region Public API
-
+    public void SetHiddenScore(int score)
+    {
+        if (!HasStateAuthority) return;
+        HiddenScore = score;
+    }
     public void ResetCheckpoint(Vector3 spawnPosition)
     {
         if (!HasStateAuthority) return;

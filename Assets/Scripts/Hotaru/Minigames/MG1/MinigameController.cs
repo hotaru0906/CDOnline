@@ -1,89 +1,129 @@
 using Fusion;
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// MG1 — Glass Bridge minigame controller.
-/// Win condition: Elimination (last player standing).
-/// Kế thừa BaseMinigameController — chỉ chứa logic riêng của MG1.
+/// Win condition: Ai về đích sớm nhất (Racing style).
+/// Kết thúc khi TẤT CẢ players về đích hoặc hết giờ.
 /// </summary>
 public class MinigameController : BaseMinigameController
 {
-    /// <summary>
-    /// Typed Instance cho MG1-specific code (VD: ScoreboardUI cần .Winner).
-    /// Trả về null nếu scene hiện tại không phải MG1.
-    /// </summary>
     public new static MinigameController Instance => BaseMinigameController.Instance as MinigameController;
 
     [Networked]
     public PlayerRef Winner { get; private set; }
 
     // ----------------------------------------------------------------
-    //  Win Condition — Elimination (last man standing)
+    //  Win Condition — kết thúc khi tất cả done
     // ----------------------------------------------------------------
 
     protected override void CheckWinCondition()
     {
-        // Chỉ check elimination nếu minigame không cho respawn
-        if (_minigameData != null && _minigameData.allowRespawn) return;
+        var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        if (allPlayers.Length == 0) return;
 
-        if (AlivePlayerCount > 1) return;
-
-        var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        PlayerRef lastSurvivor = PlayerRef.None;
-
-        foreach (var p in players)
+        foreach (var p in allPlayers)
         {
-            if (!p.IsEliminated)
-            {
-                lastSurvivor = p.Object.InputAuthority;
-                break;
-            }
+            if (!p.HasFinished && !p.IsEliminated)
+                return; // còn ít nhất 1 player chưa xong
         }
 
-        Debug.Log($"[MinigameController] Only 1 player remaining: {lastSurvivor}");
-        EndGame(lastSurvivor);
+        Debug.Log("[MinigameController] All players done — ending game.");
+        FinalizeRemainingByCheckpoint(); // xử lý ai chưa có rank (trường hợp eliminated)
+        PlayerRef winner = _finishOrder.Count > 0 ? _finishOrder[0] : PlayerRef.None;
+        EndGame(winner);
     }
 
     protected override void OnTimeUp()
     {
         Debug.Log("[MinigameController] Time's up!");
-        EndGame(FindSurvivorByCheckpoint());
-    }
-
-    /// <summary>Tìm player còn sống có checkpoint cao nhất khi hết giờ.</summary>
-    private PlayerRef FindSurvivorByCheckpoint()
-    {
-        var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        PlayerRef best = PlayerRef.None;
-        int bestCheckpoint = -1;
-
-        foreach (var p in players)
-        {
-            if (!p.IsEliminated && p.CurrentCheckpointIndex > bestCheckpoint)
-            {
-                bestCheckpoint = p.CurrentCheckpointIndex;
-                best = p.Object.InputAuthority;
-            }
-        }
-
-        return best;
+        FinalizeRemainingByCheckpoint();
+        PlayerRef winner = _finishOrder.Count > 0 ? _finishOrder[0] : PlayerRef.None;
+        EndGame(winner);
     }
 
     // ----------------------------------------------------------------
-    //  PlayerFinished — MG1 chỉ có 1 winner, kết thúc ngay
+    //  PlayerFinished — ghi nhận thứ tự, KHÔNG EndGame ngay
     // ----------------------------------------------------------------
 
     public override void PlayerFinished(PlayerRef playerRef)
     {
         if (!HasStateAuthority) return;
         if (IsGameEnded) return;
+        if (_finishOrder.Contains(playerRef)) return;
 
-        Debug.Log($"[MinigameController] Player {playerRef} finished!");
-        EndGame(playerRef);
+        _finishOrder.Add(playerRef);
+        int rank = _finishOrder.Count; // rank 1, 2, 3...
+        float elapsed = (_minigameData != null && _minigameData.timeLimit > 0f)
+            ? _minigameData.timeLimit - GameTimer
+            : 0f;
+
+        // Gán FinishRank cho player
+        var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        foreach (var p in allPlayers)
+        {
+            if (p.Object.InputAuthority == playerRef)
+            {
+                p.SetFinished(rank, elapsed);
+                break;
+            }
+        }
+
+        RPC_FreezeFinishedPlayer(playerRef);
+        RPC_ShowFinishUI(playerRef);
+
+        Debug.Log($"[MinigameController] Player {playerRef} finished — Rank {rank}");
+
+        CheckWinCondition();
     }
 
     // ----------------------------------------------------------------
-    //  EndGame — set Winner rồi gọi base
+    //  FinalizeRemainingByCheckpoint — timeout hoặc eliminated
+    // ----------------------------------------------------------------
+
+    private void FinalizeRemainingByCheckpoint()
+    {
+        var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+
+        var unfinished = new List<PlayerMinigameData>();
+        foreach (var p in allPlayers)
+            if (!p.HasFinished) unfinished.Add(p);
+
+        // Checkpoint cao hơn = gần đích hơn = rank tốt hơn
+        unfinished.Sort((a, b) => b.CurrentCheckpointIndex.CompareTo(a.CurrentCheckpointIndex));
+
+        int nextRank = _finishOrder.Count + 1;
+        foreach (var p in unfinished)
+        {
+            p.SetFinished(nextRank, 0f);
+            _finishOrder.Add(p.Object.InputAuthority);
+            Debug.Log($"[MinigameController] Timeout rank {nextRank} → P{p.Object.InputAuthority}");
+            nextRank++;
+        }
+    }
+
+    // ----------------------------------------------------------------
+    //  BuildBoardRanking — dùng _finishOrder như MG2
+    // ----------------------------------------------------------------
+
+    protected override int[] BuildBoardRanking(PlayerRef winner)
+    {
+        if (_finishOrder != null && _finishOrder.Count > 0)
+        {
+            var ranking = new int[_finishOrder.Count];
+            for (int i = 0; i < _finishOrder.Count; i++)
+                ranking[i] = _finishOrder[i].PlayerId;
+
+            Debug.Log($"[MinigameController] BoardRanking: [{string.Join(", ", ranking)}]");
+            return ranking;
+        }
+
+        return base.BuildBoardRanking(winner);
+    }
+
+    // ----------------------------------------------------------------
+    //  EndGame
     // ----------------------------------------------------------------
 
     protected override void EndGame(PlayerRef winner)
@@ -93,6 +133,29 @@ public class MinigameController : BaseMinigameController
         Winner = winner;
         RPC_OnPlayerWon(winner);
         base.EndGame(winner);
+    }
+
+    // ----------------------------------------------------------------
+    //  RPCs
+    // ----------------------------------------------------------------
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_FreezeFinishedPlayer(PlayerRef playerRef)
+    {
+        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        foreach (var p in players)
+        {
+            if (p.Object.InputAuthority != playerRef) continue;
+            p.SetFrozen(true);
+            break;
+        }
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowFinishUI(PlayerRef playerRef)
+    {
+        if (Runner.LocalPlayer == playerRef)
+            FinishUI.Instance?.ShowFinish();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -105,19 +168,43 @@ public class MinigameController : BaseMinigameController
     //  Scoreboard
     // ----------------------------------------------------------------
 
+    protected override void BuildScoreboardResults()
+    {
+        var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        var sorted = new List<PlayerMinigameData>(players);
+        sorted.Sort((a, b) => a.FinishRank.CompareTo(b.FinishRank));
+
+        for (int i = 0; i < ScoreboardResults.Length; i++)
+            ScoreboardResults.Set(i, default);
+
+        for (int i = 0; i < sorted.Count && i < ScoreboardResults.Length; i++)
+        {
+            var p = sorted[i];
+            ScoreboardResults.Set(i, new MinigameResultData
+            {
+                Player = p.Object.InputAuthority,
+                Rank = p.FinishRank > 0 ? p.FinishRank : (i + 1),
+                FinishTime = p.FinishTime,
+                Score = p.Score,
+                IsValid = true
+            });
+        }
+    }
+
     protected override void LogScoreboardInfo()
     {
-        Debug.Log("========== SCOREBOARD (MG1) ==========");
+        Debug.Log("========== SCOREBOARD (MG1 Glass Bridge) ==========");
+        var players = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        var sorted = new List<PlayerMinigameData>(players);
+        sorted.Sort((a, b) => a.FinishRank.CompareTo(b.FinishRank));
 
-        var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
-        foreach (var player in players)
+        foreach (var p in sorted)
         {
-            bool isWinner = Winner != PlayerRef.None &&
-                            player.Object.InputAuthority == Winner;
-            string status = isWinner ? "WINNER" : "LOSER";
-            Debug.Log($"[Scoreboard] {player.PlayerName}: {status}");
+            var netData = p.GetComponent<PlayerNetworkData>();
+            string name = netData != null ? netData.PlayerName.ToString() : $"P{p.Object.InputAuthority.PlayerId}";
+            string timeStr = p.FinishTime > 0f ? $"{p.FinishTime:F2}s" : "DNF";
+            Debug.Log($"[Scoreboard] #{p.FinishRank}: {name} — {timeStr}");
         }
-
-        Debug.Log("=======================================");
+        Debug.Log("====================================================");
     }
 }

@@ -161,7 +161,7 @@ public class PlayerController : NetworkBehaviour
         if (AttackTimer > 0)
         {
             AttackTimer -= Runner.DeltaTime;
-            
+
             if (AttackTimer <= 0)
             {
                 AttackTimer = 0;
@@ -310,7 +310,7 @@ public class PlayerController : NetworkBehaviour
 
     private void UpdateState()
     {
-        
+
         bool isGrounded = _networkCC.Grounded;
 
         Vector3 velocity = _networkCC.Velocity;
@@ -449,7 +449,7 @@ public class PlayerController : NetworkBehaviour
             if (
                 IsMoving &&
                 _targetMoveDirection.sqrMagnitude > 0.01f
-                
+
             )
             {
                 RotateTowards(_targetMoveDirection);
@@ -676,6 +676,12 @@ public class PlayerController : NetworkBehaviour
                 MG3BrawlController.Instance.IsGameStarted)
             {
                 MG3BrawlController.Instance.OnPlayerHit(this, other);
+            }
+            
+            if (MG5BombTagController.Instance != null &&
+            MG5BombTagController.Instance.IsGameStarted)
+            {
+                GetComponent<MG5BombTagPlayer>()?.OnAttackHit(other);
             }
         }
     }
