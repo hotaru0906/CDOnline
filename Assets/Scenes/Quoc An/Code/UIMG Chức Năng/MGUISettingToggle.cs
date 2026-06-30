@@ -3,6 +3,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// MGUI — Toggle Setting panel khi nhấn button hoặc ESC.
+/// Khóa input di chuyển + xoay camera khi mở.
 /// Gắn vào Setting Button.
 /// </summary>
 public class MGUISettingToggle : MonoBehaviour
@@ -19,7 +20,6 @@ public class MGUISettingToggle : MonoBehaviour
 
         settingButton.onClick.AddListener(Toggle);
 
-        // Đảm bảo panel ẩn lúc đầu
         if (settingPanel != null)
             settingPanel.SetActive(false);
     }
@@ -33,12 +33,17 @@ public class MGUISettingToggle : MonoBehaviour
     public void Toggle()
     {
         _isOpen = !_isOpen;
+
         if (settingPanel != null)
             settingPanel.SetActive(_isOpen);
 
-        // Pause input khi mở setting
+        // Khóa di chuyển nhân vật
         if (PlayerInputHandler.Instance != null)
             PlayerInputHandler.Instance.InputEnabled = !_isOpen;
+
+        // THÊM — Khóa xoay camera
+        if (CameraManager.Instance != null)
+            CameraManager.Instance.SetCameraRotationLocked(_isOpen);
 
         // Cursor
         if (CursorManager.Instance != null)
@@ -49,11 +54,11 @@ public class MGUISettingToggle : MonoBehaviour
     }
 
     /// <summary>
-    /// Gọi từ nút Close bên trong Setting panel.
+    /// Gọi từ nút Back/Close bên trong Setting panel.
     /// </summary>
     public void Close()
     {
-        _isOpen = true;
+        if (!_isOpen) return; // tránh toggle ngược nếu đã đóng
         Toggle();
     }
 }
