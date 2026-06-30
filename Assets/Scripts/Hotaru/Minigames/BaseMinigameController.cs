@@ -79,6 +79,63 @@ public abstract class BaseMinigameController : NetworkBehaviour
 
     protected NetworkRunner _minigameRunner;
 
+    // ============================================================
+    // KEY REWARD SYSTEM
+    // ============================================================
+    // Flow: Minigame kết thúc → BuildBoardRanking() trả về thứ tự
+    // rank (PlayerId theo rank 1 → N) → GrantKeysToPlayers() cộng
+    // key trực tiếp vào PlayerItemInventory.KeyCount của từng player
+    // → Board phase đọc KeyCount để cho phép mở khóa (logic mở khóa
+    // nằm bên Board, không thuộc phạm vi minigame).
+    //
+    // Chỉnh số lượng key mỗi rank tại các const bên dưới — áp dụng
+    // chung cho tất cả MG (MG1-MG5).
+    // ============================================================
+
+    [Header("Key Reward Settings")]
+    public const int KEY_REWARD_RANK_1 = 3; // Số key player hạng 1 nhận
+    public const int KEY_REWARD_RANK_2 = 2; // Số key player hạng 2 nhận
+    public const int KEY_REWARD_RANK_3 = 1; // Số key player hạng 3 nhận
+    public const int KEY_REWARD_RANK_4 = 0; // Số key player hạng 4 nhận
+
+    /// <summary>Trả về số key theo rank.</summary>
+    public static int GetKeyRewardForRank(int rank) => rank switch
+    {
+        1 => KEY_REWARD_RANK_1,
+        2 => KEY_REWARD_RANK_2,
+        3 => KEY_REWARD_RANK_3,
+        _ => KEY_REWARD_RANK_4
+    };
+
+    /// <summary>
+    /// Cấp key cho từng player dựa theo ranking cuối game.
+    /// ranking[0] = PlayerId hạng 1, ranking[1] = hạng 2, v.v.
+    /// Gọi trên host, ngay sau khi có ranking cuối cùng trong EndGame().
+    /// </summary>
+    protected virtual void GrantKeysToPlayers(int[] ranking)
+    {
+        if (ranking == null) return;
+
+        for (int i = 0; i < ranking.Length; i++)
+        {
+            int playerId = ranking[i];
+            int rank = i + 1; // ranking[0] = rank 1
+
+            int keyAmount = GetKeyRewardForRank(rank);
+            if (keyAmount <= 0) continue;
+
+            var inventory = PlayerItemInventory.GetForPlayer(playerId);
+            if (inventory == null)
+            {
+                Debug.LogWarning($"[{GetType().Name}] KeyReward: Inventory not found for P{playerId} (rank {rank})");
+                continue;
+            }
+
+            inventory.AddKey(keyAmount);
+            Debug.Log($"[{GetType().Name}] KeyReward: P{playerId} rank {rank} → +{keyAmount} key");
+        }
+    }
+
     // ----------------------------------------------------------------
     //  Lifecycle
     // ----------------------------------------------------------------
@@ -121,7 +178,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
         while (true)
         {
             var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-            Debug.Log($"[{GetType().Name}] Found {players.Length} players, need {_minigameData.minPlayers}"); // thêm dòng này
+            Debug.Log($"[{GetType().Name}] Found {players.Length} players, need {_minigameData.minPlayers}");
             if (players.Length >= _minigameData.minPlayers)
             {
                 Debug.Log($"[{GetType().Name}] All players ready!");
@@ -227,7 +284,6 @@ public abstract class BaseMinigameController : NetworkBehaviour
     {
         Debug.Log($"[{GetType().Name}] Scoreboard phase");
 
-        // Notify UI trên tất cả client — UI đọc ScoreboardResults và render bảng xếp hạng
         OnScoreboardReady?.Invoke();
 
         if (GameManager.Instance != null)
@@ -236,20 +292,12 @@ public abstract class BaseMinigameController : NetworkBehaviour
         LogScoreboardInfo();
     }
 
-    /// <summary>Hook gọi khi bước vào Playing phase. Override trong derived class nếu cần.</summary>
     protected virtual void OnGamePlayingStarted() { }
 
-    /// <summary>Hook gọi khi bước vào GameOver phase. Override trong derived class nếu cần.</summary>
     protected virtual void OnGameOver() { }
 
-    /// <summary>Log kết quả ra console. Override trong derived class.</summary>
     protected virtual void LogScoreboardInfo() { }
 
-    /// <summary>
-    /// Populate ScoreboardResults NetworkArray với kết quả cuối game.
-    /// Gọi từ EndGame() trên host, trước khi chuyển sang GameOver phase.
-    /// Override trong derived class.
-    /// </summary>
     protected virtual void BuildScoreboardResults() { }
 
     // ----------------------------------------------------------------
@@ -286,7 +334,6 @@ public abstract class BaseMinigameController : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        // Detect khi GameManager chuyển sang Playing state
         if (GameManager.Instance != null &&
             GameManager.Instance.CurrentState == GameState.Playing &&
             CurrentPhase != MinigamePhase.Playing)
@@ -295,7 +342,6 @@ public abstract class BaseMinigameController : NetworkBehaviour
             CurrentPhase = MinigamePhase.Playing;
         }
 
-        // GameOver → Scoreboard transition (2.5s sau EndGame)
         if (CurrentPhase == MinigamePhase.GameOver && ScoreboardTransitionTimer.Expired(Runner))
         {
             ScoreboardTransitionTimer = default;
@@ -304,18 +350,16 @@ public abstract class BaseMinigameController : NetworkBehaviour
 
         if (CurrentPhase != MinigamePhase.Playing || IsGameEnded) return;
 
-        // Đếm ngược timer
         if (GameTimer > 0f)
         {
             GameTimer -= Runner.DeltaTime;
 
-            // 🔑 Gọi update HUD mỗi tick
             OnGameTimerChanged();
 
             if (GameTimer <= 0f)
             {
                 GameTimer = 0f;
-                OnGameTimerChanged(); // update lần cuối
+                OnGameTimerChanged();
                 OnTimeUp();
                 return;
             }
@@ -325,48 +369,22 @@ public abstract class BaseMinigameController : NetworkBehaviour
         CheckWinCondition();
     }
 
-
-    /// <summary>Callback khi GameTimer thay đổi — UI có thể subscribe để hiện timer.</summary>
     protected virtual void OnGameTimerChanged() { }
 
     // ----------------------------------------------------------------
     //  Abstract / Virtual — bắt buộc override trong derived class
     // ----------------------------------------------------------------
 
-    /// <summary>
-    /// Kiểm tra điều kiện thắng mỗi FixedUpdate.
-    /// Gọi EndGame() khi điều kiện đạt được.
-    /// </summary>
     protected abstract void CheckWinCondition();
 
-    /// <summary>
-    /// Xử lý khi GameTimer về 0.
-    /// Tính rank cho những player chưa về đích, rồi gọi EndGame().
-    /// </summary>
     protected abstract void OnTimeUp();
 
-    /// <summary>
-    /// Gọi khi 1 player chạm FinishLine.
-    /// MG1: EndGame() ngay. MG2: lưu rank, tiếp tục game.
-    /// </summary>
     public virtual void PlayerFinished(PlayerRef playerRef) { }
 
-    /// <summary>
-    /// Hook gọi ngay sau khi 1 player về đích thành công.
-    /// Override để hiện rank UI, play effect riêng cho từng player, v.v.
-    /// </summary>
     protected virtual void OnPlayerFinished(PlayerRef playerRef) { }
 
-    /// <summary>
-    /// Tính toán thêm kết quả cuối game (bonus, score, v.v.).
-    /// Gọi trước EndGame(). Default: không làm gì.
-    /// </summary>
     protected virtual void CalculateResults() { }
 
-    /// <summary>
-    /// Kiểm tra có nên EndGame() ngay khi 1 player về đích không.
-    /// Default: false (tiếp tục game). MG1 override: return true (1 winner = game over ngay).
-    /// </summary>
     protected virtual bool CheckGameEnd() { return false; }
 
     /// <summary>
@@ -401,7 +419,6 @@ public abstract class BaseMinigameController : NetworkBehaviour
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         var sorted = new List<PlayerMinigameData>(allData);
 
-        // Sort HiddenScore cao → thấp (rank 1 lên đầu)
         sorted.Sort((a, b) => b.HiddenScore.CompareTo(a.HiddenScore));
 
         var ranking = new List<int>();
@@ -414,6 +431,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
         Debug.Log($"[{GetType().Name}] BoardRanking (by HiddenScore): [{string.Join(", ", ranking)}]");
         return ranking.ToArray();
     }
+
     protected virtual void EndGame(PlayerRef winner)
     {
         if (IsGameEnded) return;
@@ -425,12 +443,16 @@ public abstract class BaseMinigameController : NetworkBehaviour
 
         if (HasStateAuthority)
         {
-            // Build kết quả trước khi chuyển phase (data replicate cùng lúc với phase change)
             BuildScoreboardResults();
             ScoreboardTransitionTimer = TickTimer.CreateFromSeconds(Runner, 2.5f);
 
+            int[] finalRanking = BuildBoardRanking(winner);
+
             if (GameManager.Instance != null)
-                GameManager.Instance.SetMinigameRanking(BuildBoardRanking(winner));
+                GameManager.Instance.SetMinigameRanking(finalRanking);
+
+            // Cấp key cho player theo ranking — finalRanking[0] = rank 1, v.v.
+            GrantKeysToPlayers(finalRanking);
 
             if (GameManager.Instance != null)
                 GameManager.Instance.EndMinigame(winner.PlayerId);
@@ -483,7 +505,6 @@ public abstract class BaseMinigameController : NetworkBehaviour
             if (mgData != null) mgData.ResetCheckpoint(spawnPoint.position);
         }
 
-        // Sync vị trí xuống tất cả clients
         var positions = new Vector3[players.Length];
         var rotations = new Quaternion[players.Length];
         var playerRefs = new int[players.Length];
