@@ -7,13 +7,8 @@ public class MinigameFinishLine : BaseFinishLine
     [SerializeField] private ParticleSystem winEffect;
     [SerializeField] private AudioSource winSound;
 
-    [Networked]
-    private NetworkBool HasWinner { get; set; }
-
     protected override void HandlePlayerReachedFinish(PlayerController player)
     {
-        if (HasWinner) return;
-
         if (MinigameController.Instance == null)
         {
             Debug.LogError("[FinishLine] MinigameController null!");
@@ -23,14 +18,14 @@ public class MinigameFinishLine : BaseFinishLine
         if (!MinigameController.Instance.IsGameStarted) return;
         if (MinigameController.Instance.IsGameEnded) return;
 
-        HasWinner = true;
+        // Kiểm tra player này đã về đích chưa (tránh trigger 2 lần)
+        var mgData = player.GetComponent<PlayerMinigameData>();
+        if (mgData != null && mgData.HasFinished) return;
 
-        Debug.Log($"[FinishLine] WINNER: {player.Object.InputAuthority}");
+        Debug.Log($"[FinishLine] Player finished: {player.Object.InputAuthority}");
 
-        // Host quyết định winner
         MinigameController.Instance.PlayerFinished(player.Object.InputAuthority);
 
-        // Gửi effect xuống client
         RPC_PlayWinEffects();
     }
 

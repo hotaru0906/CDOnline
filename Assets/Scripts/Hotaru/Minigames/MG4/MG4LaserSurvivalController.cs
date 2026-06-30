@@ -27,7 +27,7 @@ public class MG4LaserSurvivalController : BaseMinigameController
     [SerializeField] private float batchDelay = 3f;
 
     private readonly List<PlayerRef> _eliminationOrder = new();
-    private int  _lastPhase  = 0;
+    private int _lastPhase = 0;
     private bool _batchRunning = false;
 
     private MG4Tank[] _allTanks;
@@ -44,7 +44,7 @@ public class MG4LaserSurvivalController : BaseMinigameController
         if (!HasStateAuthority) return;
 
         _eliminationOrder.Clear();
-        _lastPhase    = 0;
+        _lastPhase = 0;
         _batchRunning = false;
 
         // Cache tất cả tank trong scene
@@ -99,10 +99,10 @@ public class MG4LaserSurvivalController : BaseMinigameController
 
         float elapsed = Mathf.Clamp(total - GameTimer, 0f, total);
 
-        if      (elapsed < phase1Duration)                                          StartPhase(1);
-        else if (elapsed < phase1Duration + phase2Duration)                         StartPhase(2);
-        else if (elapsed < phase1Duration + phase2Duration + phase3Duration)        StartPhase(3);
-        else                                                                        StartPhase(4);
+        if (elapsed < phase1Duration) StartPhase(1);
+        else if (elapsed < phase1Duration + phase2Duration) StartPhase(2);
+        else if (elapsed < phase1Duration + phase2Duration + phase3Duration) StartPhase(3);
+        else StartPhase(4);
     }
 
     private void StartPhase(int phase)
@@ -225,7 +225,7 @@ public class MG4LaserSurvivalController : BaseMinigameController
         if (!HasStateAuthority) return;
 
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        var alive   = new List<PlayerMinigameData>();
+        var alive = new List<PlayerMinigameData>();
         foreach (var p in allData)
             if (!p.IsEliminated) alive.Add(p);
 
@@ -251,7 +251,7 @@ public class MG4LaserSurvivalController : BaseMinigameController
 
     private void FinalizeRanks()
     {
-        int total   = _eliminationOrder.Count;
+        int total = _eliminationOrder.Count;
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
 
         for (int i = 0; i < _eliminationOrder.Count; i++)
@@ -263,41 +263,43 @@ public class MG4LaserSurvivalController : BaseMinigameController
                 if (p.Object.InputAuthority == pRef) { p.SetFinished(rank, 0f); break; }
             }
         }
+
+        ApplyHiddenScores(); // ← thêm dòng này
     }
 
-    protected override int[] BuildBoardRanking(PlayerRef winner)
-    {
-        var allData = FindObjectsByType<PlayerMinigameData>(
-            FindObjectsSortMode.None);
+    // protected override int[] BuildBoardRanking(PlayerRef winner)
+    // {
+    //     var allData = FindObjectsByType<PlayerMinigameData>(
+    //         FindObjectsSortMode.None);
 
-        var sorted = new List<PlayerMinigameData>(allData);
+    //     var sorted = new List<PlayerMinigameData>(allData);
 
-        //rank nho hon = xep hang cao hon
-        sorted.Sort((a, b) =>
-            a.FinishRank.CompareTo(b.FinishRank));
+    //     //rank nho hon = xep hang cao hon
+    //     sorted.Sort((a, b) =>
+    //         a.FinishRank.CompareTo(b.FinishRank));
 
-        var ranking = new List<int>();
+    //     var ranking = new List<int>();
 
-        foreach (var p in sorted)
-        {
-            if (p.Object != null)
-            {
-                ranking.Add(
-                    p.Object.InputAuthority.PlayerId);
-            }
-        }
+    //     foreach (var p in sorted)
+    //     {
+    //         if (p.Object != null)
+    //         {
+    //             ranking.Add(
+    //                 p.Object.InputAuthority.PlayerId);
+    //         }
+    //     }
 
-        Debug.Log(
-            "[MG4] Ranking = " +
-            string.Join(", ", ranking));
-        
-        return ranking.ToArray();
-    }
+    //     Debug.Log(
+    //         "[MG4] Ranking = " +
+    //         string.Join(", ", ranking));
+
+    //     return ranking.ToArray();
+    // }
 
     protected override void BuildScoreboardResults()
     {
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        var sorted  = new List<PlayerMinigameData>(allData);
+        var sorted = new List<PlayerMinigameData>(allData);
         sorted.Sort((a, b) => a.FinishRank.CompareTo(b.FinishRank));
 
         for (int i = 0; i < ScoreboardResults.Length; i++)
@@ -308,11 +310,11 @@ public class MG4LaserSurvivalController : BaseMinigameController
             var p = sorted[i];
             ScoreboardResults.Set(i, new MinigameResultData
             {
-                Player     = p.Object.InputAuthority,
-                Rank       = p.FinishRank > 0 ? p.FinishRank : (i + 1),
-                Score      = p.Lives,
+                Player = p.Object.InputAuthority,
+                Rank = p.FinishRank > 0 ? p.FinishRank : (i + 1),
+                Score = p.Lives,
                 FinishTime = p.FinishTime,
-                IsValid    = true
+                IsValid = true
             });
         }
     }

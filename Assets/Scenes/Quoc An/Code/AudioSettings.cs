@@ -24,120 +24,136 @@ public class AudioSettings : MonoBehaviour
     [SerializeField] private Toggle bgmToggle;
     [SerializeField] private Toggle sfxToggle;
 
-    // ==============================
-    //         UNITY EVENTS
-    // ==============================
-    private void Start()
+    // ----------------------------------------------------------------
+    // Awake — set Mixer TRƯỚC khi AudioManager.Start() play nhạc
+    // ----------------------------------------------------------------
+    private void Awake()
     {
-        LoadAudioSettings(); // Load cài đặt đã lưu
-        BindSliderEvents();  // Gắn sự kiện cho Slider
+        ApplyMixerFromPrefs();
     }
 
-    // ==============================
-    //      BIND SLIDER EVENTS
-    // ==============================
+    private void Start()
+    {
+        LoadSliderValues();
+        BindSliderEvents();
+    }
+
+    // ----------------------------------------------------------------
+    // Set mixer ngay từ PlayerPrefs — không cần slider
+    // Gọi trong Awake để đảm bảo âm thanh đúng ngay từ đầu
+    // ----------------------------------------------------------------
+    private void ApplyMixerFromPrefs()
+    {
+        if (audioMixer == null) return;
+
+        audioMixer.SetFloat("MasterVolume", SliderToDB(PlayerPrefs.GetFloat("MasterVolume", 1f)));
+        audioMixer.SetFloat("MusicVolume",  SliderToDB(PlayerPrefs.GetFloat("MusicVolume",  1f)));
+        audioMixer.SetFloat("SFXVolume",    SliderToDB(PlayerPrefs.GetFloat("SFXVolume",    1f)));
+        audioMixer.SetFloat("UIVolume",     SliderToDB(PlayerPrefs.GetFloat("UIVolume",     1f)));
+    }
+
+    // ----------------------------------------------------------------
+    // Load giá trị vào slider — gọi trong Start()
+    // Slider.onValueChanged sẽ tự gọi SetXVolume() khi set value
+    // ----------------------------------------------------------------
+    private void LoadSliderValues()
+    {
+        // Tắt event trước khi set slider tránh trigger 2 lần
+        masterSlider.onValueChanged.RemoveAllListeners();
+        musicSlider.onValueChanged.RemoveAllListeners();
+        sfxSlider.onValueChanged.RemoveAllListeners();
+        uiSlider.onValueChanged.RemoveAllListeners();
+
+        masterSlider.value = PlayerPrefs.GetFloat("MasterVolume", 1f);
+        musicSlider.value  = PlayerPrefs.GetFloat("MusicVolume",  1f);
+        sfxSlider.value    = PlayerPrefs.GetFloat("SFXVolume",    1f);
+        uiSlider.value     = PlayerPrefs.GetFloat("UIVolume",     1f);
+
+        // Cập nhật label %
+        UpdateLabel(masterValueText, masterSlider.value);
+        UpdateLabel(musicValueText,  musicSlider.value);
+        UpdateLabel(sfxValueText,    sfxSlider.value);
+        UpdateLabel(uiValueText,     uiSlider.value);
+
+        // Load toggle
+        if (AudioManager.Instance != null)
+        {
+            if (bgmToggle != null) bgmToggle.isOn = AudioManager.Instance.IsBGMOn;
+            if (sfxToggle != null) sfxToggle.isOn = AudioManager.Instance.IsSFXOn;
+        }
+    }
+
     private void BindSliderEvents()
     {
-        // Gắn sự kiện thay đổi giá trị
         masterSlider.onValueChanged.AddListener(SetMasterVolume);
         musicSlider.onValueChanged.AddListener(SetMusicVolume);
         sfxSlider.onValueChanged.AddListener(SetSFXVolume);
         uiSlider.onValueChanged.AddListener(SetUIVolume);
 
-        // Gắn sự kiện cho toggle
-        if (bgmToggle != null)
-            bgmToggle.onValueChanged.AddListener(SetBGMEnabled);
-        if (sfxToggle != null)
-            sfxToggle.onValueChanged.AddListener(SetSFXEnabled);
+        if (bgmToggle != null) bgmToggle.onValueChanged.AddListener(SetBGMEnabled);
+        if (sfxToggle != null) sfxToggle.onValueChanged.AddListener(SetSFXEnabled);
     }
 
-    // ==============================
-    //       SET VOLUME FUNCTIONS
-    // ==============================
-
-    // Công thức: dB = log10(value) * 20
-    // Vì AudioMixer dùng dB (-80 đến 0)
+    // ----------------------------------------------------------------
+    // Set Volume — gọi khi kéo slider
+    // ----------------------------------------------------------------
 
     public void SetMasterVolume(float value)
     {
-        // Tránh log(0) = -infinity
-        float dB = value > 0.001f ? Mathf.Log10(value) * 20f : -80f;
-        audioMixer.SetFloat("MasterVolume", dB);
-
-        // Cập nhật label %
-        masterValueText.text = Mathf.RoundToInt(value * 100) + "%";
-
-        // Lưu vào PlayerPrefs
+        audioMixer.SetFloat("MasterVolume", SliderToDB(value));
+        UpdateLabel(masterValueText, value);
         PlayerPrefs.SetFloat("MasterVolume", value);
     }
 
     public void SetMusicVolume(float value)
     {
-        float dB = value > 0.001f ? Mathf.Log10(value) * 20f : -80f;
-        audioMixer.SetFloat("MusicVolume", dB);
-        musicValueText.text = Mathf.RoundToInt(value * 100) + "%";
+        audioMixer.SetFloat("MusicVolume", SliderToDB(value));
+        UpdateLabel(musicValueText, value);
         PlayerPrefs.SetFloat("MusicVolume", value);
     }
 
     public void SetSFXVolume(float value)
     {
-        float dB = value > 0.001f ? Mathf.Log10(value) * 20f : -80f;
-        audioMixer.SetFloat("SFXVolume", dB);
-        sfxValueText.text = Mathf.RoundToInt(value * 100) + "%";
+        audioMixer.SetFloat("SFXVolume", SliderToDB(value));
+        UpdateLabel(sfxValueText, value);
         PlayerPrefs.SetFloat("SFXVolume", value);
     }
 
     public void SetUIVolume(float value)
     {
-        float dB = value > 0.001f ? Mathf.Log10(value) * 20f : -80f;
-        audioMixer.SetFloat("UIVolume", dB);
-        uiValueText.text = Mathf.RoundToInt(value * 100) + "%";
+        audioMixer.SetFloat("UIVolume", SliderToDB(value));
+        UpdateLabel(uiValueText, value);
         PlayerPrefs.SetFloat("UIVolume", value);
     }
 
-    // ==============================
-    //    TOGGLE BGM / SFX (AudioManager)
-    // ==============================
+    // ----------------------------------------------------------------
+    // Toggle BGM / SFX
+    // ----------------------------------------------------------------
+
     public void SetBGMEnabled(bool isOn)
     {
         if (AudioManager.Instance != null)
             AudioManager.Instance.SetBGM(isOn);
+        PlayerPrefs.SetInt("BGM_On", isOn ? 1 : 0);
     }
 
     public void SetSFXEnabled(bool isOn)
     {
         if (AudioManager.Instance != null)
             AudioManager.Instance.SetSFX(isOn);
+        PlayerPrefs.SetInt("SFX_On", isOn ? 1 : 0);
     }
 
-    // ==============================
-    //       SAVE / LOAD
-    // ==============================
-    private void LoadAudioSettings()
+    // ----------------------------------------------------------------
+    // Apply / Reset
+    // ----------------------------------------------------------------
+
+    public void ApplySettings()
     {
-        // Load giá trị đã lưu, mặc định = 1 (100%)
-        float master = PlayerPrefs.GetFloat("MasterVolume", 1f);
-        float music  = PlayerPrefs.GetFloat("MusicVolume",  1f);
-        float sfx    = PlayerPrefs.GetFloat("SFXVolume",    1f);
-        float ui     = PlayerPrefs.GetFloat("UIVolume",     1f);
-
-        // Cập nhật Slider (sẽ tự gọi onValueChanged)
-        masterSlider.value = master;
-        musicSlider.value  = music;
-        sfxSlider.value    = sfx;
-        uiSlider.value     = ui;
-
-        // Load BGM/SFX toggle từ AudioManager
-        if (AudioManager.Instance != null)
-        {
-            if (bgmToggle != null)
-                bgmToggle.isOn = AudioManager.Instance.IsBGMOn;
-            if (sfxToggle != null)
-                sfxToggle.isOn = AudioManager.Instance.IsSFXOn;
-        }
+        PlayerPrefs.Save();
+        Debug.Log("[AudioSettings] Settings saved.");
     }
 
-    // Reset về mặc định
     public void ResetAudio()
     {
         masterSlider.value = 1f;
@@ -145,10 +161,25 @@ public class AudioSettings : MonoBehaviour
         sfxSlider.value    = 1f;
         uiSlider.value     = 1f;
 
-        // Reset toggles
-        if (bgmToggle != null)
-            bgmToggle.isOn = true;
-        if (sfxToggle != null)
-            sfxToggle.isOn = true;
+        if (bgmToggle != null) bgmToggle.isOn = true;
+        if (sfxToggle != null) sfxToggle.isOn = true;
+
+        PlayerPrefs.Save();
+    }
+
+    // ----------------------------------------------------------------
+    // Helpers
+    // ----------------------------------------------------------------
+
+    private float SliderToDB(float value)
+    {
+        value = Mathf.Clamp(value, 0.0001f, 1f);
+        return Mathf.Log10(value) * 20f;
+    }
+
+    private void UpdateLabel(TextMeshProUGUI label, float value)
+    {
+        if (label != null)
+            label.text = Mathf.RoundToInt(value * 100) + "%";
     }
 }

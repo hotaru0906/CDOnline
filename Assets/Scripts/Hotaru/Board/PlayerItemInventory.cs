@@ -29,6 +29,8 @@ public class PlayerItemInventory : NetworkBehaviour
 
     private static readonly Dictionary<int, PlayerItemInventory> _registry = new();
 
+    private static int _spawnedCount = 0;
+
     /// <summary>Tìm inventory của player theo PlayerId. Trả về null nếu chưa spawn.</summary>
     public static PlayerItemInventory GetForPlayer(int playerId)
     {
@@ -42,17 +44,27 @@ public class PlayerItemInventory : NetworkBehaviour
 
     public override void Spawned()
     {
+
+        Debug.Log(
+        $"Spawned InstanceID={GetInstanceID()} " +
+        $"PlayerId={Object.InputAuthority.PlayerId}");
+
         int playerId = Object.InputAuthority.PlayerId;
         _registry[playerId] = this;
 
+        Debug.Log(
+            $"Registry[{playerId}] = {GetInstanceID()}");
+
         if (HasStateAuthority)
         {
+            Debug.Log("INITIALIZE INVENTORY TO -1");
+
             for (int i = 0; i < MAX_BOARD_SLOTS; i++)
                 BoardItems.Set(i, -1);
+
             for (int i = 0; i < MAX_ROULETTE_SLOTS; i++)
                 RouletteItems.Set(i, -1);
         }
-
         Debug.Log($"[PlayerItemInventory] Registered for player {playerId}");
     }
 
@@ -72,6 +84,8 @@ public class PlayerItemInventory : NetworkBehaviour
     /// </summary>
     public bool AddBoardItem(BoardItemEffect effect)
     {
+        Debug.Log($"AddBoardItem HasStateAuthority = {HasStateAuthority}");
+
         if (!HasStateAuthority)
         {
             Debug.LogWarning("[PlayerItemInventory] AddBoardItem chỉ gọi được trên host!");
@@ -80,15 +94,20 @@ public class PlayerItemInventory : NetworkBehaviour
 
         for (int i = 0; i < MAX_BOARD_SLOTS; i++)
         {
+            Debug.Log($"Slot {i} = {BoardItems.Get(i)}");
+
             if (BoardItems.Get(i) == -1)
             {
                 BoardItems.Set(i, (int)effect);
-                Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} +Board:{effect} → slot {i}");
+
+                Debug.Log($"VERIFY Slot {i} = {BoardItems.Get(i)}");
+
+                Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} +Board:{effect} -> slot {i}");
                 return true;
             }
         }
 
-        Debug.LogWarning($"[Inventory] P{Object.InputAuthority.PlayerId} BoardItems FULL — từ chối {effect}");
+        Debug.LogWarning($"[Inventory] FULL");
         return false;
     }
 
