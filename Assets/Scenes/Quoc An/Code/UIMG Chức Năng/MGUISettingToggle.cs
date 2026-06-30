@@ -37,19 +37,22 @@ public class MGUISettingToggle : MonoBehaviour
         if (settingPanel != null)
             settingPanel.SetActive(_isOpen);
 
-        // Khóa di chuyển nhân vật
         if (PlayerInputHandler.Instance != null)
             PlayerInputHandler.Instance.InputEnabled = !_isOpen;
 
-        // THÊM — Khóa xoay camera
         if (CameraManager.Instance != null)
             CameraManager.Instance.SetCameraRotationLocked(_isOpen);
 
-        // Cursor
         if (CursorManager.Instance != null)
         {
-            if (_isOpen) CursorManager.Instance.ShowCursor();
-            else CursorManager.Instance.HideCursor();
+            if (_isOpen)
+            {
+                CursorManager.Instance.ShowCursor(); // luôn hiện cursor khi mở Setting
+            }
+            else
+            {
+                CursorManager.Instance.HideCursor(); // ẩn lại khi đóng, về lại gameplay
+            }
         }
     }
 
