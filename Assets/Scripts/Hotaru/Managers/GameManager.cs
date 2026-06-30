@@ -105,6 +105,19 @@ public class GameManager : NetworkBehaviour
     [Networked] public int BoardNodeSlot1 { get; private set; } = 0;
     [Networked] public int BoardNodeSlot2 { get; private set; } = 0;
     [Networked] public int BoardNodeSlot3 { get; private set; } = 0;
+    // ===== KEY STATE =====
+
+    // Node hiện tại của từng Key
+    [Networked] public int KeyNode0 { get; private set; } = -1;
+    [Networked] public int KeyNode1 { get; private set; } = -1;
+    [Networked] public int KeyNode2 { get; private set; } = -1;
+    [Networked] public int KeyNode3 { get; private set; } = -1;
+
+    // Key đã bị nhặt chưa
+    [Networked] public NetworkBool KeyCollected0 { get; private set; } = false;
+    [Networked] public NetworkBool KeyCollected1 { get; private set; } = false;
+    [Networked] public NetworkBool KeyCollected2 { get; private set; } = false;
+    [Networked] public NetworkBool KeyCollected3 { get; private set; } = false;
     [Networked] public int BoardItem_P0_S0 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S2 { get; private set; } = -1;
@@ -134,6 +147,64 @@ public class GameManager : NetworkBehaviour
     }
 
     public int[] GetBoardPositions() => new[] { BoardNodeSlot0, BoardNodeSlot1, BoardNodeSlot2, BoardNodeSlot3 };
+
+    public void SaveKeyState(int index, int nodeId, bool collected)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        switch (index)
+        {
+            case 0:
+                KeyNode0 = nodeId;
+                KeyCollected0 = collected;
+                break;
+
+            case 1:
+                KeyNode1 = nodeId;
+                KeyCollected1 = collected;
+                break;
+
+            case 2:
+                KeyNode2 = nodeId;
+                KeyCollected2 = collected;
+                break;
+
+            case 3:
+                KeyNode3 = nodeId;
+                KeyCollected3 = collected;
+                break;
+        }
+    }
+
+    public int GetKeyNode(int index)
+    {
+        return index switch
+        {
+            0 => KeyNode0,
+            1 => KeyNode1,
+            2 => KeyNode2,
+            3 => KeyNode3,
+            _ => -1
+        };
+    }
+
+    public bool GetKeyCollected(int index)
+    {
+        return index switch
+        {
+            0 => KeyCollected0,
+            1 => KeyCollected1,
+            2 => KeyCollected2,
+            3 => KeyCollected3,
+            _ => false
+        };
+    }
+
+    public bool HasSavedKeyState()
+    {
+        return KeyNode0 != -1;
+    }
     public void SaveBoardItems(int slot, int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;

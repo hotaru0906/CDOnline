@@ -24,6 +24,17 @@ public class PlayerItemInventory : NetworkBehaviour
     public NetworkArray<int> RouletteItems => default;
 
     // =====================================================================
+    // PLAYER RESOURCES
+    // =====================================================================
+
+    /// <summary>
+    /// Number of keys player owns.
+    /// Keys are resources, not board items.
+    /// </summary>
+    [Networked]
+    public int KeyCount { get; set; }
+
+    // =====================================================================
     // STATIC REGISTRY — tra cứu nhanh theo PlayerId
     // =====================================================================
 
@@ -64,6 +75,8 @@ public class PlayerItemInventory : NetworkBehaviour
 
             for (int i = 0; i < MAX_ROULETTE_SLOTS; i++)
                 RouletteItems.Set(i, -1);
+
+            KeyCount = 0;
         }
         Debug.Log($"[PlayerItemInventory] Registered for player {playerId}");
     }
@@ -213,6 +226,70 @@ public class PlayerItemInventory : NetworkBehaviour
             if (v != -1) list.Add((ItemEffect)v);
         }
         return list;
+    }
+
+    // =====================================================================
+    // KEY API
+    // =====================================================================
+
+    /// <summary>
+    /// Add keys to player.
+    /// </summary>
+    public void AddKey(int amount = 1)
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[PlayerItemInventory] AddKey chỉ được gọi trên Host!");
+            return;
+        }
+
+        if (amount <= 0)
+            return;
+
+        KeyCount += amount;
+
+        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} +{amount} Key (Total={KeyCount})");
+    }
+
+    /// <summary>
+    /// Check if player has at least one key.
+    /// </summary>
+    public bool HasKey()
+    {
+        return KeyCount > 0;
+    }
+
+    /// <summary>
+    /// Consume keys.
+    /// Returns false if player doesn't have enough keys.
+    /// </summary>
+    public bool ConsumeKey(int amount = 1)
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[PlayerItemInventory] ConsumeKey chỉ được gọi trên Host!");
+            return false;
+        }
+
+        if (amount <= 0)
+            return false;
+
+        if (KeyCount < amount)
+        {
+            Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} không đủ Key.");
+            return false;
+        }
+
+        KeyCount -= amount;
+
+        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} -{amount} Key (Remain={KeyCount})");
+
+        return true;
+    }
+
+    public int GetKeyCount()
+    {
+        return KeyCount;
     }
 }
 

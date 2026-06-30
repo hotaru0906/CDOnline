@@ -774,6 +774,8 @@ public class BoardManager : NetworkBehaviour
     {
         BoardState = BoardPhaseState.ResolvingTile;
 
+        BoardCollectableManager.Instance?.TryCollectKey(playerId, finalNodeID);
+
         switch (tileType)
         {
             case TileType.Steal:
@@ -1299,6 +1301,7 @@ public class BoardManager : NetworkBehaviour
             var rItems = inv.GetRouletteItems();
             GUILayout.Label($"  P{pid} Board[{bItems.Count}/4]:{(bItems.Count > 0 ? string.Join(",", bItems) : "-")}");
             GUILayout.Label($"       Rlt[{rItems.Count}/8]:{(rItems.Count > 0 ? string.Join(",", rItems) : "-")}");
+            GUILayout.Label($"       Keys: {inv.GetKeyCount()}");
         }
 
         if (_lastTileMessageTimer > 0f && _lastTileMessage.Length > 0)
@@ -1371,6 +1374,22 @@ public class BoardManager : NetworkBehaviour
                 }
                 GUI.color = Color.white;
             }
+
+            GUILayout.Space(5);
+
+            GUI.color = Color.yellow;
+
+            if (GUILayout.Button("Give 1 Key To Current Player"))
+            {
+                var inv = PlayerItemInventory.GetForPlayer(CurrentPlayerID);
+
+                if (inv != null)
+                {
+                    inv.AddKey();
+                }
+            }
+
+            GUI.color = Color.white;
         }
 
         GUILayout.EndArea();
