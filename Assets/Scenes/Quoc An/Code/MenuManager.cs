@@ -75,10 +75,44 @@ public class MenuManager : MonoBehaviour
     public void ShowFindLobby() => SwitchScreen(canvasFindLobby);
     public void ShowCreateRoom() => SwitchScreen(canvasCreateRoom);
 
+    /// <summary>
+    /// ✅ Gọi khi nhấn nút Settings
+    /// </summary>
     public void ShowSettings()
     {
         if (settingsManager != null)
+        {
             settingsManager.OpenSettings();
+            // SettingsManager sẽ tự gọi OnSettingsOpened()
+        }
+    }
+
+    /// <summary>
+    /// ✅ Gọi từ SettingsManager khi MỞ settings
+    /// </summary>
+    public void OnSettingsOpened()
+    {
+        // Ẩn current screen (thường là canvasMainMenu)
+        if (_currentScreen != null)
+        {
+            _currentScreen.SetActive(false);
+        }
+
+        Debug.Log("🔧 Settings opened - Menu hidden");
+    }
+
+    /// <summary>
+    /// ✅ Gọi từ SettingsManager khi ĐÓNG settings
+    /// </summary>
+    public void OnSettingsClosed()
+    {
+        // Hiện lại current screen
+        if (_currentScreen != null)
+        {
+            _currentScreen.SetActive(true);
+        }
+
+        Debug.Log("🏠 Settings closed - Menu restored");
     }
 
     public void ShowItemUI()
@@ -113,7 +147,6 @@ public class MenuManager : MonoBehaviour
             _currentScreen.SetActive(false);
         }
 
-        // Chuyển screen ngay lập tức - không cần loading cho menu navigation
         _currentScreen = targetScreen;
         _currentScreen.SetActive(true);
     }
@@ -135,9 +168,7 @@ public class MenuManager : MonoBehaviour
             return;
         }
 
-        // Loading is shown in LobbyRunner.CreateSession()
         lobbyRunner.CreateSession(roomName);
-        // Loading will be hidden in PlayerNetworkData.Spawned() when player spawns successfully
     }
     #endregion
 

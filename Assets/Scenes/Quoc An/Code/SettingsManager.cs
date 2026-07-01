@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 
 public class SettingsManager : MonoBehaviour
 {
@@ -26,11 +27,18 @@ public class SettingsManager : MonoBehaviour
     [Header("=== Settings Canvas ===")]
     [SerializeField] private GameObject settingsCanvas;
 
+    [Header("=== Menu Manager Reference ===")]
+    [SerializeField] private MenuManager menuManager; // ✅ Kéo MenuManager vào đây
+
+    [Header("=== Events ===")]
+    public UnityEvent OnSettingsOpened;  // ✅ Event khi mở settings
+    public UnityEvent OnSettingsClosed;  // ✅ Event khi đóng settings
+
     private GameObject _currentPanel;
 
     private void Start()
     {
-        btnAudio.onClick.AddListener(()    => SwitchTab(audioPanel));
+        btnAudio.onClick.AddListener(() => SwitchTab(audioPanel));
         btnGraphics.onClick.AddListener(() => SwitchTab(graphicsPanel));
         btnGameplay.onClick.AddListener(() => SwitchTab(gameplayPanel));
 
@@ -41,7 +49,6 @@ public class SettingsManager : MonoBehaviour
         SwitchTab(audioPanel);
     }
 
-    // ✅ Đổi thành public để thấy trong Inspector
     public void SwitchTab(GameObject targetPanel)
     {
         audioPanel.SetActive(false);
@@ -52,14 +59,12 @@ public class SettingsManager : MonoBehaviour
         _currentPanel = targetPanel;
     }
 
-    // ✅ Đổi thành public
     public void ApplySettings()
     {
         PlayerPrefs.Save();
         Debug.Log("✅ Settings Saved!");
     }
 
-    // ✅ Đổi thành public
     public void ResetAllSettings()
     {
         audioSettings.ResetAudio();
@@ -68,16 +73,38 @@ public class SettingsManager : MonoBehaviour
         Debug.Log("🔄 Settings Reset to Default!");
     }
 
-    // ✅ Đổi thành public
+    /// <summary>
+    /// ✅ Đóng Settings → Hiện lại UI Menu
+    /// </summary>
     public void CloseSettings()
     {
         settingsCanvas.SetActive(false);
+
+        // ✅ Thông báo cho MenuManager hiện lại canvas
+        if (menuManager != null)
+        {
+            menuManager.OnSettingsClosed();
+        }
+
+        // ✅ Invoke event nếu có script khác cần lắng nghe
+        OnSettingsClosed?.Invoke();
     }
 
-    // ✅ Đã public sẵn
+    /// <summary>
+    /// ✅ Mở Settings → Ẩn UI Menu
+    /// </summary>
     public void OpenSettings()
     {
         settingsCanvas.SetActive(true);
         SwitchTab(audioPanel);
+
+        // ✅ Thông báo cho MenuManager ẩn canvas
+        if (menuManager != null)
+        {
+            menuManager.OnSettingsOpened();
+        }
+
+        // ✅ Invoke event nếu có script khác cần lắng nghe
+        OnSettingsOpened?.Invoke();
     }
 }
