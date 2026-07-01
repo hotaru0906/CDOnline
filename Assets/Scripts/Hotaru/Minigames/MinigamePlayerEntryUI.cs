@@ -8,6 +8,7 @@ public class MinigamePlayerEntryUI : MonoBehaviour
     [SerializeField] private Sprite[] characterAvatars;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text livesText;
+    [SerializeField] private Slider hpSlider;  // HP bar slider (0-100)
     [SerializeField] private GameObject eliminatedOverlay;
     [SerializeField] private Image backgroundImage;
 
@@ -35,8 +36,7 @@ public class MinigamePlayerEntryUI : MonoBehaviour
         if (backgroundImage != null)
             backgroundImage.color = slotColor;
 
-
-
+        SetHP(lives);
         SetEliminated(isEliminated);
     }
 
@@ -65,5 +65,21 @@ public class MinigamePlayerEntryUI : MonoBehaviour
             return;
 
         iconImage.sprite = characterAvatars[characterIndex];
+    }
+    public void SetHP(int hp)
+    {
+        if (hpSlider != null)
+        {
+            hpSlider.minValue = 0;
+            hpSlider.maxValue = 100;
+            hpSlider.value = hp;
+        }
+    }
+
+    public void UpdateHP(int hp)
+    {
+        if (livesText != null)
+            livesText.text = hp.ToString();
+        SetHP(hp);
     }
 }

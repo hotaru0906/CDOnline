@@ -296,9 +296,8 @@ public class GameManager : NetworkBehaviour
         // Called when NetworkObject is spawned
         Debug.Log($"[GameManager] Spawned. IsHost: {HasStateAuthority}");
 
-        // Tìm UI references bằng tag
         FindUIReferences();
-        InitializeUIState();
+        HandleStateChange();
     }
 
     /// <summary>
@@ -547,24 +546,6 @@ public class GameManager : NetworkBehaviour
         }
 
         Debug.Log("[GameManager] Showing scoreboard");
-    }
-
-    private void InitializeUIState()
-    {
-        // Đảm bảo luôn tìm lại UI trước khi set
-        FindUIReferences();
-
-        // Ẩn tất cả trước
-        SetActiveUI(lobbyUI, false);
-        SetActiveUI(votingUI, false);
-        SetActiveUI(scoreboardUI, false);
-        SetActiveUI(resultUI, false);
-        SetActiveUI(minigameCountdownUI, false);
-
-        // Chỉ bật Lobby
-        SetActiveUI(lobbyUI, true);
-
-        Debug.Log("[GameManager] Initialize UI: Only LobbyUI is active");
     }
     public bool AreAllPlayersReady()
     {
@@ -1010,7 +991,7 @@ public class GameManager : NetworkBehaviour
             if (pid < 0) continue;
 
             var inv = PlayerItemInventory.GetForPlayer(pid);
-            
+
             if (inv != null)
             {
                 Debug.Log($"Restore uses InstanceID={inv.GetInstanceID()}");
@@ -1213,11 +1194,8 @@ public class GameManager : NetworkBehaviour
             CursorManager.Instance.ShowCursor();
         }
 
-        // Khôi phục lobby BGM khi về lobby
-        if (AudioManager.Instance != null && AudioManager.Instance.IsPlayingMinigameBGM)
-        {
-            AudioManager.Instance.OnMinigameEnd();
-        }
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.EnterMainBGM();
 
         // Reset player ready states (host only)
         if (HasStateAuthority)
@@ -1298,12 +1276,6 @@ public class GameManager : NetworkBehaviour
         if (PlayerInputHandler.Instance != null)
         {
             PlayerInputHandler.Instance.InputEnabled = false;
-        }
-
-        // Fade out lobby BGM khi bắt đầu load minigame scene
-        if (AudioManager.Instance != null)
-        {
-            AudioManager.Instance.OnEnterMinigameLoading();
         }
 
         // HOST: Load scene minigame
@@ -1390,15 +1362,9 @@ public class GameManager : NetworkBehaviour
             CursorManager.Instance.HideCursor();
         }
 
-        // Bật minigame BGM khi bắt đầu chơi
+        var mgData = CurrentMinigameData;
         if (AudioManager.Instance != null)
-        {
-            var mgData = CurrentMinigameData;
-            if (mgData != null && mgData.minigameBGM != null)
-                AudioManager.Instance.OnMinigameStart(mgData.minigameBGM);
-            else
-                AudioManager.Instance.OnMinigameStart();
-        }
+            AudioManager.Instance.EnterMinigameBGM(mgData?.minigameBGM);
     }
 
     /// <summary>
@@ -1513,7 +1479,9 @@ public class GameManager : NetworkBehaviour
         if (PlayerInputHandler.Instance != null)
             PlayerInputHandler.Instance.InputEnabled = false;
 
-        // HOST: load BoardScene
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.EnterMainBGM();
+            
         if (!HasStateAuthority) return;
 
         int sceneIndex = GetSceneIndex(boardSceneName);
