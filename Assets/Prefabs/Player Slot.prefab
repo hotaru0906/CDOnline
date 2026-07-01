@@ -65,8 +65,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
+  m_Sprite: {fileID: 21300000, guid: 0bf48cbb32e1f4d2bbc1a43e1b8de247, type: 3}
+  m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -140,8 +140,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
+  m_Sprite: {fileID: 21300000, guid: d35a4e5c46c6344b18e12163057a6968, type: 3}
+  m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -476,9 +476,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   iconImage: {fileID: 4963248724466440121}
+  characterAvatars:
+  - {fileID: 21300000, guid: 25a8f6beb72de1b4e821b8eb17db5c86, type: 3}
+  - {fileID: 21300000, guid: efbbd12eafa2363498891767b5962793, type: 3}
+  - {fileID: 21300000, guid: 8293020f731e35f4cbb257c593544e75, type: 3}
+  - {fileID: 21300000, guid: 38a7167afdde9c842b6d58d1b8fe6154, type: 3}
   nameText: {fileID: 4058551701602771096}
   livesText: {fileID: 3917542411728675872}
-  livesIcon: {fileID: 6193901686729183710}
+  eliminatedOverlay: {fileID: 0}
+  backgroundImage: {fileID: 0}
 --- !u!1 &8235721554901177245
 GameObject:
   m_ObjectHideFlags: 0
@@ -514,7 +520,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
   m_AnchoredPosition: {x: 50, y: 0}
-  m_SizeDelta: {x: 100, y: 100}
+  m_SizeDelta: {x: 75, y: 75}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &617026539371692458
 CanvasRenderer:
