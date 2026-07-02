@@ -274,6 +274,9 @@ public abstract class BaseMinigameController : NetworkBehaviour
                 ? _minigameData.timeLimit
                 : 0f;
 
+            // Cập nhật HUD ngay khi vào phase Playing để hiện đúng mốc thời gian ban đầu.
+            OnGameTimerChanged();
+
             UpdateAlivePlayerCount();
         }
 
@@ -391,7 +394,10 @@ public abstract class BaseMinigameController : NetworkBehaviour
         CheckWinCondition();
     }
 
-    protected virtual void OnGameTimerChanged() { }
+    protected virtual void OnGameTimerChanged()
+    {
+        MinigameHUDController.Instance?.SetTime(GameTimer);
+    }
 
     // ----------------------------------------------------------------
     //  Abstract / Virtual — bắt buộc override trong derived class

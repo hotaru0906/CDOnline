@@ -111,7 +111,7 @@ public class MG3BrawlController : BaseMinigameController
 
     protected override void OnGameTimerChanged()
     {
-        MinigameHUDController.Instance?.SetTime(GameTimer);
+        base.OnGameTimerChanged();
     }
 
 
