@@ -13,9 +13,6 @@ public class MinigameController : BaseMinigameController
 
     [Networked]
     public PlayerRef Winner { get; private set; }
-    private bool _isSpectating = false;
-    private int _spectateIndex = 0;
-    private List<PlayerController> _activePlayers = new();
 
     // ----------------------------------------------------------------
     //  Win Condition — kết thúc khi tất cả done
@@ -26,18 +23,16 @@ public class MinigameController : BaseMinigameController
         var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         if (allPlayers.Length == 0) return;
 
-        int totalPlayers = allPlayers.Length;
-        int finishedCount = _finishOrder.Count;
-
-        // End game khi N-1 players về đích (không cần đợi player cuối cùng)
-        // Ví dụ: 4 players → end khi 3 player về đích
-        if (finishedCount >= totalPlayers - 1)
+        foreach (var p in allPlayers)
         {
-            Debug.Log($"[MinigameController] {finishedCount}/{totalPlayers} players done — ending game.");
-            FinalizeRemainingByCheckpoint(); // xử lý player còn lại
-            PlayerRef winner = _finishOrder.Count > 0 ? _finishOrder[0] : PlayerRef.None;
-            EndGame(winner);
+            if (!p.HasFinished && !p.IsEliminated)
+                return; // còn ít nhất 1 player chưa xong
         }
+
+        Debug.Log("[MinigameController] All players done — ending game.");
+        FinalizeRemainingByCheckpoint(); // xử lý ai chưa có rank (trường hợp eliminated)
+        PlayerRef winner = _finishOrder.Count > 0 ? _finishOrder[0] : PlayerRef.None;
+        EndGame(winner);
     }
 
     protected override void OnTimeUp()
@@ -81,33 +76,6 @@ public class MinigameController : BaseMinigameController
         Debug.Log($"[MinigameController] Player {playerRef} finished — Rank {rank}");
 
         CheckWinCondition();
-    }
-
-    private void SwitchCameraToActivePlayer()
-    {
-        _isSpectating = true;
-        _spectateIndex = 0;
-        _activePlayers.Clear();
-
-        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        foreach (var data in allData)
-        {
-            if (data.HasFinished || data.IsEliminated) continue;
-            if (data.Object.InputAuthority == Runner.LocalPlayer) continue;
-            var pc = data.GetComponent<PlayerController>();
-            if (pc != null) _activePlayers.Add(pc);
-        }
-
-        if (_activePlayers.Count == 0) return;
-
-        var target = _activePlayers[0];
-        if (CameraManager.Instance != null)
-        {
-            CameraManager.Instance.UpdatePlayerTarget(target.transform);
-            CameraManager.Instance.SwitchToThirdPersonCamera();
-        }
-
-        Debug.Log($"[Spectate] Started — Camera → P{target.Object.InputAuthority}");
     }
 
     // ----------------------------------------------------------------
@@ -178,13 +146,7 @@ public class MinigameController : BaseMinigameController
         foreach (var p in players)
         {
             if (p.Object.InputAuthority != playerRef) continue;
-
             p.SetFrozen(true);
-
-            // Nếu đây là local player → chuyển camera sang player khác
-            if (Runner.LocalPlayer == playerRef)
-                SwitchCameraToActivePlayer();
-
             break;
         }
     }

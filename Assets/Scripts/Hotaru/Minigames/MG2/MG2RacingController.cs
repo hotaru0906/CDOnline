@@ -1,6 +1,18 @@
 using Fusion;
 using UnityEngine;
 using System.Collections.Generic;
+
+/// <summary>
+/// MG2 — Racing minigame controller.
+/// Win condition: Ranked (thứ tự về đích).
+/// Kế thừa BaseMinigameController — chỉ chứa logic riêng của racing minigame.
+/// 
+/// Flow:
+///   Player chạm MG2RacingFinishLine
+///       → PlayerFinished() lưu rank + thời gian
+///       → Tiếp tục cho đến khi TẤT CẢ players về đích
+///       → Hoặc hết giờ → FinalizeRanks() theo DistanceProgress
+/// </summary>
 public class MG2RacingController : BaseMinigameController
 {
     private bool _isSpectating = false;
@@ -51,25 +63,17 @@ public class MG2RacingController : BaseMinigameController
         var allPlayers = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         if (allPlayers.Length == 0) return;
 
-        int totalPlayers = allPlayers.Length;
-        int doneCount = 0;
-
-        // Đếm số player đã về đích hoặc bị eliminated
+        // Game kết thúc khi TẤT CẢ players đã về đích hoặc bị eliminated
         foreach (var p in allPlayers)
         {
-            if (p.HasFinished || p.IsEliminated)
-                doneCount++;
+            if (!p.HasFinished && !p.IsEliminated)
+                return; // còn ít nhất 1 player đang racing
         }
 
-        // End game khi N-1 players done (không cần đợi player cuối cùng)
-        // Ví dụ: 4 players → end khi 3 player về đích/loại
-        if (doneCount >= totalPlayers - 1)
-        {
-            Debug.Log($"[MG2RacingController] {doneCount}/{totalPlayers} players done — ending game.");
-            FinalizeRanks(); // xử lý eliminated players chưa có rank
-            PlayerRef winner = _finishOrder.Count > 0 ? _finishOrder[0] : PlayerRef.None;
-            EndGame(winner);
-        }
+        Debug.Log("[MG2RacingController] All players done — ending game.");
+        FinalizeRanks(); // xử lý eliminated players chưa có rank
+        PlayerRef winner = _finishOrder.Count > 0 ? _finishOrder[0] : PlayerRef.None;
+        EndGame(winner);
     }
 
     protected override void OnTimeUp()
@@ -231,13 +235,13 @@ public class MG2RacingController : BaseMinigameController
         var sorted = new List<PlayerMinigameData>(players);
 
         sorted.Sort((a, b) =>
-{
-    if (a.FinishRank == 0 && b.FinishRank == 0)
-        return b.DistanceProgress.CompareTo(a.DistanceProgress);
-    if (a.FinishRank == 0) return 1;
-    if (b.FinishRank == 0) return -1;
-    return b.FinishRank.CompareTo(a.FinishRank);  // ← Đảo từ 'a' sang 'b' để sắp xếp đúng
-});
+        {
+            if (a.FinishRank == 0 && b.FinishRank == 0)
+                return b.DistanceProgress.CompareTo(a.DistanceProgress);
+            if (a.FinishRank == 0) return 1;
+            if (b.FinishRank == 0) return -1;
+            return a.FinishRank.CompareTo(b.FinishRank);
+        });
 
         // Clear toàn bộ array trước
         for (int i = 0; i < ScoreboardResults.Length; i++)

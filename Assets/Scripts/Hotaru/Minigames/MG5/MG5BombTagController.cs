@@ -113,10 +113,6 @@ public class MG5BombTagController : BaseMinigameController
     {
         if (!HasStateAuthority) return;
 
-        // Reset visible state để trigger OnChangedRender callback trên clients
-        if (MG5Bomb.Instance != null)
-            MG5Bomb.Instance.SetVisible(false);
-
         BombHolder = newHolder;
         BombActive = true;
 
@@ -207,10 +203,6 @@ public class MG5BombTagController : BaseMinigameController
         if (!HasStateAuthority) return;
 
         var playerRef = data.Object.InputAuthority;
-
-        // Deactivate player + camera switch
-        RPC_HandlePlayerEliminated(playerRef);
-
         if (!_eliminationOrder.Contains(playerRef))
         {
             _eliminationOrder.Add(playerRef);
@@ -219,31 +211,6 @@ public class MG5BombTagController : BaseMinigameController
 
         UpdateAlivePlayerCount();
         CheckWinCondition();
-    }
-
-    private void SwitchCameraToActivePlayer()
-    {
-        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        var candidates = new List<PlayerController>();
-
-        foreach (var data in allData)
-        {
-            if (data.IsEliminated) continue;
-            var pc = data.GetComponent<PlayerController>();
-            if (pc != null && pc.gameObject.activeSelf)
-                candidates.Add(pc);
-        }
-
-        if (candidates.Count == 0) return;
-
-        var target = candidates[0];
-        if (CameraManager.Instance != null)
-        {
-            CameraManager.Instance.UpdatePlayerTarget(target.transform);
-            CameraManager.Instance.SwitchToThirdPersonCamera();
-        }
-
-        Debug.Log($"[MG5BombTag] Spectate — Camera → P{target.Object.InputAuthority}");
     }
 
     // ----------------------------------------------------------------
@@ -426,24 +393,6 @@ public class MG5BombTagController : BaseMinigameController
     {
         if (MG5Bomb.Instance != null)
             MG5Bomb.Instance.PlayExplosion();
-    }
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_HandlePlayerEliminated(PlayerRef eliminatedRef)
-    {
-        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        foreach (var p in players)
-        {
-            if (p.Object.InputAuthority != eliminatedRef) continue;
-
-            // Deactivate player
-            p.gameObject.SetActive(false);
-
-            // Nếu là local player → chuyển camera sang player khác
-            if (Runner.LocalPlayer == eliminatedRef)
-                SwitchCameraToActivePlayer();
-
-            break;
-        }
     }
 
     // ----------------------------------------------------------------
