@@ -26,6 +26,8 @@ public class BoardPlayerToken : MonoBehaviour
     [SerializeField] private float moveSpeed = 4f;    // nodes per second
     [SerializeField] private float hopHeight = 0.4f;  // độ cao nhảy mỗi ô
 
+    [SerializeField] private float rotateSpeed = 14f; // toc độ xoay khi di chuyển (độ/giây)
+
     [Header("Debug")]
     [SerializeField] private bool showLabel = true;
 
@@ -95,11 +97,24 @@ public class BoardPlayerToken : MonoBehaviour
     {
         CurrentNodeID = nodeID;
 
-        var node = BoardNodePath.Instance?.GetNodeByID(nodeID);
+        var path = BoardNodePath.Instance;
+        var node = path?.GetNodeByID(nodeID);
 
-        if (node != null)
+        if (node == null)
+            return;
+
+        transform.position = node.GetSpawnPosition(playerSlotIndex) + Vector3.up * 0.5f;
+
+        // Luôn nhìn về node kế tiếp
+        var nextNode = path.GetNodeAfterSteps(node, 1, out _);
+
+        if (nextNode != null && nextNode != node)
         {
-            transform.position = node.GetSpawnPosition(playerSlotIndex) + Vector3.up * 0.5f;
+            Vector3 dir = nextNode.WorldPosition - node.WorldPosition;
+            dir.y = 0f;
+
+            if (dir.sqrMagnitude > 0.001f)
+                transform.rotation = Quaternion.LookRotation(dir);
         }
     }
 
@@ -269,6 +284,31 @@ public class BoardPlayerToken : MonoBehaviour
 
             Vector3 from = transform.position;
             Vector3 to = node.WorldPosition + Vector3.up * 0.5f;
+
+            //========================
+            // Quay người trước
+            //========================
+
+            Vector3 dir = to - from;
+            dir.y = 0f;
+
+            if (dir.sqrMagnitude > 0.001f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(dir);
+
+                while (Quaternion.Angle(transform.rotation, targetRotation) > 1f)
+                {
+                    transform.rotation = Quaternion.Slerp(
+                        transform.rotation,
+                        targetRotation,
+                        Time.deltaTime * rotateSpeed);
+
+                    yield return null;
+                }
+
+                transform.rotation = targetRotation;
+            }
+
             float duration = 1f / moveSpeed;
             float elapsed = 0f;
 
@@ -279,18 +319,12 @@ public class BoardPlayerToken : MonoBehaviour
                 float hop = Mathf.Sin(t * Mathf.PI) * hopHeight;
                 transform.position = Vector3.Lerp(from, to, t) + Vector3.up * hop;
 
-                Vector3 flatDir = to - transform.position;
-                flatDir.y = 0f;
-                if (flatDir.sqrMagnitude > 0.0001f)
-                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(flatDir), t);
-
                 yield return null;
             }
 
             transform.position = to;
             CurrentNodeID = nodeID;
 
-            yield return new WaitForSeconds(0.08f); // pause nhỏ giữa mỗi ô
         }
 
         var finalNode = BoardNodePath.Instance?.GetNodeByID(CurrentNodeID);
@@ -312,6 +346,10 @@ public class BoardPlayerToken : MonoBehaviour
                     + Vector3.up * 0.5f;
             }
         }
+
+        IsMoving = false;
+
+        OnMoveFinished?.Invoke(this);
     }
 
     

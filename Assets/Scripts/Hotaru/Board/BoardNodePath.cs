@@ -218,6 +218,35 @@ public class BoardNodePath : MonoBehaviour
         return traveled[tIdx];
     }
 
+    public BoardNode GetNextNode(BoardNode current, int branchIndex = 0)
+    {
+        if (current == null)
+            return null;
+
+        if (current.nextNodes != null &&
+            current.nextNodes.Count > 0)
+        {
+            branchIndex = Mathf.Clamp(
+                branchIndex,
+                0,
+                current.nextNodes.Count - 1);
+
+            return current.nextNodes[branchIndex];
+        }
+
+        int idx = nodes.IndexOf(current);
+
+        if (idx < 0)
+            return null;
+
+        int nextIdx = GetNextValidIndex(idx, 1);
+
+        if (nextIdx < 0)
+            return null;
+
+        return nodes[nextIdx];
+    }
+
     /// <summary>
     /// Tính đường đi LÙI 'steps' bước từ currentNode, dựa theo thứ tự trong nodes list.
     /// Dùng cho PushBack Board item — di chuyển target về phía sau.
