@@ -12,13 +12,13 @@ public class AudioSettings : MonoBehaviour
     [SerializeField] private Slider masterSlider;
     [SerializeField] private Slider musicSlider;
     [SerializeField] private Slider sfxSlider;
-    [SerializeField] private Slider uiSlider;
+
 
     [Header("=== Value Labels ===")]
     [SerializeField] private TextMeshProUGUI masterValueText;
     [SerializeField] private TextMeshProUGUI musicValueText;
     [SerializeField] private TextMeshProUGUI sfxValueText;
-    [SerializeField] private TextMeshProUGUI uiValueText;
+
 
     [Header("=== Toggles ===")]
     [SerializeField] private Toggle bgmToggle;
@@ -49,7 +49,7 @@ public class AudioSettings : MonoBehaviour
         audioMixer.SetFloat("MasterVolume", SliderToDB(PlayerPrefs.GetFloat("MasterVolume", 1f)));
         audioMixer.SetFloat("MusicVolume",  SliderToDB(PlayerPrefs.GetFloat("MusicVolume",  1f)));
         audioMixer.SetFloat("SFXVolume",    SliderToDB(PlayerPrefs.GetFloat("SFXVolume",    1f)));
-        audioMixer.SetFloat("UIVolume",     SliderToDB(PlayerPrefs.GetFloat("UIVolume",     1f)));
+
     }
 
     // ----------------------------------------------------------------
@@ -62,18 +62,18 @@ public class AudioSettings : MonoBehaviour
         masterSlider.onValueChanged.RemoveAllListeners();
         musicSlider.onValueChanged.RemoveAllListeners();
         sfxSlider.onValueChanged.RemoveAllListeners();
-        uiSlider.onValueChanged.RemoveAllListeners();
+
 
         masterSlider.value = PlayerPrefs.GetFloat("MasterVolume", 1f);
         musicSlider.value  = PlayerPrefs.GetFloat("MusicVolume",  1f);
         sfxSlider.value    = PlayerPrefs.GetFloat("SFXVolume",    1f);
-        uiSlider.value     = PlayerPrefs.GetFloat("UIVolume",     1f);
+
 
         // Cập nhật label %
         UpdateLabel(masterValueText, masterSlider.value);
         UpdateLabel(musicValueText,  musicSlider.value);
         UpdateLabel(sfxValueText,    sfxSlider.value);
-        UpdateLabel(uiValueText,     uiSlider.value);
+
 
         // Load toggle
         if (AudioManager.Instance != null)
@@ -88,7 +88,7 @@ public class AudioSettings : MonoBehaviour
         masterSlider.onValueChanged.AddListener(SetMasterVolume);
         musicSlider.onValueChanged.AddListener(SetMusicVolume);
         sfxSlider.onValueChanged.AddListener(SetSFXVolume);
-        uiSlider.onValueChanged.AddListener(SetUIVolume);
+
 
         if (bgmToggle != null) bgmToggle.onValueChanged.AddListener(SetBGMEnabled);
         if (sfxToggle != null) sfxToggle.onValueChanged.AddListener(SetSFXEnabled);
@@ -119,12 +119,7 @@ public class AudioSettings : MonoBehaviour
         PlayerPrefs.SetFloat("SFXVolume", value);
     }
 
-    public void SetUIVolume(float value)
-    {
-        audioMixer.SetFloat("UIVolume", SliderToDB(value));
-        UpdateLabel(uiValueText, value);
-        PlayerPrefs.SetFloat("UIVolume", value);
-    }
+
 
     // ----------------------------------------------------------------
     // Toggle BGM / SFX
@@ -159,7 +154,7 @@ public class AudioSettings : MonoBehaviour
         masterSlider.value = 1f;
         musicSlider.value  = 1f;
         sfxSlider.value    = 1f;
-        uiSlider.value     = 1f;
+
 
         if (bgmToggle != null) bgmToggle.isOn = true;
         if (sfxToggle != null) sfxToggle.isOn = true;

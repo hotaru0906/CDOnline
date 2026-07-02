@@ -1160,6 +1160,70 @@ PrefabInstance:
       propertyPath: m_AnchorMax.y
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: menuManager
+      value: 
+      objectReference: {fileID: 1240918938}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: settingsCanvasGroup
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsClosed.m_PersistentCalls.m_Calls.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsOpened.m_PersistentCalls.m_Calls.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsClosed.m_PersistentCalls.m_Calls.Array.data[0].m_Mode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsOpened.m_PersistentCalls.m_Calls.Array.data[0].m_Mode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsClosed.m_PersistentCalls.m_Calls.Array.data[0].m_Target
+      value: 
+      objectReference: {fileID: 520052951}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsOpened.m_PersistentCalls.m_Calls.Array.data[0].m_Target
+      value: 
+      objectReference: {fileID: 1240918938}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsClosed.m_PersistentCalls.m_Calls.Array.data[0].m_CallState
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsOpened.m_PersistentCalls.m_Calls.Array.data[0].m_CallState
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsClosed.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
+      value: CloseSettings
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsOpened.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
+      value: ShowSettings
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsClosed.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
+      value: SettingsManager, Assembly-CSharp
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsOpened.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
+      value: MenuManager, Assembly-CSharp
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsClosed.m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_ObjectArgumentAssemblyTypeName
+      value: UnityEngine.Object, UnityEngine
+      objectReference: {fileID: 0}
+    - target: {fileID: 4576215854099500989, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
+      propertyPath: OnSettingsOpened.m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_ObjectArgumentAssemblyTypeName
+      value: UnityEngine.Object, UnityEngine
+      objectReference: {fileID: 0}
     - target: {fileID: 4909561457252631536, guid: 8ef5ac078fada724a9edca7aa0c37f7d, type: 3}
       propertyPath: m_AnchorMax.x
       value: 1
@@ -11577,13 +11641,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   bgmSource: {fileID: 0}
   audioMixer: {fileID: 24100000, guid: 34a7a0afd953fcb4e988f1b3f33e2580, type: 2}
-  bgmList:
-  - {fileID: 8300000, guid: 3f274a8031823304e9edbdbd530fc3d4, type: 3}
-  - {fileID: 8300000, guid: f8195f28a160c3c40bbbbcd4e0cdf95e, type: 3}
-  - {fileID: 8300000, guid: 7e1d28df170300140bbbae1134cf782a, type: 3}
-  - {fileID: 8300000, guid: affb2188b2d0e8942be88d7c2fc8d2b5, type: 3}
-  - {fileID: 8300000, guid: a89907cecb3424946b99b95323dbf8d2, type: 3}
-  minigameBGM: {fileID: 8300000, guid: 5f7af8daf124e1e4d9956374619544d3, type: 3}
+  mainBGM: {fileID: 0}
   fadeDuration: 1
   isBGMOn: 1
   isSFXOn: 1
