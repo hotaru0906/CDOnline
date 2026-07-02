@@ -8,10 +8,12 @@ public enum BoardPhaseState
     WaitingForRoll,
     Rolling,
     Moving,
+    WaitingForDirection,
     ResolvingTile,
     WaitingForTargetSelect,
     WaitingForItemTarget,
     NextTurn,
+    
     BoardComplete
 }
 
@@ -70,6 +72,13 @@ public class BoardManager : NetworkBehaviour
     #region Local State
     private int _completedThisRound = 0;
 
+    // ===== Branch Movement =====
+    private int _remainingSteps = 0;
+    private BoardNode _currentMoveNode;
+    private int _selectedBranchIndex = 0;
+
+    private bool _directionSelected = false;
+
 
     private bool _waitingForMyRoll = false;
 
@@ -104,6 +113,7 @@ public class BoardManager : NetworkBehaviour
     #region Events
     public System.Action<int> OnTurnStarted;
     public System.Action OnBoardPhaseComplete;
+    public System.Action<BoardNode> OnDirectionSelectionRequested;
     #endregion
 
     #region Slot Accessors
@@ -437,7 +447,7 @@ public class BoardManager : NetworkBehaviour
         RPC_HideDice();
 
         // 6. Di chuyển
-        yield return StartCoroutine(ExecuteMovement(slot, playerId, result));
+        yield return StartCoroutine(ExecuteMovementStepByStep(slot, playerId, result));
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -730,6 +740,22 @@ public class BoardManager : NetworkBehaviour
     #endregion
 
     #region Movement
+
+    private IEnumerator MoveOneStep(int slot, BoardNode nextNode)
+    {
+        var token = tokens[slot];
+
+        RPC_AnimateMovement(
+            slot,
+            new int[]
+            {
+                nextNode.nodeID
+            });
+
+        while (token.IsMoving)
+            yield return null;
+    }
+    
     private IEnumerator ExecuteMovement(int slot, int playerId, int steps)
     {
         BoardState = BoardPhaseState.Moving;
@@ -767,6 +793,73 @@ public class BoardManager : NetworkBehaviour
         if (tokens != null && slot < tokens.Length && tokens[slot] != null)
             tokens[slot].AnimateMovement(pathNodeIDs);
     }
+
+    private IEnumerator ExecuteMovementStepByStep(
+        int slot,
+        int playerId,
+        int steps)
+        {
+            BoardState = BoardPhaseState.Moving;
+
+            _remainingSteps = steps;
+
+            _currentMoveNode =
+                BoardNodePath.Instance.GetNodeByID(
+                    GetNodeIDAtSlot(slot));
+
+            if (_currentMoveNode == null)
+            {
+                yield return FinishTurn(
+                    slot,
+                    playerId,
+                    GetNodeIDAtSlot(slot),
+                    TileType.Empty);
+
+                yield break;
+            }
+
+            while (_remainingSteps > 0)
+            {
+                BoardNode nextNode =
+                    BoardNodePath.Instance.GetNextNode(
+                        _currentMoveNode,
+                        _selectedBranchIndex);
+
+                if (nextNode == null)
+                    break;
+                yield return StartCoroutine(
+                    MoveOneStep(slot, nextNode));
+                _currentMoveNode = nextNode;
+
+                SetNodeIDAtSlot(slot, nextNode.nodeID);
+
+                _remainingSteps--;
+
+                if (_remainingSteps > 0 &&
+                    _currentMoveNode.nextNodes != null &&
+                    _currentMoveNode.nextNodes.Count > 1)
+                {
+                    Debug.Log($"[Board] Branch reached at Node {_currentMoveNode.nodeID}");
+
+                    BoardState = BoardPhaseState.WaitingForDirection;
+
+                    _directionSelected = false;
+
+                    OnDirectionSelectionRequested?.Invoke(_currentMoveNode);
+
+                    while (!_directionSelected)
+                        yield return null;
+
+                    BoardState = BoardPhaseState.Moving;
+                }
+            }
+
+            yield return FinishTurn(
+                slot,
+                playerId,
+                _currentMoveNode.nodeID,
+                _currentMoveNode.tileType);
+        }
     #endregion
 
     #region Tile Resolve
@@ -1196,6 +1289,13 @@ public class BoardManager : NetworkBehaviour
                 return;
             }
         }
+    }
+
+    public void SelectBranch(int branchIndex)
+    {
+        _selectedBranchIndex = branchIndex;
+
+        _directionSelected = true;
     }
 
     public void ReverseOrder()
