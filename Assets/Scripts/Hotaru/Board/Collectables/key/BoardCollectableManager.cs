@@ -3,15 +3,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Collections;
 
-/// <summary>
-/// Quản lý toàn bộ Collectable trên Board.
-/// </summary>
-/// <remarks>
-/// Chức năng:
-/// - Spawn Collectable.
-/// - Respawn Collectable.
-/// - Quản lý trạng thái của Collectable.
-/// </remarks>
+
 public class BoardCollectableManager : NetworkBehaviour
 {
 

@@ -37,6 +37,13 @@ public class PlayerItemInventory : NetworkBehaviour
     [Networked]
     public int ChestCount { get; set; }
 
+    public static System.Action<int, int, int> OnResourceChanged;
+    public static System.Action<int> OnInventoryRegistered;
+    public static System.Action<int> OnInventoryUnregistered;
+
+    private int _lastRenderedKeyCount = -1;
+    private int _lastRenderedChestCount = -1;
+
     // =====================================================================
     // STATIC REGISTRY — tra cứu nhanh theo PlayerId
     // =====================================================================
@@ -66,6 +73,8 @@ public class PlayerItemInventory : NetworkBehaviour
         int playerId = Object.InputAuthority.PlayerId;
         _registry[playerId] = this;
 
+        OnInventoryRegistered?.Invoke(playerId);
+
         Debug.Log(
             $"Registry[{playerId}] = {GetInstanceID()}");
 
@@ -82,14 +91,38 @@ public class PlayerItemInventory : NetworkBehaviour
             KeyCount = 0;
 
             ChestCount = 0;
+
+            if (GameManager.Instance != null)
+                GameManager.Instance.TryRestorePlayerResourceState(playerId, this);
         }
         Debug.Log($"[PlayerItemInventory] Registered for player {playerId}");
+
+        // Force one initial push so UI can pick up current values after scene transitions.
+        _lastRenderedKeyCount = KeyCount;
+        _lastRenderedChestCount = ChestCount;
+        OnResourceChanged?.Invoke(playerId, KeyCount, ChestCount);
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
         int playerId = Object.InputAuthority.PlayerId;
         _registry.Remove(playerId);
+        OnInventoryUnregistered?.Invoke(playerId);
+    }
+
+    public override void Render()
+    {
+        base.Render();
+
+        int playerId = Object.InputAuthority.PlayerId;
+
+        if (_lastRenderedKeyCount == KeyCount && _lastRenderedChestCount == ChestCount)
+            return;
+
+        _lastRenderedKeyCount = KeyCount;
+        _lastRenderedChestCount = ChestCount;
+
+        OnResourceChanged?.Invoke(playerId, KeyCount, ChestCount);
     }
 
     // =====================================================================
@@ -253,6 +286,9 @@ public class PlayerItemInventory : NetworkBehaviour
 
         KeyCount += amount;
 
+        if (GameManager.Instance != null)
+            GameManager.Instance.SavePlayerResourceState(Object.InputAuthority.PlayerId, KeyCount, ChestCount);
+
         Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} +{amount} Key (Total={KeyCount})");
     }
 
@@ -287,6 +323,9 @@ public class PlayerItemInventory : NetworkBehaviour
 
         KeyCount -= amount;
 
+        if (GameManager.Instance != null)
+            GameManager.Instance.SavePlayerResourceState(Object.InputAuthority.PlayerId, KeyCount, ChestCount);
+
         Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} -{amount} Key (Remain={KeyCount})");
 
         return true;
@@ -304,7 +343,22 @@ public class PlayerItemInventory : NetworkBehaviour
 
         ChestCount++;
 
+        if (GameManager.Instance != null)
+            GameManager.Instance.SavePlayerResourceState(Object.InputAuthority.PlayerId, KeyCount, ChestCount);
+
         Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} Chest = {ChestCount}");
+    }
+
+    public void SetResourceCounts(int keyCount, int chestCount)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        KeyCount = Mathf.Max(0, keyCount);
+        ChestCount = Mathf.Max(0, chestCount);
+
+        if (GameManager.Instance != null)
+            GameManager.Instance.SavePlayerResourceState(Object.InputAuthority.PlayerId, KeyCount, ChestCount);
     }
 
     public int GetChestCount()

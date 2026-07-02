@@ -1,10 +1,6 @@
 using Fusion;
 using UnityEngine;
 
-/// <summary>
-/// Key collectable trên Board.
-/// Player đứng đúng ô sẽ nhận Key.
-/// </summary>
 public class KeyCollectable : BoardCollectable
 {
     [Networked]

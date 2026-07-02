@@ -1,9 +1,7 @@
 using Fusion;
 using UnityEngine;
 
-/// <summary>
-/// Base class cho tất cả collectable trên Board.
-/// </summary>
+
 public abstract class BoardCollectable : NetworkBehaviour
 {
     [SerializeField]
