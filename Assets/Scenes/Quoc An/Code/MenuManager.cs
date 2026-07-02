@@ -87,15 +87,15 @@ public class MenuManager : MonoBehaviour
     public void ShowFindLobby() => SwitchScreen(canvasFindLobby);
     public void ShowCreateRoom() => SwitchScreen(canvasCreateRoom);
 
-public void ShowSettings()
-{
-    if (settingsManager != null)
+    public void ShowSettings()
     {
-        // Ẩn màn hình hiện tại trước khi mở Setting
-        OnSettingsOpened();
-        settingsManager.OpenSettings();
+        if (settingsManager != null)
+        {
+            // Ẩn màn hình hiện tại trước khi mở Setting
+            OnSettingsOpened();
+            settingsManager.OpenSettings();
+        }
     }
-}
 
     /// <summary>
     /// ✅ Dùng CanvasGroup thay vì SetActive
