@@ -28,6 +28,15 @@ public class MG3BrawlController : BaseMinigameController
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         foreach (var p in allData)
             p.OnPlayerEliminated -= HandlePlayerEliminated;
+
+        // MG3 rule: once picked up, item is kept for the whole match.
+        // Only clear item-in-hand visuals/state when minigame ends.
+        if (HasStateAuthority)
+        {
+            var allBrawlData = FindObjectsByType<MG3PlayerBrawlData>(FindObjectsSortMode.None);
+            foreach (var brawlData in allBrawlData)
+                brawlData.DropItem();
+        }
     }
 
     #endregion
@@ -41,15 +50,10 @@ public class MG3BrawlController : BaseMinigameController
         if (targetMgData == null || !targetMgData.CanTakeDamage()) return;
 
         var attackerBrawl = attacker.GetComponent<MG3PlayerBrawlData>();
-        var targetBrawl = target.GetComponent<MG3PlayerBrawlData>();
 
         if (attackerBrawl != null && attackerBrawl.HasItem)
         {
-            attackerBrawl.DropItem();
             targetMgData.TakeDamage(20);
-
-            if (targetBrawl != null && targetBrawl.HasItem)
-                targetBrawl.DropItem();
 
             RPC_OnHitWithItem(
                 attacker.Object.InputAuthority,

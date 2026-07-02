@@ -53,7 +53,12 @@ public class MG5BombTagController : BaseMinigameController
 
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         foreach (var p in allData)
+        {
             p.OnPlayerEliminated += HandlePlayerEliminated;
+
+            // Khôi phục đầy đủ trạng thái player khi vào MG5 round mới.
+            RPC_SetPlayerEliminatedState(p.Object.InputAuthority, false);
+        }
 
         // Chọn random holder đầu tiên
         var allPlayers = GetAlivePlayers();
@@ -78,7 +83,12 @@ public class MG5BombTagController : BaseMinigameController
 
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         foreach (var p in allData)
+        {
             p.OnPlayerEliminated -= HandlePlayerEliminated;
+
+            // Đảm bảo player được hiện lại đầy đủ sau khi kết thúc MG5.
+            RPC_SetPlayerEliminatedState(p.Object.InputAuthority, false);
+        }
     }
 
     // ----------------------------------------------------------------
@@ -113,22 +123,18 @@ public class MG5BombTagController : BaseMinigameController
     {
         if (!HasStateAuthority) return;
 
-        // Reset visible state để trigger OnChangedRender callback trên clients
-        if (MG5Bomb.Instance != null)
-            MG5Bomb.Instance.SetVisible(false);
-
         BombHolder = newHolder;
         BombActive = true;
 
         if (resetTimer)
             BombTimer = UnityEngine.Random.Range(bombTimerMin, bombTimerMax);
 
-        // Host set visible ngay — tự replicate xuống clients
-        if (MG5Bomb.Instance != null)
-            MG5Bomb.Instance.SetVisible(true);
-
         // RPC chỉ lo attach transform
         RPC_MoveBomb(newHolder);
+
+        // Luôn hiện bomb sau khi gắn holder mới.
+        if (MG5Bomb.Instance != null)
+            MG5Bomb.Instance.SetVisible(true);
 
         Debug.Log($"[MG5BombTag] Bomb → P{newHolder} | Timer: {BombTimer:F1}s | ResetTimer: {resetTimer}");
     }
@@ -160,10 +166,15 @@ public class MG5BombTagController : BaseMinigameController
         PlayerRef victim = BombHolder;
         BombActive = false;
 
+        // Tắt visible trên network trước khi chuyển holder mới để client nhận state đổi rõ ràng.
+        if (MG5Bomb.Instance != null)
+            MG5Bomb.Instance.SetVisible(false);
+
         Debug.Log($"[MG5BombTag] BOOM! P{victim} eliminated");
 
         // Play explosion trước khi eliminate
-        RPC_TriggerExplosionVFX();
+        if (MG5Bomb.Instance != null)
+            MG5Bomb.Instance.PlayExplosion();
 
         // Eliminate player
         var victimData = GetPlayerMinigameData(victim);
@@ -422,25 +433,39 @@ public class MG5BombTagController : BaseMinigameController
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_TriggerExplosionVFX()
-    {
-        if (MG5Bomb.Instance != null)
-            MG5Bomb.Instance.PlayExplosion();
-    }
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_HandlePlayerEliminated(PlayerRef eliminatedRef)
+    {
+        RPC_SetPlayerEliminatedState(eliminatedRef, true);
+
+        // Nếu là local player → chuyển camera sang player khác
+        if (Runner.LocalPlayer == eliminatedRef)
+            SwitchCameraToActivePlayer();
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SetPlayerEliminatedState(PlayerRef playerRef, bool eliminated)
     {
         var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
         foreach (var p in players)
         {
-            if (p.Object.InputAuthority != eliminatedRef) continue;
+            if (p.Object.InputAuthority != playerRef) continue;
 
-            // Deactivate player
-            p.gameObject.SetActive(false);
+            var colliders = p.GetComponentsInChildren<Collider>(true);
+            foreach (var col in colliders)
+            {
+                if (col == null) continue;
+                col.enabled = !eliminated;
+            }
 
-            // Nếu là local player → chuyển camera sang player khác
-            if (Runner.LocalPlayer == eliminatedRef)
-                SwitchCameraToActivePlayer();
+            var modelSwitcher = p.GetComponent<PlayerModelSwitcher>();
+            if (modelSwitcher != null)
+            {
+                if (eliminated) modelSwitcher.HideCharacter();
+                else modelSwitcher.ShowCharacter();
+            }
+
+            if (!eliminated)
+                p.SetFrozen(false);
 
             break;
         }

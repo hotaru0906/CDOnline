@@ -61,6 +61,9 @@ public class MG4LaserSurvivalController : BaseMinigameController
             p.ResetForNewRound();
             p.SetLives(startingLives);
             p.OnPlayerEliminated += HandlePlayerEliminated;
+
+            // Ensure colliders are restored when a new MG4 round starts.
+            RPC_SetPlayerCollidersEnabled(p.Object.InputAuthority, true);
         }
 
         MinigameHUDController.Instance?.RefreshPlayers();
@@ -75,7 +78,12 @@ public class MG4LaserSurvivalController : BaseMinigameController
 
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         foreach (var p in allData)
+        {
             p.OnPlayerEliminated -= HandlePlayerEliminated;
+
+            // Restore colliders after MG4 ends so other game modes behave normally.
+            RPC_SetPlayerCollidersEnabled(p.Object.InputAuthority, true);
+        }
 
         // Deactivate tất cả tank khi game kết thúc
         if (_allTanks != null)
@@ -189,6 +197,7 @@ public class MG4LaserSurvivalController : BaseMinigameController
         }
 
         RPC_FreezeEliminatedPlayer(playerRef);
+        RPC_SetPlayerCollidersEnabled(playerRef, false);
         MinigameHUDController.Instance?.RefreshPlayers();
         UpdateAlivePlayerCount();
         CheckWinCondition();
@@ -331,6 +340,25 @@ public class MG4LaserSurvivalController : BaseMinigameController
         {
             if (p.Object.InputAuthority != playerRef) continue;
             p.SetFrozen(true);
+            break;
+        }
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SetPlayerCollidersEnabled(PlayerRef playerRef, bool enabled)
+    {
+        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        foreach (var p in players)
+        {
+            if (p.Object.InputAuthority != playerRef) continue;
+
+            var colliders = p.GetComponentsInChildren<Collider>(true);
+            foreach (var col in colliders)
+            {
+                if (col == null) continue;
+                col.enabled = enabled;
+            }
+
             break;
         }
     }
