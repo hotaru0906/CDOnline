@@ -1451,6 +1451,11 @@ public class GameManager : NetworkBehaviour
             PlayerInputHandler.Instance.InputEnabled = false;
         }
 
+        // Bật minigame BGM ngay từ Tutorial (thay vì đợi đến Playing).
+        var tutorialMgData = CurrentMinigameData;
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.EnterMinigameBGM(tutorialMgData?.minigameBGM);
+
         // HOST: Load scene minigame
         if (!HasStateAuthority)
         {
@@ -1534,10 +1539,6 @@ public class GameManager : NetworkBehaviour
         {
             CursorManager.Instance.HideCursor();
         }
-
-        var mgData = CurrentMinigameData;
-        if (AudioManager.Instance != null)
-            AudioManager.Instance.EnterMinigameBGM(mgData?.minigameBGM);
     }
 
     /// <summary>
