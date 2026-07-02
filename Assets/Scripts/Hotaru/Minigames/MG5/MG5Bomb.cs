@@ -94,21 +94,6 @@ public class MG5Bomb : NetworkBehaviour
         RPC_PlayExplosion();
     }
 
-    public void PlayExplosionLocal()
-    {
-        if (bombMesh != null) bombMesh.SetActive(false);
-        if (bombLight != null) bombLight.enabled = false;
-
-        if (explosionVFX != null)
-            explosionVFX.Play();
-
-        // Audio phát tại vị trí bomb — nghe được từ xa theo 3D sound
-        if (explosionAudio != null)
-            explosionAudio.Play();
-
-        Debug.Log("[MG5Bomb] BOOM!");
-    }
-
     // ----------------------------------------------------------------
     //  Visual
     // ----------------------------------------------------------------
@@ -151,6 +136,16 @@ public class MG5Bomb : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_PlayExplosion()
     {
-        PlayExplosionLocal();
+        if (bombMesh != null) bombMesh.SetActive(false);
+        if (bombLight != null) bombLight.enabled = false;
+
+        if (explosionVFX != null)
+            explosionVFX.Play();
+
+        // Audio phát tại vị trí bomb — nghe được từ xa theo 3D sound
+        if (explosionAudio != null)
+            explosionAudio.Play();
+
+        Debug.Log("[MG5Bomb] BOOM!");
     }
 }
