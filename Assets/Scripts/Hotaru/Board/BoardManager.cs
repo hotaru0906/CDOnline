@@ -776,6 +776,18 @@ public class BoardManager : NetworkBehaviour
 
         BoardCollectableManager.Instance?.TryCollectKey(playerId, finalNodeID);
 
+        bool chestHandled =
+        BoardChestManager.Instance != null &&
+        BoardChestManager.Instance.TryOpenChest(playerId, finalNodeID);
+
+        if (chestHandled)
+        {
+            while (BoardChestManager.Instance.IsInteractionActive)
+            {
+                yield return null;
+            }
+        }
+
         switch (tileType)
         {
             case TileType.Steal:
@@ -1220,6 +1232,24 @@ public class BoardManager : NetworkBehaviour
         }
 
         return null;
+    }
+
+    public void EndGame(int winnerPlayerId)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        Debug.Log("=================================");
+        Debug.Log($"PLAYER {winnerPlayerId} WINS!");
+        Debug.Log("=================================");
+
+        BoardState = BoardPhaseState.BoardComplete;
+
+        // TODO:
+        // Winner UI
+        // Camera
+        // Animation
+        // Load End Scene
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]

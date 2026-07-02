@@ -118,6 +118,10 @@ public class GameManager : NetworkBehaviour
     [Networked] public NetworkBool KeyCollected1 { get; private set; } = false;
     [Networked] public NetworkBool KeyCollected2 { get; private set; } = false;
     [Networked] public NetworkBool KeyCollected3 { get; private set; } = false;
+    // ===== CHEST STATE =====
+
+    [Networked]
+    public int ChestNode { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S0 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S2 { get; private set; } = -1;
@@ -205,6 +209,25 @@ public class GameManager : NetworkBehaviour
     {
         return KeyNode0 != -1;
     }
+
+    public void SaveChestState(int nodeId)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        ChestNode = nodeId;
+    }
+
+    public int GetChestNode()
+    {
+        return ChestNode;
+    }
+
+    public bool HasSavedChestState()
+    {
+        return ChestNode != -1;
+    }
+
     public void SaveBoardItems(int slot, int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;
@@ -1055,25 +1078,18 @@ public class GameManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Gọi bởi BoardManager khi tất cả players đã đi xong.
-    /// Quyết định next state: Voting (còn round) hoặc Roulette (hết round).
+    /// Board kết thúc.
+    /// Luôn chuyển sang Voting.
+    /// Điều kiện thắng sẽ do ChestManager quyết định sau này.
     /// </summary>
     public void ProceedFromBoard()
     {
-        if (!HasStateAuthority) return;
+        if (!HasStateAuthority)
+            return;
 
-        Debug.Log($"[GameManager] Board done — Round {CurrentRound}/{TotalRounds}");
+        Debug.Log("[GameManager] Board complete -> Start Voting");
 
-        if (CurrentRound >= TotalRounds)
-        {
-            Debug.Log("[GameManager] All rounds completed — Starting Roulette!");
-            StartRoulette();
-        }
-        else
-        {
-            Debug.Log("[GameManager] More rounds left — Starting Voting...");
-            StartVoting(VotingType.MinigameOnly);
-        }
+        StartVoting(VotingType.MinigameOnly);
     }
 
     /// <summary>
