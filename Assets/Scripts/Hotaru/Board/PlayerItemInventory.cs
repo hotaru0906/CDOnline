@@ -34,6 +34,9 @@ public class PlayerItemInventory : NetworkBehaviour
     [Networked]
     public int KeyCount { get; set; }
 
+    [Networked]
+    public int ChestCount { get; set; }
+
     // =====================================================================
     // STATIC REGISTRY — tra cứu nhanh theo PlayerId
     // =====================================================================
@@ -77,6 +80,8 @@ public class PlayerItemInventory : NetworkBehaviour
                 RouletteItems.Set(i, -1);
 
             KeyCount = 0;
+
+            ChestCount = 0;
         }
         Debug.Log($"[PlayerItemInventory] Registered for player {playerId}");
     }
@@ -290,6 +295,21 @@ public class PlayerItemInventory : NetworkBehaviour
     public int GetKeyCount()
     {
         return KeyCount;
+    }
+
+    public void AddChest()
+    {
+        if (!HasStateAuthority)
+            return;
+
+        ChestCount++;
+
+        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} Chest = {ChestCount}");
+    }
+
+    public int GetChestCount()
+    {
+        return ChestCount;
     }
 }
 
