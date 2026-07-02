@@ -8,6 +8,7 @@ public class MenuManager : MonoBehaviour
 {
     [Header("Các Canvas")]
     [SerializeField] private GameObject canvasMainMenu;
+    [SerializeField] private CanvasGroup mainMenuCanvasGroup; // ✅ THÊM
     [SerializeField] private GameObject canvasPlayOnline;
     [SerializeField] private GameObject canvasFindLobby;
     [SerializeField] private GameObject canvasCreateRoom;
@@ -29,6 +30,17 @@ public class MenuManager : MonoBehaviour
     private GameObject _currentScreen;
     private readonly Stack<GameObject> _screenHistory = new();
     private readonly List<RoomItems> _roomItems = new();
+
+    private void Awake()
+    {
+        // ✅ Tạo CanvasGroup cho MainMenu nếu chưa có
+        if (mainMenuCanvasGroup == null && canvasMainMenu != null)
+        {
+            mainMenuCanvasGroup = canvasMainMenu.GetComponent<CanvasGroup>();
+            if (mainMenuCanvasGroup == null)
+                mainMenuCanvasGroup = canvasMainMenu.AddComponent<CanvasGroup>();
+        }
+    }
 
     private void Start()
     {
@@ -75,41 +87,57 @@ public class MenuManager : MonoBehaviour
     public void ShowFindLobby() => SwitchScreen(canvasFindLobby);
     public void ShowCreateRoom() => SwitchScreen(canvasCreateRoom);
 
-    /// <summary>
-    /// ✅ Gọi khi nhấn nút Settings
-    /// </summary>
-    public void ShowSettings()
+public void ShowSettings()
+{
+    if (settingsManager != null)
     {
-        if (settingsManager != null)
-        {
-            settingsManager.OpenSettings();
-            // SettingsManager sẽ tự gọi OnSettingsOpened()
-        }
+        // Ẩn màn hình hiện tại trước khi mở Setting
+        OnSettingsOpened();
+        settingsManager.OpenSettings();
     }
+}
 
     /// <summary>
-    /// ✅ Gọi từ SettingsManager khi MỞ settings
+    /// ✅ Dùng CanvasGroup thay vì SetActive
     /// </summary>
     public void OnSettingsOpened()
     {
-        // Ẩn current screen (thường là canvasMainMenu)
         if (_currentScreen != null)
         {
-            _currentScreen.SetActive(false);
+            // ✅ Nếu là MainMenu → dùng CanvasGroup
+            if (_currentScreen == canvasMainMenu && mainMenuCanvasGroup != null)
+            {
+                mainMenuCanvasGroup.alpha = 0f;
+                mainMenuCanvasGroup.interactable = false;
+                mainMenuCanvasGroup.blocksRaycasts = false;
+            }
+            else
+            {
+                _currentScreen.SetActive(false); // Fallback cho screen khác
+            }
         }
 
         Debug.Log("🔧 Settings opened - Menu hidden");
     }
 
     /// <summary>
-    /// ✅ Gọi từ SettingsManager khi ĐÓNG settings
+    /// ✅ Dùng CanvasGroup thay vì SetActive
     /// </summary>
     public void OnSettingsClosed()
     {
-        // Hiện lại current screen
         if (_currentScreen != null)
         {
-            _currentScreen.SetActive(true);
+            // ✅ Nếu là MainMenu → dùng CanvasGroup
+            if (_currentScreen == canvasMainMenu && mainMenuCanvasGroup != null)
+            {
+                mainMenuCanvasGroup.alpha = 1f;
+                mainMenuCanvasGroup.interactable = true;
+                mainMenuCanvasGroup.blocksRaycasts = true;
+            }
+            else
+            {
+                _currentScreen.SetActive(true); // Fallback cho screen khác
+            }
         }
 
         Debug.Log("🏠 Settings closed - Menu restored");

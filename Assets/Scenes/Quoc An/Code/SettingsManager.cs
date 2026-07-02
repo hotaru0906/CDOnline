@@ -26,15 +26,30 @@ public class SettingsManager : MonoBehaviour
 
     [Header("=== Settings Canvas ===")]
     [SerializeField] private GameObject settingsCanvas;
+    [SerializeField] private CanvasGroup settingsCanvasGroup;
 
     [Header("=== Menu Manager Reference ===")]
-    [SerializeField] private MenuManager menuManager; // ✅ Kéo MenuManager vào đây
+    [SerializeField] private MenuManager menuManager;
 
     [Header("=== Events ===")]
-    public UnityEvent OnSettingsOpened;  // ✅ Event khi mở settings
-    public UnityEvent OnSettingsClosed;  // ✅ Event khi đóng settings
+    public UnityEvent OnSettingsOpened;
+    public UnityEvent OnSettingsClosed;
 
     private GameObject _currentPanel;
+    private bool _isOpen = false; // THÊM: tránh gọi trùng lặp
+
+    private void Awake()
+    {
+        // Tạo CanvasGroup nếu chưa có
+        if (settingsCanvasGroup == null && settingsCanvas != null)
+        {
+            settingsCanvasGroup = settingsCanvas.GetComponent<CanvasGroup>();
+            if (settingsCanvasGroup == null)
+                settingsCanvasGroup = settingsCanvas.AddComponent<CanvasGroup>();
+        }
+
+        HideSettingsImmediate();
+    }
 
     private void Start()
     {
@@ -74,37 +89,67 @@ public class SettingsManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ✅ Đóng Settings → Hiện lại UI Menu
-    /// </summary>
-    public void CloseSettings()
-    {
-        settingsCanvas.SetActive(false);
-
-        // ✅ Thông báo cho MenuManager hiện lại canvas
-        if (menuManager != null)
-        {
-            menuManager.OnSettingsClosed();
-        }
-
-        // ✅ Invoke event nếu có script khác cần lắng nghe
-        OnSettingsClosed?.Invoke();
-    }
-
-    /// <summary>
-    /// ✅ Mở Settings → Ẩn UI Menu
+    /// Mở Settings — chỉ lo việc hiện CanvasGroup.
+    /// MenuManager tự lo việc ẩn menu trước khi gọi hàm này.
     /// </summary>
     public void OpenSettings()
     {
-        settingsCanvas.SetActive(true);
+        if (_isOpen) return; // tránh gọi trùng
+        _isOpen = true;
+
+        ShowSettingsImmediate();
         SwitchTab(audioPanel);
 
-        // ✅ Thông báo cho MenuManager ẩn canvas
-        if (menuManager != null)
-        {
-            menuManager.OnSettingsOpened();
-        }
+        // Không gọi menuManager.OnSettingsOpened() ở đây nữa
+        // MenuManager.ShowSettings() đã tự gọi OnSettingsOpened() trước rồi
 
-        // ✅ Invoke event nếu có script khác cần lắng nghe
         OnSettingsOpened?.Invoke();
+        Debug.Log("[SettingsManager] Settings opened.");
+    }
+
+    /// <summary>
+    /// Đóng Settings — hiện lại menu.
+    /// </summary>
+    public void CloseSettings()
+    {
+        if (!_isOpen) return; // tránh gọi trùng
+        _isOpen = false;
+
+        HideSettingsImmediate();
+
+        // Báo MenuManager khôi phục màn hình trước đó
+        if (menuManager != null)
+            menuManager.OnSettingsClosed();
+
+        OnSettingsClosed?.Invoke();
+        Debug.Log("[SettingsManager] Settings closed.");
+    }
+
+    private void ShowSettingsImmediate()
+    {
+        if (settingsCanvasGroup != null)
+        {
+            settingsCanvasGroup.alpha = 1f;
+            settingsCanvasGroup.interactable = true;
+            settingsCanvasGroup.blocksRaycasts = true;
+        }
+        else
+        {
+            settingsCanvas?.SetActive(true);
+        }
+    }
+
+    private void HideSettingsImmediate()
+    {
+        if (settingsCanvasGroup != null)
+        {
+            settingsCanvasGroup.alpha = 0f;
+            settingsCanvasGroup.interactable = false;
+            settingsCanvasGroup.blocksRaycasts = false;
+        }
+        else
+        {
+            settingsCanvas?.SetActive(false);
+        }
     }
 }
