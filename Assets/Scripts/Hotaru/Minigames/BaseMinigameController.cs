@@ -127,13 +127,35 @@ public abstract class BaseMinigameController : NetworkBehaviour
             var inventory = PlayerItemInventory.GetForPlayer(playerId);
             if (inventory == null)
             {
-                Debug.LogWarning($"[{GetType().Name}] KeyReward: Inventory not found for P{playerId} (rank {rank})");
+                StartCoroutine(GrantKeyWhenInventoryReady(playerId, rank, keyAmount));
                 continue;
             }
 
             inventory.AddKey(keyAmount);
             Debug.Log($"[{GetType().Name}] KeyReward: P{playerId} rank {rank} → +{keyAmount} key");
         }
+    }
+
+    private IEnumerator GrantKeyWhenInventoryReady(int playerId, int rank, int keyAmount)
+    {
+        const float timeoutSeconds = 3f;
+        float timer = 0f;
+
+        while (timer < timeoutSeconds)
+        {
+            var inventory = PlayerItemInventory.GetForPlayer(playerId);
+            if (inventory != null)
+            {
+                inventory.AddKey(keyAmount);
+                Debug.Log($"[{GetType().Name}] KeyReward (delayed): P{playerId} rank {rank} → +{keyAmount} key");
+                yield break;
+            }
+
+            timer += Time.deltaTime;
+            yield return null;
+        }
+
+        Debug.LogWarning($"[{GetType().Name}] KeyReward FAILED: Inventory not found for P{playerId} after {timeoutSeconds:0.0}s (rank {rank})");
     }
 
     // ----------------------------------------------------------------
@@ -252,6 +274,9 @@ public abstract class BaseMinigameController : NetworkBehaviour
                 ? _minigameData.timeLimit
                 : 0f;
 
+            // Cập nhật HUD ngay khi vào phase Playing để hiện đúng mốc thời gian ban đầu.
+            OnGameTimerChanged();
+
             UpdateAlivePlayerCount();
         }
 
@@ -369,7 +394,10 @@ public abstract class BaseMinigameController : NetworkBehaviour
         CheckWinCondition();
     }
 
-    protected virtual void OnGameTimerChanged() { }
+    protected virtual void OnGameTimerChanged()
+    {
+        MinigameHUDController.Instance?.SetTime(GameTimer);
+    }
 
     // ----------------------------------------------------------------
     //  Abstract / Virtual — bắt buộc override trong derived class

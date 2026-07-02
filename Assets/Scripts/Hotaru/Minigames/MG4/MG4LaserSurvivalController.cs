@@ -89,7 +89,7 @@ public class MG4LaserSurvivalController : BaseMinigameController
 
     protected override void OnGameTimerChanged()
     {
-        MinigameHUDController.Instance?.SetTime(GameTimer);
+        base.OnGameTimerChanged();
 
         if (!HasStateAuthority || IsGameEnded) return;
 

@@ -141,6 +141,22 @@ public class GameManager : NetworkBehaviour
     [Networked] public int BoardItem_P3_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S2 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S3 { get; private set; } = -1;
+
+    // ===== PLAYER RESOURCE STATE (KEY/CHEST) =====
+    [Networked] public int KeyCount_P0 { get; private set; } = 0;
+    [Networked] public int KeyCount_P1 { get; private set; } = 0;
+    [Networked] public int KeyCount_P2 { get; private set; } = 0;
+    [Networked] public int KeyCount_P3 { get; private set; } = 0;
+
+    [Networked] public int ChestCount_P0 { get; private set; } = 0;
+    [Networked] public int ChestCount_P1 { get; private set; } = 0;
+    [Networked] public int ChestCount_P2 { get; private set; } = 0;
+    [Networked] public int ChestCount_P3 { get; private set; } = 0;
+
+    [Networked] public int ResourcePlayerId_P0 { get; private set; } = -1;
+    [Networked] public int ResourcePlayerId_P1 { get; private set; } = -1;
+    [Networked] public int ResourcePlayerId_P2 { get; private set; } = -1;
+    [Networked] public int ResourcePlayerId_P3 { get; private set; } = -1;
     public void SaveBoardPositions(int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;
@@ -251,6 +267,106 @@ public class GameManager : NetworkBehaviour
         3 => new[] { BoardItem_P3_S0, BoardItem_P3_S1, BoardItem_P3_S2, BoardItem_P3_S3 },
         _ => new[] { -1, -1, -1, -1 }
     };
+
+    public void SavePlayerResourceState(int playerId, int keyCount, int chestCount)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        int slot = FindOrAssignResourceSlot(playerId);
+        if (slot < 0)
+            return;
+
+        switch (slot)
+        {
+            case 0:
+                ResourcePlayerId_P0 = playerId;
+                KeyCount_P0 = Mathf.Max(0, keyCount);
+                ChestCount_P0 = Mathf.Max(0, chestCount);
+                break;
+            case 1:
+                ResourcePlayerId_P1 = playerId;
+                KeyCount_P1 = Mathf.Max(0, keyCount);
+                ChestCount_P1 = Mathf.Max(0, chestCount);
+                break;
+            case 2:
+                ResourcePlayerId_P2 = playerId;
+                KeyCount_P2 = Mathf.Max(0, keyCount);
+                ChestCount_P2 = Mathf.Max(0, chestCount);
+                break;
+            case 3:
+                ResourcePlayerId_P3 = playerId;
+                KeyCount_P3 = Mathf.Max(0, keyCount);
+                ChestCount_P3 = Mathf.Max(0, chestCount);
+                break;
+        }
+
+        Debug.Log($"[GameManager] Saved Resource P{playerId}: Key={keyCount}, Chest={chestCount}");
+    }
+
+    public bool TryGetPlayerResourceState(int playerId, out int keyCount, out int chestCount)
+    {
+        switch (GetResourceSlotByPlayerId(playerId))
+        {
+            case 0:
+                keyCount = KeyCount_P0;
+                chestCount = ChestCount_P0;
+                return true;
+            case 1:
+                keyCount = KeyCount_P1;
+                chestCount = ChestCount_P1;
+                return true;
+            case 2:
+                keyCount = KeyCount_P2;
+                chestCount = ChestCount_P2;
+                return true;
+            case 3:
+                keyCount = KeyCount_P3;
+                chestCount = ChestCount_P3;
+                return true;
+            default:
+                keyCount = 0;
+                chestCount = 0;
+                return false;
+        }
+    }
+
+    public bool TryRestorePlayerResourceState(int playerId, PlayerItemInventory inventory)
+    {
+        if (!HasStateAuthority || inventory == null)
+            return false;
+
+        if (!TryGetPlayerResourceState(playerId, out int keyCount, out int chestCount))
+            return false;
+
+        inventory.SetResourceCounts(keyCount, chestCount);
+        Debug.Log($"[GameManager] Restored Resource P{playerId}: Key={keyCount}, Chest={chestCount}");
+        return true;
+    }
+
+    private int FindOrAssignResourceSlot(int playerId)
+    {
+        int existed = GetResourceSlotByPlayerId(playerId);
+        if (existed >= 0)
+            return existed;
+
+        if (ResourcePlayerId_P0 < 0) return 0;
+        if (ResourcePlayerId_P1 < 0) return 1;
+        if (ResourcePlayerId_P2 < 0) return 2;
+        if (ResourcePlayerId_P3 < 0) return 3;
+
+        // Fallback nếu đủ 4 slot: map theo player id để ổn định.
+        return Mathf.Abs(playerId) % 4;
+    }
+
+    private int GetResourceSlotByPlayerId(int playerId)
+    {
+        if (ResourcePlayerId_P0 == playerId) return 0;
+        if (ResourcePlayerId_P1 == playerId) return 1;
+        if (ResourcePlayerId_P2 == playerId) return 2;
+        if (ResourcePlayerId_P3 == playerId) return 3;
+        return -1;
+    }
     #region Synced Minigame Settings (từ MinigameData, sync cho tất cả clients)
     [Networked] public NetworkBool MG_CanMove { get; private set; } = true;
     [Networked] public NetworkBool MG_CanJump { get; private set; } = true;
@@ -963,9 +1079,13 @@ public class GameManager : NetworkBehaviour
 
         BoardManager.Instance.StartBoardPhase(ranking);
 
+        RestorePlayerResourceStates();
+
         int[] saved = GetBoardPositions();
         if (saved[0] != 0 || saved[1] != 0 || saved[2] != 0 || saved[3] != 0)
             BoardManager.Instance.RestoreBoardPositions(saved);
+
+        RestorePlayerResourceStates();
     }
 
     private void SaveCurrentBoardItems()
@@ -1001,6 +1121,43 @@ public class GameManager : NetworkBehaviour
                 $"{inv.BoardItems.Get(1)}, " +
                 $"{inv.BoardItems.Get(2)}, " +
                 $"{inv.BoardItems.Get(3)}]");
+        }
+
+        SaveCurrentPlayerResources();
+    }
+
+    private void SaveCurrentPlayerResources()
+    {
+        if (!HasStateAuthority || BoardManager.Instance == null)
+            return;
+
+        for (int slot = 0; slot < BoardManager.Instance.ActivePlayerCount; slot++)
+        {
+            int playerId = BoardManager.Instance.GetPlayerIDAtSlot(slot);
+            if (playerId < 0)
+                continue;
+
+            var inv = PlayerItemInventory.GetForPlayer(playerId);
+            if (inv == null)
+                continue;
+
+            SavePlayerResourceState(playerId, inv.GetKeyCount(), inv.GetChestCount());
+        }
+    }
+
+    private void RestorePlayerResourceStates()
+    {
+        if (!HasStateAuthority)
+            return;
+
+        foreach (var playerRef in Runner.ActivePlayers)
+        {
+            int playerId = playerRef.PlayerId;
+            var inv = PlayerItemInventory.GetForPlayer(playerId);
+            if (inv == null)
+                continue;
+
+            TryRestorePlayerResourceState(playerId, inv);
         }
     }
 
