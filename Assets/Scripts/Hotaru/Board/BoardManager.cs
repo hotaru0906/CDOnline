@@ -794,6 +794,27 @@ public class BoardManager : NetworkBehaviour
             tokens[slot].AnimateMovement(pathNodeIDs);
     }
 
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowDirectionSelection(int playerId, int nodeID)
+    {
+        // Không phải player đang tới lượt thì bỏ qua
+        if (Runner.LocalPlayer.PlayerId != playerId)
+            return;
+
+        BoardNode node = BoardNodePath.Instance.GetNodeByID(nodeID);
+
+        if (node == null)
+            return;
+
+        var ui = FindFirstObjectByType<DirectionSelectionUI>();
+
+        if (ui != null)
+        {
+            ui.ShowDirectionUI(node);
+        }
+
+    }
+
     private IEnumerator ExecuteMovementStepByStep(
         int slot,
         int playerId,
@@ -845,7 +866,9 @@ public class BoardManager : NetworkBehaviour
 
                     _directionSelected = false;
 
-                    OnDirectionSelectionRequested?.Invoke(_currentMoveNode);
+                    RPC_ShowDirectionSelection(
+                        playerId,
+                        _currentMoveNode.nodeID);
 
                     while (!_directionSelected)
                         yield return null;
@@ -1291,11 +1314,33 @@ public class BoardManager : NetworkBehaviour
         }
     }
 
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_SubmitBranchSelection(int playerId, int branchIndex)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        // Chỉ player đang tới lượt mới được chọn
+        if (playerId != CurrentPlayerID)
+            return;
+
+        _selectedBranchIndex = branchIndex;
+        _directionSelected = true;
+    }
+
     public void SelectBranch(int branchIndex)
     {
-        _selectedBranchIndex = branchIndex;
-
-        _directionSelected = true;
+        if (HasStateAuthority)
+        {
+            _selectedBranchIndex = branchIndex;
+            _directionSelected = true;
+        }
+        else
+        {
+            RPC_SubmitBranchSelection(
+                Runner.LocalPlayer.PlayerId,
+                branchIndex);
+        }
     }
 
     public void ReverseOrder()

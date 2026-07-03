@@ -6,6 +6,7 @@ using UnityEngine.UI;
 [DefaultExecutionOrder(-1000)]
 public class DirectionSelectionUI : MonoBehaviour
 {
+    public static DirectionSelectionUI Instance { get; private set; }
     [Header("UI")]
     [SerializeField] private GameObject panel;
     [SerializeField] private Transform buttonRoot;
@@ -20,6 +21,7 @@ public class DirectionSelectionUI : MonoBehaviour
 
     private void Awake()
     {
+        Instance = this;
         Debug.LogError("===== DIRECTION UI AWAKE =====");
 
         panel.SetActive(false);
@@ -88,7 +90,7 @@ public class DirectionSelectionUI : MonoBehaviour
         }
     }
 
-    private void ShowDirectionUI(BoardNode node)
+    public void ShowDirectionUI(BoardNode node)
     {
         Hide();
 

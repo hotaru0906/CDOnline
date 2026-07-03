@@ -32,8 +32,18 @@ public class BoardChestManager : NetworkBehaviour
     // 4. Spawned
     public override void Spawned()
     {
+        // Client chỉ restore vị trí
         if (!HasStateAuthority)
+        {
+            if (GameManager.Instance.HasSavedChestState())
+            {
+                RestoreChest();
+            }
+
             return;
+        }
+
+        // ===== Host =====
 
         if (chestSpawnNodes.Count == 0)
         {
