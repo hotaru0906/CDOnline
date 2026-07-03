@@ -1,52 +1,25 @@
 using Fusion;
 using UnityEngine;
 using System.Collections.Generic;
-
-/// <summary>
-/// MG3 Brawl — Last player standing wins.
-/// 
-/// Rules:
-///   - Mỗi player có Lives (3-5 mạng)
-///   - Không có item: tấn công chỉ stun (knockback)
-///   - Có item trên tay: tấn công gây -1 Lives + drop item
-///   - Hết mạng: bị loại (IsEliminated)
-///   - Win condition: còn 1 player sống
-///   - Rank: sống lâu nhất = 1st, chết sớm nhất = 4th
-///
-/// SETUP trong scene:
-///   1. Attach script này vào NetworkObject trong MG3 scene
-///   2. Assign spawnPoints (4 điểm)
-///   3. Attach MG3ItemSpawner vào scene riêng
-///   4. Attach MG3PlayerBrawlData vào player prefab
-/// </summary>
 public class MG3BrawlController : BaseMinigameController
 {
     public new static MG3BrawlController Instance =>
         BaseMinigameController.Instance as MG3BrawlController;
-
-    [Header("Brawl Settings")]
-    [SerializeField] private int startingLives = 3;
-
-    // Thứ tự bị loại — chết trước = rank thấp hơn
-    // eliminationOrder[0] = player bị loại đầu tiên (rank 4th nếu 4 players)
     private readonly List<PlayerRef> _eliminationOrder = new();
 
-    // ----------------------------------------------------------------
-    //  Setup
-    // ----------------------------------------------------------------
-
+    #region Overrides
     protected override void OnGamePlayingStarted()
     {
         if (!HasStateAuthority) return;
 
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         foreach (var p in allData)
-            p.SetLives(startingLives);
+            p.SetHP(100);  // ← đổi từ SetLives(startingLives)
 
         foreach (var p in allData)
             p.OnPlayerEliminated += HandlePlayerEliminated;
         MinigameHUDController.Instance?.RefreshPlayers();
-        Debug.Log($"[MG3BrawlController] Game started — {allData.Length} players, {startingLives} lives each");
+        Debug.Log($"[MG3BrawlController] Game started — {allData.Length} players, 100 HP each");
     }
 
     protected override void OnGameOver()
@@ -55,17 +28,19 @@ public class MG3BrawlController : BaseMinigameController
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         foreach (var p in allData)
             p.OnPlayerEliminated -= HandlePlayerEliminated;
+
+        // MG3 rule: once picked up, item is kept for the whole match.
+        // Only clear item-in-hand visuals/state when minigame ends.
+        if (HasStateAuthority)
+        {
+            var allBrawlData = FindObjectsByType<MG3PlayerBrawlData>(FindObjectsSortMode.None);
+            foreach (var brawlData in allBrawlData)
+                brawlData.DropItem();
+        }
     }
 
-    // ----------------------------------------------------------------
-    //  Hit Logic — gọi từ CheckAttackHit override
-    // ----------------------------------------------------------------
-
-    /// <summary>
-    /// Gọi khi attacker tấn công trúng target.
-    /// Nếu attacker có item → -1 lives target + drop item.
-    /// Nếu không có item → chỉ knockback (xử lý bởi PlayerController).
-    /// </summary>
+    #endregion
+    #region Hit Logic
     public void OnPlayerHit(PlayerController attacker, PlayerController target)
     {
         if (!HasStateAuthority) return;
@@ -75,24 +50,16 @@ public class MG3BrawlController : BaseMinigameController
         if (targetMgData == null || !targetMgData.CanTakeDamage()) return;
 
         var attackerBrawl = attacker.GetComponent<MG3PlayerBrawlData>();
-        var targetBrawl = target.GetComponent<MG3PlayerBrawlData>();
 
         if (attackerBrawl != null && attackerBrawl.HasItem)
         {
-            // Có item → gây sát thương thật
-            attackerBrawl.DropItem();
-            targetMgData.LoseLife();
-
-            // Nếu target đang có item → drop item của target
-            if (targetBrawl != null && targetBrawl.HasItem)
-                targetBrawl.DropItem();
+            targetMgData.TakeDamage(20);
 
             RPC_OnHitWithItem(
                 attacker.Object.InputAuthority,
                 target.Object.InputAuthority
             );
-
-            Debug.Log($"[MG3Brawl] P{attacker.Object.InputAuthority} HIT P{target.Object.InputAuthority} with item!");
+            Debug.Log($"[MG3Brawl] P{attacker.Object.InputAuthority} HIT P{target.Object.InputAuthority} — 20 damage!");
         }
         else
         {
@@ -100,10 +67,8 @@ public class MG3BrawlController : BaseMinigameController
             Debug.Log($"[MG3Brawl] P{attacker.Object.InputAuthority} stunned P{target.Object.InputAuthority}");
         }
     }
-
-    // ----------------------------------------------------------------
-    //  Elimination
-    // ----------------------------------------------------------------
+    #endregion
+    #region Elimination & Win Condition
 
     private void HandlePlayerEliminated(PlayerMinigameData data)
     {
@@ -119,10 +84,6 @@ public class MG3BrawlController : BaseMinigameController
         UpdateAlivePlayerCount();
         CheckWinCondition();
     }
-
-    // ----------------------------------------------------------------
-    //  Win Condition
-    // ----------------------------------------------------------------
 
     protected override void CheckWinCondition()
     {
@@ -154,7 +115,7 @@ public class MG3BrawlController : BaseMinigameController
 
     protected override void OnGameTimerChanged()
     {
-        MinigameHUDController.Instance?.SetTime(GameTimer);
+        base.OnGameTimerChanged();
     }
 
 
@@ -169,7 +130,7 @@ public class MG3BrawlController : BaseMinigameController
         foreach (var p in allData)
             if (!p.IsEliminated) alive.Add(p);
 
-        alive.Sort((a, b) => b.Lives.CompareTo(a.Lives));
+        alive.Sort((a, b) => b.HP.CompareTo(a.HP));
 
         // Thêm người còn sống vào elimination order (nhiều mạng nhất = cuối cùng = rank cao nhất)
         foreach (var p in alive)
@@ -186,11 +147,6 @@ public class MG3BrawlController : BaseMinigameController
         FinalizeRanks();
         EndGame(winner);
     }
-
-    // ----------------------------------------------------------------
-    //  Rank — elimination order ngược lại = rank
-    // ----------------------------------------------------------------
-
     private void FinalizeRanks()
     {
         int total = _eliminationOrder.Count;
@@ -215,23 +171,6 @@ public class MG3BrawlController : BaseMinigameController
         ApplyHiddenScores(); // ← thêm dòng này
     }
 
-    // protected override int[] BuildBoardRanking(PlayerRef winner)
-    // {
-    //     // Rank board: người thắng đi trước
-    //     var ranking = new List<int>();
-
-    //     // eliminationOrder cuối cùng = winner (rank 1)
-    //     // Đảo ngược để rank 1 lên đầu
-    //     for (int i = _eliminationOrder.Count - 1; i >= 0; i--)
-    //         ranking.Add(_eliminationOrder[i].PlayerId);
-
-    //     return ranking.ToArray();
-    // }
-
-    // ----------------------------------------------------------------
-    //  Scoreboard
-    // ----------------------------------------------------------------
-
     protected override void BuildScoreboardResults()
     {
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
@@ -249,7 +188,7 @@ public class MG3BrawlController : BaseMinigameController
             {
                 Player = p.Object.InputAuthority,
                 Rank = p.FinishRank > 0 ? p.FinishRank : (i + 1),
-                Score = p.Lives,
+                Score = p.HP,
                 IsValid = true
             });
         }
@@ -268,14 +207,12 @@ public class MG3BrawlController : BaseMinigameController
             string name = netData != null
                 ? netData.PlayerName.ToString()
                 : $"P{p.Object.InputAuthority.PlayerId}";
-            Debug.Log($"[Scoreboard] #{p.FinishRank}: {name} — {p.Lives} lives remaining");
+            Debug.Log($"[Scoreboard] #{p.FinishRank}: {name} — {p.HP} HP remaining");
         }
         Debug.Log("=============================================");
     }
-
-    // ----------------------------------------------------------------
-    //  RPC
-    // ----------------------------------------------------------------
+    #endregion
+    #region RPCs
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnHitWithItem(PlayerRef attackerId, PlayerRef targetId)
@@ -298,4 +235,5 @@ public class MG3BrawlController : BaseMinigameController
             }
         }
     }
+    #endregion
 }

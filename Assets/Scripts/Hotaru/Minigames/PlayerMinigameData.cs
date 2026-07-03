@@ -34,7 +34,8 @@ public class PlayerMinigameData : NetworkBehaviour
     [Networked] public int Score { get; private set; }
     [Networked] public int HiddenScore { get; private set; }
 
-    // Thêm OnChangedRender để client nhận callback khi Lives thay đổi
+    [Networked, OnChangedRender(nameof(OnHPChangedRender))]
+    public int HP { get; private set; } = 0;
     [Networked, OnChangedRender(nameof(OnLivesChangedRender))]
     public int Lives { get; private set; } = 0;
 
@@ -44,12 +45,9 @@ public class PlayerMinigameData : NetworkBehaviour
     #endregion
 
     #region Events
-
-    // Fired locally on the instance when player becomes eliminated (Render() detects change)
     public event System.Action<PlayerMinigameData> OnPlayerEliminated;
-
-    // Host-side event when lives change: (playerId, newLives)
     public event System.Action<int, int> OnLivesChangedHost;
+    public event System.Action<int, int> OnHPChangedHost;
 
     #endregion
 
@@ -128,14 +126,39 @@ public class PlayerMinigameData : NetworkBehaviour
         DistanceProgress = 0f;
         Score = 0;
         Lives = 0;
-
+        HP = 0;
         // Fire host-side lives changed event
         OnLivesChangedHost?.Invoke(Object.InputAuthority.PlayerId, Lives);
+        OnHPChangedHost?.Invoke(Object.InputAuthority.PlayerId, HP);
 
         playerController?.SetFrozen(false);
         Debug.Log($"[PlayerMinigameData] Checkpoint reset to {spawnPosition}");
     }
+    public void SetHP(int hp)
+    {
+        if (!HasStateAuthority) return;
+        HP = hp;
+        OnHPChangedHost?.Invoke(Object.InputAuthority.PlayerId, HP);
+        Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} HP set to {HP}");
+    }
 
+    public void TakeDamage(int amount)
+    {
+        if (!HasStateAuthority) return;
+        if (IsEliminated || IsInvincible) return;
+
+        HP = Mathf.Max(0, HP - amount);
+        OnHPChangedHost?.Invoke(Object.InputAuthority.PlayerId, HP);
+        Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} took {amount} damage — {HP} HP remaining");
+
+        if (HP <= 0)
+        {
+            IsEliminated = true;
+            IsDead = true;
+            playerController?.SetFrozen(true);
+            Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} ELIMINATED (HP=0)");
+        }
+    }
     public void ResetForNewRound()
     {
         if (!HasStateAuthority) return;
@@ -383,6 +406,10 @@ public class PlayerMinigameData : NetworkBehaviour
     private void OnIsEliminatedChangedRender()
     {
         MinigameHUDController.Instance?.MarkPlayerEliminated(Object.InputAuthority.PlayerId);
+    }
+    private void OnHPChangedRender()
+    {
+        MinigameHUDController.Instance?.UpdatePlayerHP(Object.InputAuthority.PlayerId, HP);
     }
 
     #endregion

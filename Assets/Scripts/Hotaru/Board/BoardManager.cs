@@ -8,10 +8,12 @@ public enum BoardPhaseState
     WaitingForRoll,
     Rolling,
     Moving,
+    WaitingForDirection,
     ResolvingTile,
     WaitingForTargetSelect,
     WaitingForItemTarget,
     NextTurn,
+    
     BoardComplete
 }
 
@@ -70,6 +72,13 @@ public class BoardManager : NetworkBehaviour
     #region Local State
     private int _completedThisRound = 0;
 
+    // ===== Branch Movement =====
+    private int _remainingSteps = 0;
+    private BoardNode _currentMoveNode;
+    private int _selectedBranchIndex = 0;
+
+    private bool _directionSelected = false;
+
 
     private bool _waitingForMyRoll = false;
 
@@ -104,6 +113,7 @@ public class BoardManager : NetworkBehaviour
     #region Events
     public System.Action<int> OnTurnStarted;
     public System.Action OnBoardPhaseComplete;
+    public System.Action<BoardNode> OnDirectionSelectionRequested;
     #endregion
 
     #region Slot Accessors
@@ -437,7 +447,7 @@ public class BoardManager : NetworkBehaviour
         RPC_HideDice();
 
         // 6. Di chuyển
-        yield return StartCoroutine(ExecuteMovement(slot, playerId, result));
+        yield return StartCoroutine(ExecuteMovementStepByStep(slot, playerId, result));
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -730,6 +740,22 @@ public class BoardManager : NetworkBehaviour
     #endregion
 
     #region Movement
+
+    private IEnumerator MoveOneStep(int slot, BoardNode nextNode)
+    {
+        var token = tokens[slot];
+
+        RPC_AnimateMovement(
+            slot,
+            new int[]
+            {
+                nextNode.nodeID
+            });
+
+        while (token.IsMoving)
+            yield return null;
+    }
+    
     private IEnumerator ExecuteMovement(int slot, int playerId, int steps)
     {
         BoardState = BoardPhaseState.Moving;
@@ -767,12 +793,116 @@ public class BoardManager : NetworkBehaviour
         if (tokens != null && slot < tokens.Length && tokens[slot] != null)
             tokens[slot].AnimateMovement(pathNodeIDs);
     }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowDirectionSelection(int playerId, int nodeID)
+    {
+        // Không phải player đang tới lượt thì bỏ qua
+        if (Runner.LocalPlayer.PlayerId != playerId)
+            return;
+
+        BoardNode node = BoardNodePath.Instance.GetNodeByID(nodeID);
+
+        if (node == null)
+            return;
+
+        var ui = FindFirstObjectByType<DirectionSelectionUI>();
+
+        if (ui != null)
+        {
+            ui.ShowDirectionUI(node);
+        }
+
+    }
+
+    private IEnumerator ExecuteMovementStepByStep(
+        int slot,
+        int playerId,
+        int steps)
+        {
+            BoardState = BoardPhaseState.Moving;
+
+            _remainingSteps = steps;
+
+            _currentMoveNode =
+                BoardNodePath.Instance.GetNodeByID(
+                    GetNodeIDAtSlot(slot));
+
+            if (_currentMoveNode == null)
+            {
+                yield return FinishTurn(
+                    slot,
+                    playerId,
+                    GetNodeIDAtSlot(slot),
+                    TileType.Empty);
+
+                yield break;
+            }
+
+            while (_remainingSteps > 0)
+            {
+                BoardNode nextNode =
+                    BoardNodePath.Instance.GetNextNode(
+                        _currentMoveNode,
+                        _selectedBranchIndex);
+
+                if (nextNode == null)
+                    break;
+                yield return StartCoroutine(
+                    MoveOneStep(slot, nextNode));
+                _currentMoveNode = nextNode;
+
+                SetNodeIDAtSlot(slot, nextNode.nodeID);
+
+                _remainingSteps--;
+
+                if (_remainingSteps > 0 &&
+                    _currentMoveNode.nextNodes != null &&
+                    _currentMoveNode.nextNodes.Count > 1)
+                {
+                    Debug.Log($"[Board] Branch reached at Node {_currentMoveNode.nodeID}");
+
+                    BoardState = BoardPhaseState.WaitingForDirection;
+
+                    _directionSelected = false;
+
+                    RPC_ShowDirectionSelection(
+                        playerId,
+                        _currentMoveNode.nodeID);
+
+                    while (!_directionSelected)
+                        yield return null;
+
+                    BoardState = BoardPhaseState.Moving;
+                }
+            }
+
+            yield return FinishTurn(
+                slot,
+                playerId,
+                _currentMoveNode.nodeID,
+                _currentMoveNode.tileType);
+        }
     #endregion
 
     #region Tile Resolve
     private IEnumerator FinishTurn(int slot, int playerId, int finalNodeID, TileType tileType)
     {
         BoardState = BoardPhaseState.ResolvingTile;
+
+        BoardCollectableManager.Instance?.TryCollectKey(playerId, finalNodeID);
+
+        bool chestHandled =
+        BoardChestManager.Instance != null &&
+        BoardChestManager.Instance.TryOpenChest(playerId, finalNodeID);
+
+        if (chestHandled)
+        {
+            while (BoardChestManager.Instance.IsInteractionActive)
+            {
+                yield return null;
+            }
+        }
 
         switch (tileType)
         {
@@ -1184,6 +1314,35 @@ public class BoardManager : NetworkBehaviour
         }
     }
 
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_SubmitBranchSelection(int playerId, int branchIndex)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        // Chỉ player đang tới lượt mới được chọn
+        if (playerId != CurrentPlayerID)
+            return;
+
+        _selectedBranchIndex = branchIndex;
+        _directionSelected = true;
+    }
+
+    public void SelectBranch(int branchIndex)
+    {
+        if (HasStateAuthority)
+        {
+            _selectedBranchIndex = branchIndex;
+            _directionSelected = true;
+        }
+        else
+        {
+            RPC_SubmitBranchSelection(
+                Runner.LocalPlayer.PlayerId,
+                branchIndex);
+        }
+    }
+
     public void ReverseOrder()
     {
         if (!HasStateAuthority) return;
@@ -1218,6 +1377,24 @@ public class BoardManager : NetworkBehaviour
         }
 
         return null;
+    }
+
+    public void EndGame(int winnerPlayerId)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        Debug.Log("=================================");
+        Debug.Log($"PLAYER {winnerPlayerId} WINS!");
+        Debug.Log("=================================");
+
+        BoardState = BoardPhaseState.BoardComplete;
+
+        // TODO:
+        // Winner UI
+        // Camera
+        // Animation
+        // Load End Scene
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -1299,6 +1476,7 @@ public class BoardManager : NetworkBehaviour
             var rItems = inv.GetRouletteItems();
             GUILayout.Label($"  P{pid} Board[{bItems.Count}/4]:{(bItems.Count > 0 ? string.Join(",", bItems) : "-")}");
             GUILayout.Label($"       Rlt[{rItems.Count}/8]:{(rItems.Count > 0 ? string.Join(",", rItems) : "-")}");
+            GUILayout.Label($"       Keys: {inv.GetKeyCount()}");
         }
 
         if (_lastTileMessageTimer > 0f && _lastTileMessage.Length > 0)
@@ -1371,6 +1549,22 @@ public class BoardManager : NetworkBehaviour
                 }
                 GUI.color = Color.white;
             }
+
+            GUILayout.Space(5);
+
+            GUI.color = Color.yellow;
+
+            if (GUILayout.Button("Give 1 Key To Current Player"))
+            {
+                var inv = PlayerItemInventory.GetForPlayer(CurrentPlayerID);
+
+                if (inv != null)
+                {
+                    inv.AddKey();
+                }
+            }
+
+            GUI.color = Color.white;
         }
 
         GUILayout.EndArea();

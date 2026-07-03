@@ -105,6 +105,23 @@ public class GameManager : NetworkBehaviour
     [Networked] public int BoardNodeSlot1 { get; private set; } = 0;
     [Networked] public int BoardNodeSlot2 { get; private set; } = 0;
     [Networked] public int BoardNodeSlot3 { get; private set; } = 0;
+    // ===== KEY STATE =====
+
+    // Node hiện tại của từng Key
+    [Networked] public int KeyNode0 { get; private set; } = -1;
+    [Networked] public int KeyNode1 { get; private set; } = -1;
+    [Networked] public int KeyNode2 { get; private set; } = -1;
+    [Networked] public int KeyNode3 { get; private set; } = -1;
+
+    // Key đã bị nhặt chưa
+    [Networked] public NetworkBool KeyCollected0 { get; private set; } = false;
+    [Networked] public NetworkBool KeyCollected1 { get; private set; } = false;
+    [Networked] public NetworkBool KeyCollected2 { get; private set; } = false;
+    [Networked] public NetworkBool KeyCollected3 { get; private set; } = false;
+    // ===== CHEST STATE =====
+
+    [Networked]
+    public int ChestNode { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S0 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S2 { get; private set; } = -1;
@@ -124,6 +141,22 @@ public class GameManager : NetworkBehaviour
     [Networked] public int BoardItem_P3_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S2 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S3 { get; private set; } = -1;
+
+    // ===== PLAYER RESOURCE STATE (KEY/CHEST) =====
+    [Networked] public int KeyCount_P0 { get; private set; } = 0;
+    [Networked] public int KeyCount_P1 { get; private set; } = 0;
+    [Networked] public int KeyCount_P2 { get; private set; } = 0;
+    [Networked] public int KeyCount_P3 { get; private set; } = 0;
+
+    [Networked] public int ChestCount_P0 { get; private set; } = 0;
+    [Networked] public int ChestCount_P1 { get; private set; } = 0;
+    [Networked] public int ChestCount_P2 { get; private set; } = 0;
+    [Networked] public int ChestCount_P3 { get; private set; } = 0;
+
+    [Networked] public int ResourcePlayerId_P0 { get; private set; } = -1;
+    [Networked] public int ResourcePlayerId_P1 { get; private set; } = -1;
+    [Networked] public int ResourcePlayerId_P2 { get; private set; } = -1;
+    [Networked] public int ResourcePlayerId_P3 { get; private set; } = -1;
     public void SaveBoardPositions(int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;
@@ -134,6 +167,83 @@ public class GameManager : NetworkBehaviour
     }
 
     public int[] GetBoardPositions() => new[] { BoardNodeSlot0, BoardNodeSlot1, BoardNodeSlot2, BoardNodeSlot3 };
+
+    public void SaveKeyState(int index, int nodeId, bool collected)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        switch (index)
+        {
+            case 0:
+                KeyNode0 = nodeId;
+                KeyCollected0 = collected;
+                break;
+
+            case 1:
+                KeyNode1 = nodeId;
+                KeyCollected1 = collected;
+                break;
+
+            case 2:
+                KeyNode2 = nodeId;
+                KeyCollected2 = collected;
+                break;
+
+            case 3:
+                KeyNode3 = nodeId;
+                KeyCollected3 = collected;
+                break;
+        }
+    }
+
+    public int GetKeyNode(int index)
+    {
+        return index switch
+        {
+            0 => KeyNode0,
+            1 => KeyNode1,
+            2 => KeyNode2,
+            3 => KeyNode3,
+            _ => -1
+        };
+    }
+
+    public bool GetKeyCollected(int index)
+    {
+        return index switch
+        {
+            0 => KeyCollected0,
+            1 => KeyCollected1,
+            2 => KeyCollected2,
+            3 => KeyCollected3,
+            _ => false
+        };
+    }
+
+    public bool HasSavedKeyState()
+    {
+        return KeyNode0 != -1;
+    }
+
+    public void SaveChestState(int nodeId)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        ChestNode = nodeId;
+    }
+
+    public int GetChestNode()
+    {
+        return ChestNode;
+    }
+
+    public bool HasSavedChestState()
+    {
+        return ChestNode != -1;
+    }
+
     public void SaveBoardItems(int slot, int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;
@@ -157,6 +267,106 @@ public class GameManager : NetworkBehaviour
         3 => new[] { BoardItem_P3_S0, BoardItem_P3_S1, BoardItem_P3_S2, BoardItem_P3_S3 },
         _ => new[] { -1, -1, -1, -1 }
     };
+
+    public void SavePlayerResourceState(int playerId, int keyCount, int chestCount)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        int slot = FindOrAssignResourceSlot(playerId);
+        if (slot < 0)
+            return;
+
+        switch (slot)
+        {
+            case 0:
+                ResourcePlayerId_P0 = playerId;
+                KeyCount_P0 = Mathf.Max(0, keyCount);
+                ChestCount_P0 = Mathf.Max(0, chestCount);
+                break;
+            case 1:
+                ResourcePlayerId_P1 = playerId;
+                KeyCount_P1 = Mathf.Max(0, keyCount);
+                ChestCount_P1 = Mathf.Max(0, chestCount);
+                break;
+            case 2:
+                ResourcePlayerId_P2 = playerId;
+                KeyCount_P2 = Mathf.Max(0, keyCount);
+                ChestCount_P2 = Mathf.Max(0, chestCount);
+                break;
+            case 3:
+                ResourcePlayerId_P3 = playerId;
+                KeyCount_P3 = Mathf.Max(0, keyCount);
+                ChestCount_P3 = Mathf.Max(0, chestCount);
+                break;
+        }
+
+        Debug.Log($"[GameManager] Saved Resource P{playerId}: Key={keyCount}, Chest={chestCount}");
+    }
+
+    public bool TryGetPlayerResourceState(int playerId, out int keyCount, out int chestCount)
+    {
+        switch (GetResourceSlotByPlayerId(playerId))
+        {
+            case 0:
+                keyCount = KeyCount_P0;
+                chestCount = ChestCount_P0;
+                return true;
+            case 1:
+                keyCount = KeyCount_P1;
+                chestCount = ChestCount_P1;
+                return true;
+            case 2:
+                keyCount = KeyCount_P2;
+                chestCount = ChestCount_P2;
+                return true;
+            case 3:
+                keyCount = KeyCount_P3;
+                chestCount = ChestCount_P3;
+                return true;
+            default:
+                keyCount = 0;
+                chestCount = 0;
+                return false;
+        }
+    }
+
+    public bool TryRestorePlayerResourceState(int playerId, PlayerItemInventory inventory)
+    {
+        if (!HasStateAuthority || inventory == null)
+            return false;
+
+        if (!TryGetPlayerResourceState(playerId, out int keyCount, out int chestCount))
+            return false;
+
+        inventory.SetResourceCounts(keyCount, chestCount);
+        Debug.Log($"[GameManager] Restored Resource P{playerId}: Key={keyCount}, Chest={chestCount}");
+        return true;
+    }
+
+    private int FindOrAssignResourceSlot(int playerId)
+    {
+        int existed = GetResourceSlotByPlayerId(playerId);
+        if (existed >= 0)
+            return existed;
+
+        if (ResourcePlayerId_P0 < 0) return 0;
+        if (ResourcePlayerId_P1 < 0) return 1;
+        if (ResourcePlayerId_P2 < 0) return 2;
+        if (ResourcePlayerId_P3 < 0) return 3;
+
+        // Fallback nếu đủ 4 slot: map theo player id để ổn định.
+        return Mathf.Abs(playerId) % 4;
+    }
+
+    private int GetResourceSlotByPlayerId(int playerId)
+    {
+        if (ResourcePlayerId_P0 == playerId) return 0;
+        if (ResourcePlayerId_P1 == playerId) return 1;
+        if (ResourcePlayerId_P2 == playerId) return 2;
+        if (ResourcePlayerId_P3 == playerId) return 3;
+        return -1;
+    }
     #region Synced Minigame Settings (từ MinigameData, sync cho tất cả clients)
     [Networked] public NetworkBool MG_CanMove { get; private set; } = true;
     [Networked] public NetworkBool MG_CanJump { get; private set; } = true;
@@ -225,9 +435,8 @@ public class GameManager : NetworkBehaviour
         // Called when NetworkObject is spawned
         Debug.Log($"[GameManager] Spawned. IsHost: {HasStateAuthority}");
 
-        // Tìm UI references bằng tag
         FindUIReferences();
-        InitializeUIState();
+        HandleStateChange();
     }
 
     /// <summary>
@@ -476,24 +685,6 @@ public class GameManager : NetworkBehaviour
         }
 
         Debug.Log("[GameManager] Showing scoreboard");
-    }
-
-    private void InitializeUIState()
-    {
-        // Đảm bảo luôn tìm lại UI trước khi set
-        FindUIReferences();
-
-        // Ẩn tất cả trước
-        SetActiveUI(lobbyUI, false);
-        SetActiveUI(votingUI, false);
-        SetActiveUI(scoreboardUI, false);
-        SetActiveUI(resultUI, false);
-        SetActiveUI(minigameCountdownUI, false);
-
-        // Chỉ bật Lobby
-        SetActiveUI(lobbyUI, true);
-
-        Debug.Log("[GameManager] Initialize UI: Only LobbyUI is active");
     }
     public bool AreAllPlayersReady()
     {
@@ -888,9 +1079,13 @@ public class GameManager : NetworkBehaviour
 
         BoardManager.Instance.StartBoardPhase(ranking);
 
+        RestorePlayerResourceStates();
+
         int[] saved = GetBoardPositions();
         if (saved[0] != 0 || saved[1] != 0 || saved[2] != 0 || saved[3] != 0)
             BoardManager.Instance.RestoreBoardPositions(saved);
+
+        RestorePlayerResourceStates();
     }
 
     private void SaveCurrentBoardItems()
@@ -927,6 +1122,43 @@ public class GameManager : NetworkBehaviour
                 $"{inv.BoardItems.Get(2)}, " +
                 $"{inv.BoardItems.Get(3)}]");
         }
+
+        SaveCurrentPlayerResources();
+    }
+
+    private void SaveCurrentPlayerResources()
+    {
+        if (!HasStateAuthority || BoardManager.Instance == null)
+            return;
+
+        for (int slot = 0; slot < BoardManager.Instance.ActivePlayerCount; slot++)
+        {
+            int playerId = BoardManager.Instance.GetPlayerIDAtSlot(slot);
+            if (playerId < 0)
+                continue;
+
+            var inv = PlayerItemInventory.GetForPlayer(playerId);
+            if (inv == null)
+                continue;
+
+            SavePlayerResourceState(playerId, inv.GetKeyCount(), inv.GetChestCount());
+        }
+    }
+
+    private void RestorePlayerResourceStates()
+    {
+        if (!HasStateAuthority)
+            return;
+
+        foreach (var playerRef in Runner.ActivePlayers)
+        {
+            int playerId = playerRef.PlayerId;
+            var inv = PlayerItemInventory.GetForPlayer(playerId);
+            if (inv == null)
+                continue;
+
+            TryRestorePlayerResourceState(playerId, inv);
+        }
     }
 
     public void RestoreBoardItems()
@@ -939,7 +1171,7 @@ public class GameManager : NetworkBehaviour
             if (pid < 0) continue;
 
             var inv = PlayerItemInventory.GetForPlayer(pid);
-            
+
             if (inv != null)
             {
                 Debug.Log($"Restore uses InstanceID={inv.GetInstanceID()}");
@@ -984,25 +1216,18 @@ public class GameManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Gọi bởi BoardManager khi tất cả players đã đi xong.
-    /// Quyết định next state: Voting (còn round) hoặc Roulette (hết round).
+    /// Board kết thúc.
+    /// Luôn chuyển sang Voting.
+    /// Điều kiện thắng sẽ do ChestManager quyết định sau này.
     /// </summary>
     public void ProceedFromBoard()
     {
-        if (!HasStateAuthority) return;
+        if (!HasStateAuthority)
+            return;
 
-        Debug.Log($"[GameManager] Board done — Round {CurrentRound}/{TotalRounds}");
+        Debug.Log("[GameManager] Board complete -> Start Voting");
 
-        if (CurrentRound >= TotalRounds)
-        {
-            Debug.Log("[GameManager] All rounds completed — Starting Roulette!");
-            StartRoulette();
-        }
-        else
-        {
-            Debug.Log("[GameManager] More rounds left — Starting Voting...");
-            StartVoting(VotingType.MinigameOnly);
-        }
+        StartVoting(VotingType.MinigameOnly);
     }
 
     /// <summary>
@@ -1142,11 +1367,8 @@ public class GameManager : NetworkBehaviour
             CursorManager.Instance.ShowCursor();
         }
 
-        // Khôi phục lobby BGM khi về lobby
-        if (AudioManager.Instance != null && AudioManager.Instance.IsPlayingMinigameBGM)
-        {
-            AudioManager.Instance.OnMinigameEnd();
-        }
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.EnterMainBGM();
 
         // Reset player ready states (host only)
         if (HasStateAuthority)
@@ -1229,11 +1451,10 @@ public class GameManager : NetworkBehaviour
             PlayerInputHandler.Instance.InputEnabled = false;
         }
 
-        // Fade out lobby BGM khi bắt đầu load minigame scene
+        // Bật minigame BGM ngay từ Tutorial (thay vì đợi đến Playing).
+        var tutorialMgData = CurrentMinigameData;
         if (AudioManager.Instance != null)
-        {
-            AudioManager.Instance.OnEnterMinigameLoading();
-        }
+            AudioManager.Instance.EnterMinigameBGM(tutorialMgData?.minigameBGM);
 
         // HOST: Load scene minigame
         if (!HasStateAuthority)
@@ -1317,16 +1538,6 @@ public class GameManager : NetworkBehaviour
         if (CursorManager.Instance != null)
         {
             CursorManager.Instance.HideCursor();
-        }
-
-        // Bật minigame BGM khi bắt đầu chơi
-        if (AudioManager.Instance != null)
-        {
-            var mgData = CurrentMinigameData;
-            if (mgData != null && mgData.minigameBGM != null)
-                AudioManager.Instance.OnMinigameStart(mgData.minigameBGM);
-            else
-                AudioManager.Instance.OnMinigameStart();
         }
     }
 
@@ -1442,7 +1653,9 @@ public class GameManager : NetworkBehaviour
         if (PlayerInputHandler.Instance != null)
             PlayerInputHandler.Instance.InputEnabled = false;
 
-        // HOST: load BoardScene
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.EnterMainBGM();
+            
         if (!HasStateAuthority) return;
 
         int sceneIndex = GetSceneIndex(boardSceneName);

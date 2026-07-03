@@ -9,6 +9,7 @@ public class MG5Bomb : NetworkBehaviour
     [SerializeField] private GameObject bombMesh;
     [SerializeField] private Light bombLight;
     [SerializeField] private ParticleSystem explosionVFX;
+    [SerializeField] private AudioSource explosionAudio; // ← thêm
 
     [Header("Light Settings")]
     [SerializeField] private float baseIntensity = 1f;
@@ -47,11 +48,9 @@ public class MG5Bomb : NetworkBehaviour
 
     public override void Render()
     {
-        Debug.Log($"[MG5Bomb] Render — IsVisible={IsVisible}, HasStateAuthority={HasStateAuthority}, Object.IsValid={Object.IsValid}");
         if (_attachTarget != null)
             transform.position = _attachTarget.position + attachOffset;
 
-        // Luôn check mỗi frame thay vì chỉ dựa vào OnChangedRender
         if (_lastVisible != IsVisible)
         {
             _lastVisible = IsVisible;
@@ -82,12 +81,11 @@ public class MG5Bomb : NetworkBehaviour
         _displayTimer = timer;
     }
 
-    // Chỉ host gọi — replicate xuống clients qua OnVisibleChanged
     public void SetVisible(bool visible)
     {
         if (!HasStateAuthority) return;
         IsVisible = visible;
-        ApplyVisible(visible); // apply ngay trên host, không chờ replication
+        ApplyVisible(visible);
     }
 
     public void PlayExplosion()
@@ -96,11 +94,25 @@ public class MG5Bomb : NetworkBehaviour
         RPC_PlayExplosion();
     }
 
+    public void PlayExplosionLocal()
+    {
+        if (bombMesh != null) bombMesh.SetActive(false);
+        if (bombLight != null) bombLight.enabled = false;
+
+        if (explosionVFX != null)
+            explosionVFX.Play();
+
+        // Audio phát tại vị trí bomb — nghe được từ xa theo 3D sound
+        if (explosionAudio != null)
+            explosionAudio.Play();
+
+        Debug.Log("[MG5Bomb] BOOM!");
+    }
+
     // ----------------------------------------------------------------
     //  Visual
     // ----------------------------------------------------------------
 
-    // Chạy trên clients khi IsVisible thay đổi qua network
     private void OnVisibleChanged()
     {
         _lastVisible = IsVisible;
@@ -139,9 +151,6 @@ public class MG5Bomb : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_PlayExplosion()
     {
-        if (bombMesh != null) bombMesh.SetActive(false);
-        if (bombLight != null) bombLight.enabled = false;
-        if (explosionVFX != null) explosionVFX.Play();
-        Debug.Log("[MG5Bomb] BOOM!");
+        PlayExplosionLocal();
     }
 }

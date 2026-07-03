@@ -1,16 +1,6 @@
 using Fusion;
 using UnityEngine;
 
-/// <summary>
-/// Dữ liệp brawl của player — item trên tay.
-/// Attach vào player prefab cùng với PlayerController.
-///
-/// SETUP:
-///   - itemInHandObjects[0] = item vị trí tay model 0
-///   - itemInHandObjects[1] = item vị trí tay model 1
-///   - itemInHandObjects[2] = item vị trí tay model 2
-///   - Tất cả ban đầu inactive
-/// </summary>
 public class MG3PlayerBrawlData : NetworkBehaviour
 {
     [Header("Item In Hand — 1 per character model")]

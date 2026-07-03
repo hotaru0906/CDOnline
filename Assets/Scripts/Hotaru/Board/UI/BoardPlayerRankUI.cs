@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class BoardPlayerRankUI : MonoBehaviour
 {
-    [SerializeField] private BoardPlayerEntryUI[] entries = new BoardPlayerEntryUI[4];
+    [SerializeField] private BoardPlayerRankEntryUI[] entries = new BoardPlayerRankEntryUI[4];
 
     private static readonly Color[] SlotColors =
     {
@@ -21,6 +21,10 @@ public class BoardPlayerRankUI : MonoBehaviour
 
     private void OnDestroy()
     {
+        PlayerItemInventory.OnInventoryRegistered -= OnInventoryRegistered;
+        PlayerItemInventory.OnInventoryUnregistered -= OnInventoryUnregistered;
+        PlayerItemInventory.OnResourceChanged -= OnResourceChanged;
+
         if (BoardManager.Instance != null)
             BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
     }
@@ -30,6 +34,9 @@ public class BoardPlayerRankUI : MonoBehaviour
         while (BoardManager.Instance == null)
             yield return null;
 
+        PlayerItemInventory.OnInventoryRegistered += OnInventoryRegistered;
+        PlayerItemInventory.OnInventoryUnregistered += OnInventoryUnregistered;
+        PlayerItemInventory.OnResourceChanged += OnResourceChanged;
         BoardManager.Instance.OnTurnStarted += OnTurnStarted;
         Refresh();
         Debug.Log("[BoardPlayerRankUI] Subscribed");
@@ -44,6 +51,38 @@ public class BoardPlayerRankUI : MonoBehaviour
         SetActiveTurn(playerId);
     }
 
+    private void OnResourceChanged(int playerId, int keyCount, int chestCount)
+    {
+        var bm = BoardManager.Instance;
+        if (bm == null)
+            return;
+
+        for (int i = 0; i < bm.ActivePlayerCount; i++)
+        {
+            if (entries[i] == null)
+                continue;
+
+            if (bm.GetPlayerIDAtSlot(i) != playerId)
+                continue;
+
+            entries[i].SetResourceData(keyCount, chestCount);
+            return;
+        }
+
+        // Inventory update can arrive before ActivePlayerCount/slot mapping is ready.
+        Refresh();
+    }
+
+    private void OnInventoryRegistered(int playerId)
+    {
+        Refresh();
+    }
+
+    private void OnInventoryUnregistered(int playerId)
+    {
+        Refresh();
+    }
+
     // =====================================================================
     // REFRESH
     // =====================================================================
@@ -52,18 +91,6 @@ public class BoardPlayerRankUI : MonoBehaviour
     {
         var bm = BoardManager.Instance;
         if (bm == null) return;
-
-        var list = new List<(int slot, int playerId, int nodeId)>();
-        for (int i = 0; i < bm.ActivePlayerCount; i++)
-        {
-            int pid = bm.GetPlayerIDAtSlot(i);
-            if (pid >= 0) list.Add((i, pid, bm.GetNodeIDAtSlot(i)));
-        }
-        list.Sort((a, b) => b.nodeId.CompareTo(a.nodeId));
-
-        var rankBySlot = new int[4];
-        for (int r = 0; r < list.Count; r++)
-            rankBySlot[list[r].slot] = r + 1;
 
         for (int i = 0; i < entries.Length; i++)
         {
@@ -80,10 +107,14 @@ public class BoardPlayerRankUI : MonoBehaviour
             int    pid  = bm.GetPlayerIDAtSlot(i);
             string name = BoardHUDController.Instance?.GetPlayerName(pid) ?? $"P{pid}";
 
+            var inventory = PlayerItemInventory.GetForPlayer(pid);
+            int keyCount = inventory != null ? inventory.GetKeyCount() : 0;
+            int chestCount = inventory != null ? inventory.GetChestCount() : 0;
+
             entries[i].SetData(
                 playerName  : name,
-                rank        : rankBySlot[i],
-                slotColor   : SlotColors[i],
+                keyCount    : keyCount,
+                chestCount  : chestCount,
                 isActiveTurn: false
             );
         }

@@ -110,4 +110,8 @@ public class MinigameHUDController : MonoBehaviour
     {
         playerRankPanel?.MarkEliminated(playerId);
     }
+    public void UpdatePlayerHP(int playerId, int hp)
+    {
+        playerRankPanel?.UpdateHPForPlayer(playerId, hp);
+    }
 }

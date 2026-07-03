@@ -658,7 +658,7 @@ public class PlayerController : NetworkBehaviour
     private void CheckAttackHit()
     {
         Collider[] hits = Physics.OverlapSphere(
-            transform.position + transform.forward * 1.5f, 1f);
+            transform.position + transform.forward * 1.75f, 1f);
 
         foreach (Collider hit in hits)
         {
@@ -718,7 +718,7 @@ public class PlayerController : NetworkBehaviour
         Gizmos.color = Color.red;
 
         Gizmos.DrawWireSphere(
-            transform.position + transform.forward * 1.5f,
+            transform.position + transform.forward * 1.75f,
             1f
         );
     }
