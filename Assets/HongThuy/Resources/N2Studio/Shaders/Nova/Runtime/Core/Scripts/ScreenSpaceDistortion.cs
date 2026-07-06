@@ -50,7 +50,7 @@ namespace Nova.Runtime.Core.Scripts
                 : RenderTextureFormat.DefaultHDR;
 
 #if UNITY_2023_3_OR_NEWER
-            if (GraphicsSettings.GetRenderPipelineSettings<RenderGraphSettings>().enableRenderCompatibilityMode)
+            //if (GraphicsSettings.GetRenderPipelineSettings<RenderGraphSettings>().enableRenderCompatibilityMode)
 #endif
             {
                 var desc = renderingData.cameraData.cameraTargetDescriptor;

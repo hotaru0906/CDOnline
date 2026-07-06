@@ -16,6 +16,8 @@ public class MinigameVotingManager : NetworkBehaviour
     [SerializeField] private int displayCount = 3; // Số minigame hiển thị để vote mỗi lần
     [SerializeField] private bool shuffleMinigames = true;
 
+    private const int InvalidIndex = -1;
+
     #region Networked Properties
 
     [Networked, Capacity(20)]
@@ -107,8 +109,33 @@ public class MinigameVotingManager : NetworkBehaviour
         return null;
     }
 
+    public int GetActualIndexByAvailableIndex(int availableIndex)
+    {
+        if (!IsReady) return InvalidIndex;
+        if (availableIndex < 0 || availableIndex >= AvailableCount) return InvalidIndex;
+
+        int actualIndex = AvailableMinigameIndices.Get(availableIndex);
+        if (actualIndex < 0 || actualIndex >= allMinigames.Count)
+            return InvalidIndex;
+
+        return actualIndex;
+    }
+
+    public MinigameData GetMinigameByActualIndex(int actualIndex)
+    {
+        if (!IsReady) return null;
+        if (actualIndex < 0 || actualIndex >= allMinigames.Count) return null;
+        return allMinigames[actualIndex];
+    }
+
     public void MarkMinigamePlayed(int availableIndex)
     {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[MinigameVotingManager] Only Host can mark minigame as played");
+            return;
+        }
+
         if (!IsReady)
         {
             Debug.LogWarning("[MinigameVotingManager] Cannot mark played - not spawned yet");
@@ -125,21 +152,24 @@ public class MinigameVotingManager : NetworkBehaviour
         if (actualIndex < 0 || actualIndex >= allMinigames.Count)
             return;
 
-        // Kiểm tra đã chơi bằng SO
-        var so = allMinigames[actualIndex];
-        if (playedMinigameSO.Contains(so))
+        // Kiểm tra đã chơi bằng networked indices để đảm bảo đồng bộ tuyệt đối host/client.
+        if (IsMinigamePlayed(actualIndex))
         {
-            Debug.Log($"[MinigameVotingManager] Minigame {so.name} already marked as played");
+            Debug.Log($"[MinigameVotingManager] Minigame index {actualIndex} already marked as played");
             return;
         }
 
         // Thêm vào danh sách đã chơi
-        if (PlayedCount < 20)
+        if (PlayedCount < PlayedMinigameIndices.Length)
         {
             PlayedMinigameIndices.Set(PlayedCount, actualIndex);
             PlayedCount++;
-            playedMinigameSO.Add(so);
-            Debug.Log($"[MinigameVotingManager] Marked minigame {so.name} as played. Total played: {PlayedCount}");
+            playedMinigameSO.Add(allMinigames[actualIndex]);
+            Debug.Log($"[MinigameVotingManager] Marked minigame {allMinigames[actualIndex].name} as played. Total played: {PlayedCount}");
+        }
+        else
+        {
+            Debug.LogWarning("[MinigameVotingManager] PlayedMinigameIndices is full, cannot track more played minigames");
         }
     }
 
@@ -149,50 +179,25 @@ public class MinigameVotingManager : NetworkBehaviour
 
         Debug.Log("[MinigameVotingManager] Preparing next voting round...");
 
-        // Hiện tất cả minigame, không shuffle, không track played
-        AvailableCount = allMinigames.Count;
-        for (int i = 0; i < allMinigames.Count; i++)
-            AvailableMinigameIndices.Set(i, i);
+        var unplayedIndices = BuildUnplayedIndices();
 
-        RPC_NotifyMinigameListUpdated();
-        Debug.Log($"[MinigameVotingManager] Available: {AvailableCount} minigames");
-    }
-
-    public void PrepareNextVotingRoundForRoulette()
-    {
-        if (!HasStateAuthority || !IsReady) return;
-
-        Debug.Log("[MinigameVotingManager] Preparing next voting round for RouletteOrMinigame...");
-
-        // Lấy danh sách minigame chưa chơi bằng SO
-        List<int> unplayedIndices = new List<int>();
-        for (int i = 0; i < allMinigames.Count; i++)
-        {
-            if (!playedMinigameSO.Contains(allMinigames[i]))
-            {
-                unplayedIndices.Add(i);
-            }
-        }
-
-        Debug.Log($"[MinigameVotingManager] Unplayed minigames (Roulette): {unplayedIndices.Count}");
-
-        // Nếu không còn minigame nào, không reset, không cho vote lại minigame đã chơi
+        // Không còn lựa chọn hợp lệ thì trả list rỗng (không cho random lại game đã chơi).
         if (unplayedIndices.Count == 0)
         {
-            Debug.LogWarning("[MinigameVotingManager] No unplayed minigames left for Roulette voting!");
+            Debug.LogWarning("[MinigameVotingManager] No unplayed minigames left for voting");
+            ClearAvailableMinigameIndices();
             AvailableCount = 0;
             RPC_NotifyMinigameListUpdated();
             return;
         }
 
-        // Shuffle nếu cần
         if (shuffleMinigames)
         {
             ShuffleList(unplayedIndices);
         }
 
-        // Chọn số lượng minigame để hiển thị
-        int count = Mathf.Min(displayCount, unplayedIndices.Count);
+        int count = Mathf.Min(displayCount, unplayedIndices.Count, AvailableMinigameIndices.Length);
+        ClearAvailableMinigameIndices();
         AvailableCount = count;
 
         for (int i = 0; i < count; i++)
@@ -201,8 +206,13 @@ public class MinigameVotingManager : NetworkBehaviour
             Debug.Log($"[MinigameVotingManager] Available slot {i}: Minigame {unplayedIndices[i]}");
         }
 
-        // Notify clients
         RPC_NotifyMinigameListUpdated();
+        Debug.Log($"[MinigameVotingManager] Available: {AvailableCount} minigames (from {unplayedIndices.Count} unplayed)");
+    }
+
+    public void PrepareNextVotingRoundForRoulette()
+    {
+        PrepareNextVotingRound();
     }
 
     /// <summary>
@@ -217,16 +227,20 @@ public class MinigameVotingManager : NetworkBehaviour
         playedMinigameSO.Clear();
 
         // Clear array
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < PlayedMinigameIndices.Length; i++)
         {
-            PlayedMinigameIndices.Set(i, -1);
+            PlayedMinigameIndices.Set(i, InvalidIndex);
         }
+
+        ClearAvailableMinigameIndices();
+        AvailableCount = 0;
     }
     /// <summary>
     /// Lấy danh sách SO minigame đã chơi
     /// </summary>
     public List<MinigameData> GetPlayedMinigames()
     {
+        RebuildPlayedCacheFromNetwork();
         return new List<MinigameData>(playedMinigameSO);
     }
 
@@ -261,12 +275,50 @@ public class MinigameVotingManager : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_NotifyMinigameListUpdated()
     {
+        RebuildPlayedCacheFromNetwork();
         Debug.Log("[MinigameVotingManager] Minigame list updated notification received");
         OnMinigameListUpdated?.Invoke();
     }
     #endregion
 
     #region Helper Methods
+    private List<int> BuildUnplayedIndices()
+    {
+        List<int> unplayedIndices = new List<int>();
+        for (int i = 0; i < allMinigames.Count; i++)
+        {
+            if (!IsMinigamePlayed(i))
+            {
+                unplayedIndices.Add(i);
+            }
+        }
+        return unplayedIndices;
+    }
+
+    private void RebuildPlayedCacheFromNetwork()
+    {
+        playedMinigameSO.Clear();
+
+        if (!IsReady) return;
+
+        for (int i = 0; i < PlayedCount; i++)
+        {
+            int index = PlayedMinigameIndices.Get(i);
+            if (index >= 0 && index < allMinigames.Count)
+            {
+                playedMinigameSO.Add(allMinigames[index]);
+            }
+        }
+    }
+
+    private void ClearAvailableMinigameIndices()
+    {
+        for (int i = 0; i < AvailableMinigameIndices.Length; i++)
+        {
+            AvailableMinigameIndices.Set(i, InvalidIndex);
+        }
+    }
+
     private void ShuffleList<T>(List<T> list)
     {
         int n = list.Count;
