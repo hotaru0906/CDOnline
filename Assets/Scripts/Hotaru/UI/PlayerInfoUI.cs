@@ -71,7 +71,10 @@ public class PlayerInfoUI : MonoBehaviour
                 RefreshPlayerList();
             }
 
-            UpdatePlayerData();
+            if (_lastPlayerCount > 0)
+            {
+                UpdatePlayerData();
+            }
         }
     }
 

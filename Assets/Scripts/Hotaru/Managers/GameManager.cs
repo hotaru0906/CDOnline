@@ -108,6 +108,29 @@ public class GameManager : NetworkBehaviour
     [Networked] public int BoardNodeSlot1 { get; private set; } = 0;
     [Networked] public int BoardNodeSlot2 { get; private set; } = 0;
     [Networked] public int BoardNodeSlot3 { get; private set; } = 0;
+
+    [Networked] public int CharacterPlayerId0 { get; private set; } = -1;
+    [Networked] public int CharacterPlayerId1 { get; private set; } = -1;
+    [Networked] public int CharacterPlayerId2 { get; private set; } = -1;
+    [Networked] public int CharacterPlayerId3 { get; private set; } = -1;
+
+    [Networked] public int CharacterIndex0 { get; private set; } = 0;
+    [Networked] public int CharacterIndex1 { get; private set; } = 0;
+    [Networked] public int CharacterIndex2 { get; private set; } = 0;
+    [Networked] public int CharacterIndex3 { get; private set; } = 0;
+
+    // ===== PLAYER POSITION STATE =====
+
+    [Networked] public int PositionPlayerId0 { get; private set; } = -1;
+    [Networked] public int PositionPlayerId1 { get; private set; } = -1;
+    [Networked] public int PositionPlayerId2 { get; private set; } = -1;
+    [Networked] public int PositionPlayerId3 { get; private set; } = -1;
+
+    [Networked] public int PositionNode0 { get; private set; } = 0;
+    [Networked] public int PositionNode1 { get; private set; } = 0;
+    [Networked] public int PositionNode2 { get; private set; } = 0;
+    [Networked] public int PositionNode3 { get; private set; } = 0;
+
     // ===== KEY STATE =====
 
     // Node hiện tại của từng Key
@@ -160,6 +183,46 @@ public class GameManager : NetworkBehaviour
     [Networked] public int ResourcePlayerId_P1 { get; private set; } = -1;
     [Networked] public int ResourcePlayerId_P2 { get; private set; } = -1;
     [Networked] public int ResourcePlayerId_P3 { get; private set; } = -1;
+
+    public void SavePlayerCharacter(int playerId, int characterIndex)
+    {
+        if (CharacterPlayerId0 == -1 || CharacterPlayerId0 == playerId)
+        {
+            CharacterPlayerId0 = playerId;
+            CharacterIndex0 = characterIndex;
+            return;
+        }
+
+        if (CharacterPlayerId1 == -1 || CharacterPlayerId1 == playerId)
+        {
+            CharacterPlayerId1 = playerId;
+            CharacterIndex1 = characterIndex;
+            return;
+        }
+
+        if (CharacterPlayerId2 == -1 || CharacterPlayerId2 == playerId)
+        {
+            CharacterPlayerId2 = playerId;
+            CharacterIndex2 = characterIndex;
+            return;
+        }
+
+        if (CharacterPlayerId3 == -1 || CharacterPlayerId3 == playerId)
+        {
+            CharacterPlayerId3 = playerId;
+            CharacterIndex3 = characterIndex;
+        }
+    }
+
+    public int GetPlayerCharacter(int playerId)
+    {
+        if (CharacterPlayerId0 == playerId) return CharacterIndex0;
+        if (CharacterPlayerId1 == playerId) return CharacterIndex1;
+        if (CharacterPlayerId2 == playerId) return CharacterIndex2;
+        if (CharacterPlayerId3 == playerId) return CharacterIndex3;
+
+        return 0;
+    }
     public void SaveBoardPositions(int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;
@@ -171,6 +234,81 @@ public class GameManager : NetworkBehaviour
 
     public int[] GetBoardPositions() => new[] { BoardNodeSlot0, BoardNodeSlot1, BoardNodeSlot2, BoardNodeSlot3 };
 
+    public void SavePlayerBoardPosition(int playerId, int nodeId)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        int slot = FindOrAssignPositionSlot(playerId);
+
+        switch (slot)
+        {
+            case 0:
+                PositionPlayerId0 = playerId;
+                PositionNode0 = nodeId;
+                break;
+
+            case 1:
+                PositionPlayerId1 = playerId;
+                PositionNode1 = nodeId;
+                break;
+
+            case 2:
+                PositionPlayerId2 = playerId;
+                PositionNode2 = nodeId;
+                break;
+
+            case 3:
+                PositionPlayerId3 = playerId;
+                PositionNode3 = nodeId;
+                break;
+        }
+    }
+
+    public bool TryGetPlayerBoardPosition(int playerId, out int nodeId)
+    {
+        if (PositionPlayerId0 == playerId)
+        {
+            nodeId = PositionNode0;
+            return true;
+        }
+
+        if (PositionPlayerId1 == playerId)
+        {
+            nodeId = PositionNode1;
+            return true;
+        }
+
+        if (PositionPlayerId2 == playerId)
+        {
+            nodeId = PositionNode2;
+            return true;
+        }
+
+        if (PositionPlayerId3 == playerId)
+        {
+            nodeId = PositionNode3;
+            return true;
+        }
+
+        nodeId = 0;
+        return false;
+    }
+
+    private int FindOrAssignPositionSlot(int playerId)
+    {
+        if (PositionPlayerId0 == playerId) return 0;
+        if (PositionPlayerId1 == playerId) return 1;
+        if (PositionPlayerId2 == playerId) return 2;
+        if (PositionPlayerId3 == playerId) return 3;
+
+        if (PositionPlayerId0 < 0) return 0;
+        if (PositionPlayerId1 < 0) return 1;
+        if (PositionPlayerId2 < 0) return 2;
+        if (PositionPlayerId3 < 0) return 3;
+
+        return Mathf.Abs(playerId) % 4;
+    }
     public void SaveKeyState(int index, int nodeId, bool collected)
     {
         if (!HasStateAuthority)
@@ -270,6 +408,117 @@ public class GameManager : NetworkBehaviour
         3 => new[] { BoardItem_P3_S0, BoardItem_P3_S1, BoardItem_P3_S2, BoardItem_P3_S3 },
         _ => new[] { -1, -1, -1, -1 }
     };
+
+    // ===== BOARD ITEMS BY PLAYER =====
+
+    [Networked] public int BoardItemsPlayerId0 { get; private set; } = -1;
+    [Networked] public int BoardItemsPlayerId1 { get; private set; } = -1;
+    [Networked] public int BoardItemsPlayerId2 { get; private set; } = -1;
+    [Networked] public int BoardItemsPlayerId3 { get; private set; } = -1;
+
+    private int FindOrAssignBoardItemSlot(int playerId)
+    {
+        if (BoardItemsPlayerId0 == playerId) return 0;
+        if (BoardItemsPlayerId1 == playerId) return 1;
+        if (BoardItemsPlayerId2 == playerId) return 2;
+        if (BoardItemsPlayerId3 == playerId) return 3;
+
+        if (BoardItemsPlayerId0 < 0) return 0;
+        if (BoardItemsPlayerId1 < 0) return 1;
+        if (BoardItemsPlayerId2 < 0) return 2;
+        if (BoardItemsPlayerId3 < 0) return 3;
+
+        return Mathf.Abs(playerId) % 4;
+    }
+
+    public void SaveBoardItemsByPlayer(
+    int playerId,
+    int s0,
+    int s1,
+    int s2,
+    int s3)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        int slot = FindOrAssignBoardItemSlot(playerId);
+
+        switch (slot)
+        {
+            case 0:
+                BoardItemsPlayerId0 = playerId;
+                BoardItem_P0_S0 = s0;
+                BoardItem_P0_S1 = s1;
+                BoardItem_P0_S2 = s2;
+                BoardItem_P0_S3 = s3;
+                break;
+
+            case 1:
+                BoardItemsPlayerId1 = playerId;
+                BoardItem_P1_S0 = s0;
+                BoardItem_P1_S1 = s1;
+                BoardItem_P1_S2 = s2;
+                BoardItem_P1_S3 = s3;
+                break;
+
+            case 2:
+                BoardItemsPlayerId2 = playerId;
+                BoardItem_P2_S0 = s0;
+                BoardItem_P2_S1 = s1;
+                BoardItem_P2_S2 = s2;
+                BoardItem_P2_S3 = s3;
+                break;
+
+            case 3:
+                BoardItemsPlayerId3 = playerId;
+                BoardItem_P3_S0 = s0;
+                BoardItem_P3_S1 = s1;
+                BoardItem_P3_S2 = s2;
+                BoardItem_P3_S3 = s3;
+                break;
+        }
+    }
+
+    public int[] GetBoardItemsByPlayer(int playerId)
+    {
+        if (BoardItemsPlayerId0 == playerId)
+            return new[]
+            {
+                BoardItem_P0_S0,
+                BoardItem_P0_S1,
+                BoardItem_P0_S2,
+                BoardItem_P0_S3
+            };
+
+        if (BoardItemsPlayerId1 == playerId)
+            return new[]
+            {
+                BoardItem_P1_S0,
+                BoardItem_P1_S1,
+                BoardItem_P1_S2,
+                BoardItem_P1_S3
+            };
+
+        if (BoardItemsPlayerId2 == playerId)
+            return new[]
+            {
+                BoardItem_P2_S0,
+                BoardItem_P2_S1,
+                BoardItem_P2_S2,
+                BoardItem_P2_S3
+            };
+
+        if (BoardItemsPlayerId3 == playerId)
+            return new[]
+            {
+                BoardItem_P3_S0,
+                BoardItem_P3_S1,
+                BoardItem_P3_S2,
+                BoardItem_P3_S3
+            };
+
+        return new[] { -1, -1, -1, -1 };
+    }
 
     public void SavePlayerResourceState(int playerId, int keyCount, int chestCount)
     {
@@ -1210,7 +1459,7 @@ public class GameManager : NetworkBehaviour
             // <<< THÊM DÒNG NÀY
             Debug.Log($"Inventory HasStateAuthority = {inv.HasStateAuthority}");
 
-            int[] savedi = GetBoardItems(i);
+            int[] savedi = GetBoardItemsByPlayer(pid);
 
             bool hasAny = false;
             foreach (var v in savedi)

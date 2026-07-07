@@ -60,14 +60,30 @@ public class BoardHUDController : MonoBehaviour
 
     public string GetPlayerName(int playerId)
     {
-        if (_nameCache.TryGetValue(playerId, out string cached)) return cached;
-
         var all = Object.FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
-        foreach (var p in all)
-            if (p.Object != null)
-                _nameCache[p.Object.InputAuthority.PlayerId] = p.PlayerName.ToString();
 
-        return _nameCache.TryGetValue(playerId, out string found) ? found : $"P{playerId}";
+        foreach (var p in all)
+        {
+            if (p.Object == null)
+                continue;
+
+            if (p.Object.InputAuthority.PlayerId != playerId)
+                continue;
+
+            string playerName = p.PlayerName.ToString();
+
+            if (!string.IsNullOrWhiteSpace(playerName))
+                return playerName;
+
+            return $"Player {playerId}";
+        }
+
+        return $"Player {playerId}";
+    }
+
+    public void RefreshPlayerNames()
+    {
+        playerRankPanel?.Refresh();
     }
 
     // =====================================================================
