@@ -117,6 +117,16 @@ public class VotingUI : MonoBehaviour
             availableCount = MinigameVotingManager.Instance.GetAvailableMinigameCount();
         }
 
+        if (availableCount <= 0)
+        {
+            if (statusText != null)
+            {
+                statusText.text = "No minigame available to vote.";
+            }
+            isInitialized = true;
+            return;
+        }
+
         // Create new cards based on available minigames
         for (int i = 0; i < availableCount; i++)
         {

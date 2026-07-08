@@ -81,6 +81,9 @@ public class GameManager : NetworkBehaviour
     [Networked]
     public int CurrentMinigameIndex { get; private set; } = -1;
 
+    [Networked]
+    public int CurrentMinigameActualIndex { get; private set; } = -1;
+
     /// <summary>
     /// Loại voting hiện tại
     /// </summary>
@@ -383,6 +386,19 @@ public class GameManager : NetworkBehaviour
     {
         get
         {
+            // Ưu tiên actual index đã được host sync để tránh lệch giữa slot vote và minigame thực tế.
+            if (CurrentMinigameActualIndex >= 0)
+            {
+                if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+                {
+                    var actualData = MinigameVotingManager.Instance.GetMinigameByActualIndex(CurrentMinigameActualIndex);
+                    if (actualData != null) return actualData;
+                }
+
+                if (availableMinigames != null && CurrentMinigameActualIndex < availableMinigames.Length)
+                    return availableMinigames[CurrentMinigameActualIndex];
+            }
+
             if (CurrentMinigameIndex < 0)
                 return null;
 
@@ -871,6 +887,7 @@ public class GameManager : NetworkBehaviour
         }
 
         MinigameData minigameData = null;
+        int actualMinigameIndex = -1;
 
         // Ưu tiên lấy minigame từ MinigameVotingManager (đồng bộ với VotingManager)
         if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
@@ -883,9 +900,16 @@ public class GameManager : NetworkBehaviour
             }
 
             minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(minigameIndex);
+            actualMinigameIndex = MinigameVotingManager.Instance.GetActualIndexByAvailableIndex(minigameIndex);
             if (minigameData == null)
             {
                 Debug.LogError($"[GameManager] Failed to get minigame data for index: {minigameIndex}");
+                return;
+            }
+
+            if (actualMinigameIndex < 0)
+            {
+                Debug.LogError($"[GameManager] Failed to resolve actual minigame index for available index: {minigameIndex}");
                 return;
             }
 
@@ -910,11 +934,15 @@ public class GameManager : NetworkBehaviour
             }
 
             minigameData = availableMinigames[minigameIndex];
+            actualMinigameIndex = minigameIndex;
             Debug.Log($"[GameManager] Starting minigame #{minigameIndex}: {minigameData.minigameName} (from availableMinigames)");
         }
 
         CurrentMinigameIndex = minigameIndex;
+        CurrentMinigameActualIndex = actualMinigameIndex;
         CurrentRound++;
+
+        Debug.Log($"[GameManager] Selected minigame - availableIndex: {CurrentMinigameIndex}, actualIndex: {CurrentMinigameActualIndex}");
 
         // Sync minigame settings cho tất cả clients
         if (minigameData != null)
@@ -1314,6 +1342,7 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[GameManager] Returning to lobby...");
         CurrentRound = 0;
         CurrentMinigameIndex = -1;
+        CurrentMinigameActualIndex = -1;
         FinalWinnerId = -1;
 
         // Reset Roulette state
