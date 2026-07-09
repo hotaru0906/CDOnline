@@ -28,6 +28,10 @@ public class BoardPlayerToken : MonoBehaviour
     [SerializeField] private float moveSpeed = 4f;    // nodes per second
     [SerializeField] private float hopHeight = 0.4f;  // độ cao nhảy mỗi ô
 
+    [Header("Audio")]
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip jumpSound;
+
     [SerializeField] private float rotateSpeed = 14f; // toc độ xoay khi di chuyển (độ/giây)
 
     [Header("Debug")]
@@ -359,6 +363,7 @@ public class BoardPlayerToken : MonoBehaviour
             transform.position = to;
             CurrentNodeID = nodeID;
 
+            PlayStepSound();
         }
 
         var finalNode = BoardNodePath.Instance?.GetNodeByID(CurrentNodeID);
@@ -389,7 +394,16 @@ public class BoardPlayerToken : MonoBehaviour
     
     public void PlayJumpAnimation()
     {
+        PlayStepSound();
         StartCoroutine(JumpRoutine());
+    }
+
+    private void PlayStepSound()
+    {
+        if (audioSource != null && jumpSound != null)
+        {
+            audioSource.PlayOneShot(jumpSound);
+        }
     }
 
     private IEnumerator JumpRoutine()
