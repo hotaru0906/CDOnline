@@ -9,7 +9,8 @@ public enum UIPanelType
     MinigameTutorial,   // Tutorial trong minigame scene (mỗi scene khác nhau)
     MinigameCountdown,   // Countdown UI chính (dùng chung, không theo scene)
     MinigameSetting,    // MỚI — Setting panel trong minigame
-    MinigamePlayerHUD   // MỚI — Player info HUD dưới màn hình
+    MinigamePlayerHUD,   // MỚI — Player info HUD dưới màn hình
+    MinigameTieBreaker
 }
 
 /// <summary>
@@ -19,21 +20,21 @@ public enum UIPanelType
 public class UIPanel : MonoBehaviour
 {
     [SerializeField] private UIPanelType panelType;
-    
+
     public UIPanelType PanelType => panelType;
-    
+
     private void Awake()
     {
         // Đăng ký với GameManager ngay khi Awake (kể cả khi inactive)
         RegisterWithGameManager();
     }
-    
+
     private void OnEnable()
     {
         // Đăng ký lại khi enable (phòng trường hợp GameManager spawn sau)
         RegisterWithGameManager();
     }
-    
+
     private void RegisterWithGameManager()
     {
         if (GameManager.Instance != null)

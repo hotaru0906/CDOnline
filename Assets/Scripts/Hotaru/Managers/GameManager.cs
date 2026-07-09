@@ -34,6 +34,7 @@ public class GameManager : NetworkBehaviour
     [Header("UI Panels (Auto-found via UIPanel component)")]
     [SerializeField] private GameObject lobbyUI;
     [SerializeField] private GameObject votingUI;           // UI vote chọn minigame
+    [SerializeField] private GameObject minigameTieBreakerUI;
     [SerializeField] private GameObject scoreboardUI;
     [SerializeField] private GameObject resultUI;
 
@@ -734,6 +735,9 @@ public class GameManager : NetworkBehaviour
                 break;
             case UIPanelType.Voting:
                 votingUI = panel.gameObject;
+                break;
+            case UIPanelType.MinigameTieBreaker:
+                minigameTieBreakerUI = panel.gameObject;
                 break;
             case UIPanelType.Scoreboard:
                 scoreboardUI = panel.gameObject;
@@ -1633,6 +1637,7 @@ public class GameManager : NetworkBehaviour
         // Show lobby UI, hide others
         SetActiveUI(lobbyUI, true);
         SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1661,6 +1666,7 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1709,6 +1715,7 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả UI panels (minigame UI sẽ được show sau khi scene load)
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1865,6 +1872,7 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, false);
         SetActiveUI(scoreboardUI, true);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1915,6 +1923,7 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -1961,6 +1970,7 @@ public class GameManager : NetworkBehaviour
         // Ẩn tất cả UI - Roulette xử lí bằng gameplay 3D
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
@@ -2013,6 +2023,7 @@ public class GameManager : NetworkBehaviour
 
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, true);
         SetActiveUI(minigameTutorialUI, false);
@@ -2027,6 +2038,22 @@ public class GameManager : NetworkBehaviour
     #endregion
 
     #region Private Helpers
+    public void ShowMinigameTieBreakerPanel()
+    {
+        SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, true);
+    }
+
+    public void HideMinigameTieBreakerPanel()
+    {
+        SetActiveUI(minigameTieBreakerUI, false);
+
+        if (CurrentState == GameState.Voting)
+        {
+            SetActiveUI(votingUI, true);
+        }
+    }
+
     private void SetActiveUI(GameObject uiObject, bool active)
     {
         if (uiObject != null)

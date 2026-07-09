@@ -2,6 +2,7 @@ using Fusion;
 using UnityEngine;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 
 /// <summary>
 /// Quản lý voting system
@@ -50,6 +51,7 @@ public class VotingManager : NetworkBehaviour
     [SerializeField] private float votingDuration = 10f;
     [SerializeField] private float quickEndTime = 3f; // Thời gian còn lại khi tất cả đã vote
     [SerializeField] private bool instantEndWhenAllVoted = false; // End ngay khi tất cả vote
+    [SerializeField] private float tieBreakDuration = 3f;
     #endregion
 
     #region Events
@@ -59,11 +61,14 @@ public class VotingManager : NetworkBehaviour
     public event Action<int, int> OnVoteCountChanged; // (minigameIndex, newCount)
     public event Action OnAllPlayersVoted; // Khi tất cả đã vote
     public event Action<VotingType> OnVotingTypeChanged_Event;
+    public event Action<int[], int, float> OnTieBreakStarted; // (availableIndices, winnerAvailableIndex, duration)
+    public event Action<int> OnTieBreakEnded; // winnerAvailableIndex
     #endregion
 
     #region Local State
     private bool hasVoted = false;
     private int localVoteIndex = -1;
+    private int pendingTieWinnerIndex = -1;
     #endregion
 
     /// <summary>
@@ -196,6 +201,7 @@ public class VotingManager : NetworkBehaviour
         }
 
         WinnerIndex = -1;
+        pendingTieWinnerIndex = -1;
         RemainingTime = votingDuration;
         IsVotingActive = true;
 
@@ -214,21 +220,17 @@ public class VotingManager : NetworkBehaviour
 
         IsVotingActive = false;
 
-        WinnerIndex = CalculateWinner();
-        Debug.Log($"[VotingManager] Winner: Minigame #{WinnerIndex}");
-
-        // Notify all clients
-        RPC_OnVotingEnded(WinnerIndex);
-
-        // Start the winning minigame
-        if (GameManager.Instance != null)
+        List<int> topIndices = GetTopVotedIndices();
+        if (topIndices.Count <= 1)
         {
-            Debug.Log($"[VotingManager] Calling GameManager.StartMinigame({WinnerIndex})");
-            GameManager.Instance.StartMinigame(WinnerIndex);
+            WinnerIndex = topIndices.Count == 1 ? topIndices[0] : 0;
+            Debug.Log($"[VotingManager] Winner: Minigame #{WinnerIndex}");
+            RPC_OnVotingEnded(WinnerIndex);
+            StartWinningMinigame(WinnerIndex);
         }
         else
         {
-            Debug.LogError("[VotingManager] GameManager.Instance is NULL!");
+            StartTieBreak(topIndices);
         }
     }
 
@@ -326,6 +328,28 @@ public class VotingManager : NetworkBehaviour
     {
         OnVotingEnded?.Invoke();
     }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnTieBreakStarted(int[] candidateIndices, int winnerIndex, float duration)
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ShowMinigameTieBreakerPanel();
+        }
+
+        OnTieBreakStarted?.Invoke(candidateIndices, winnerIndex, duration);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnTieBreakEnded(int winnerIndex)
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.HideMinigameTieBreakerPanel();
+        }
+
+        OnTieBreakEnded?.Invoke(winnerIndex);
+    }
     #endregion
 
     #region Callbacks
@@ -370,6 +394,77 @@ public class VotingManager : NetworkBehaviour
         }
 
         return winnerIndex;
+    }
+
+    private List<int> GetTopVotedIndices()
+    {
+        List<int> top = new List<int>();
+        int maxVotes = int.MinValue;
+
+        for (int i = 0; i < MinigameCount; i++)
+        {
+            int count = VoteCounts.Get(i);
+
+            if (count > maxVotes)
+            {
+                maxVotes = count;
+                top.Clear();
+                top.Add(i);
+            }
+            else if (count == maxVotes)
+            {
+                top.Add(i);
+            }
+        }
+
+        return top;
+    }
+
+    private void StartTieBreak(List<int> tiedIndices)
+    {
+        if (!HasStateAuthority || tiedIndices == null || tiedIndices.Count == 0)
+            return;
+
+        pendingTieWinnerIndex = tiedIndices[UnityEngine.Random.Range(0, tiedIndices.Count)];
+
+        int candidateCount = Mathf.Min(tiedIndices.Count, 10);
+        int[] candidates = new int[candidateCount];
+        for (int i = 0; i < candidateCount; i++)
+        {
+            candidates[i] = tiedIndices[i];
+        }
+
+        Debug.Log($"[VotingManager] Tie detected between {candidateCount} options. Starting tie-break for {tieBreakDuration}s. Winner preselected: #{pendingTieWinnerIndex}");
+        RPC_OnTieBreakStarted(candidates, pendingTieWinnerIndex, tieBreakDuration);
+        StartCoroutine(CompleteTieBreakAfterDelay());
+    }
+
+    private IEnumerator CompleteTieBreakAfterDelay()
+    {
+        yield return new WaitForSeconds(tieBreakDuration);
+
+        if (!HasStateAuthority)
+            yield break;
+
+        WinnerIndex = pendingTieWinnerIndex >= 0 ? pendingTieWinnerIndex : CalculateWinner();
+        Debug.Log($"[VotingManager] Tie-break completed. Winner: Minigame #{WinnerIndex}");
+
+        RPC_OnTieBreakEnded(WinnerIndex);
+        RPC_OnVotingEnded(WinnerIndex);
+        StartWinningMinigame(WinnerIndex);
+    }
+
+    private void StartWinningMinigame(int winnerIndex)
+    {
+        if (GameManager.Instance != null)
+        {
+            Debug.Log($"[VotingManager] Calling GameManager.StartMinigame({winnerIndex})");
+            GameManager.Instance.StartMinigame(winnerIndex);
+        }
+        else
+        {
+            Debug.LogError("[VotingManager] GameManager.Instance is NULL!");
+        }
     }
 
     /// <summary>

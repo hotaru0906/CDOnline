@@ -677,11 +677,16 @@ public class PlayerController : NetworkBehaviour
             {
                 MG3BrawlController.Instance.OnPlayerHit(this, other);
             }
-            
+
             if (MG5BombTagController.Instance != null &&
             MG5BombTagController.Instance.IsGameStarted)
             {
                 GetComponent<MG5BombTagPlayer>()?.OnAttackHit(other);
+            }
+            if (MG7CrownController.Instance != null &&
+            MG7CrownController.Instance.IsGameStarted)
+            {
+                GetComponent<MG7CrownPlayer>()?.OnAttackHit(other);
             }
         }
     }
