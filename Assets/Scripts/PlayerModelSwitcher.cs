@@ -21,7 +21,6 @@ public class PlayerModelSwitcher : NetworkBehaviour
 
     public override void Spawned()
     {
-        // Đọc CharacterIndex từ PlayerNetworkData và hiện model tương ứng
         var networkData = GetComponent<PlayerNetworkData>();
         if (networkData != null)
         {
@@ -29,7 +28,6 @@ public class PlayerModelSwitcher : NetworkBehaviour
         }
         else
         {
-            // Fallback: hiện model đầu tiên
             SetCharacterModel(0);
         }
     }

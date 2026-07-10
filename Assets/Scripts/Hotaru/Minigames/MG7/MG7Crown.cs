@@ -23,6 +23,7 @@ public class MG7Crown : NetworkBehaviour
 
     private Transform _attachTarget;
     private bool _lastVisible;
+    private bool _localVisible;
 
     // ----------------------------------------------------------------
     //  Lifecycle
@@ -34,7 +35,8 @@ public class MG7Crown : NetworkBehaviour
         Instance = this;
 
         _lastVisible = IsVisible;
-        ApplyVisible(IsVisible);
+        _localVisible = IsVisible;
+        ApplyVisible(_localVisible);
     }
 
     private void OnDestroy()
@@ -44,17 +46,39 @@ public class MG7Crown : NetworkBehaviour
 
     public override void Render()
     {
+        if (_attachTarget == null && _localVisible)
+            TryResolveAttachTargetFromController();
+
         if (_attachTarget != null)
             transform.position = _attachTarget.position + attachOffset;
 
         if (_lastVisible != IsVisible)
         {
             _lastVisible = IsVisible;
-            ApplyVisible(IsVisible);
+            _localVisible = IsVisible;
+            ApplyVisible(_localVisible);
         }
 
-        if (IsVisible && rotateSpeed != 0f)
+        if (_localVisible && rotateSpeed != 0f)
             transform.Rotate(Vector3.up, rotateSpeed * Time.deltaTime, Space.World);
+    }
+
+    private void TryResolveAttachTargetFromController()
+    {
+        var controller = MG7CrownController.Instance;
+        if (controller == null) return;
+
+        var holderRef = controller.CrownHolder;
+        if (holderRef == PlayerRef.None) return;
+
+        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        foreach (var p in players)
+        {
+            if (p.Object.InputAuthority != holderRef) continue;
+
+            AttachToPlayer(p.transform);
+            return;
+        }
     }
 
     // ----------------------------------------------------------------
@@ -75,8 +99,14 @@ public class MG7Crown : NetworkBehaviour
 
     public void SetVisible(bool visible)
     {
-        if (!HasStateAuthority) return;
-        IsVisible = visible;
+        // RPC từ controller sẽ gọi hàm này trên mọi client để đảm bảo crown luôn hiển thị đồng bộ.
+        if (HasStateAuthority)
+        {
+            IsVisible = visible;
+            _lastVisible = IsVisible;
+        }
+
+        _localVisible = visible;
         ApplyVisible(visible);
     }
 
@@ -87,7 +117,8 @@ public class MG7Crown : NetworkBehaviour
     private void OnVisibleChanged()
     {
         _lastVisible = IsVisible;
-        ApplyVisible(IsVisible);
+        _localVisible = IsVisible;
+        ApplyVisible(_localVisible);
     }
 
     private void ApplyVisible(bool visible)

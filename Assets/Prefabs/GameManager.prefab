@@ -50,6 +50,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   lobbyUI: {fileID: 0}
   votingUI: {fileID: 0}
+  minigameTieBreakerUI: {fileID: 0}
   scoreboardUI: {fileID: 0}
   resultUI: {fileID: 0}
   minigameCountdownUI: {fileID: 0}
@@ -72,6 +73,7 @@ MonoBehaviour:
     _value: 1
   _TotalRounds: 3
   _CurrentMinigameIndex: -1
+  _CurrentMinigameActualIndex: -1
   _CurrentVotingType: 0
   _FinalWinnerId: -1
   _MgRank1: -1
@@ -231,6 +233,7 @@ MonoBehaviour:
   votingDuration: 10
   quickEndTime: 3
   instantEndWhenAllVoted: 0
+  tieBreakDuration: 3
 --- !u!1 &5410280941758782221
 GameObject:
   m_ObjectHideFlags: 0
@@ -379,5 +382,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 259f6ec5892b82948939d019ff0cf214, type: 2}
   - {fileID: 11400000, guid: 0a2a84da929469044b534f6e25dd6757, type: 2}
   - {fileID: 11400000, guid: 0cf5b9ebe61a87a4dae394932268a7ea, type: 2}
+  - {fileID: 11400000, guid: 520b80c3fa898554ead73a2123d9922f, type: 2}
   displayCount: 5
   shuffleMinigames: 1

@@ -38,6 +38,7 @@ public class PlayerNetworkData : NetworkBehaviour
             // Sync lên network cho người khác thấy
             RPC_SetPlayerName(savedName);
             RPC_SetCharacterIndex(savedIndex);
+            
         }
 
         // Host sets default name for new players
@@ -49,9 +50,6 @@ public class PlayerNetworkData : NetworkBehaviour
                 PlayerName = $"Player {playerNumber}";
             }
         }
-
-        // Cập nhật model ngay sau khi spawn (vì OnChangedRender không trigger nếu giá trị không đổi)
-        UpdateCharacterModel();
 
         // Cập nhật tên hiển thị
         UpdateNameDisplay();
@@ -76,6 +74,10 @@ public class PlayerNetworkData : NetworkBehaviour
 
         // Cập nhật UI hiển thị tên player
         UpdateNameDisplay();
+        if (BoardHUDController.Instance != null)
+        {
+            BoardHUDController.Instance.RefreshPlayerNames();
+        }
     }
 
     /// <summary>
@@ -92,12 +94,12 @@ public class PlayerNetworkData : NetworkBehaviour
 
     private void OnCharacterIndexChanged()
     {
-        // Called when character index changes - update model visibility
         var modelSwitcher = GetComponent<PlayerModelSwitcher>();
         if (modelSwitcher != null)
         {
             modelSwitcher.SetCharacterModel(CharacterIndex);
         }
+
         Debug.Log($"[PlayerNetworkData] Character index changed to: {CharacterIndex}");
     }
 
@@ -153,6 +155,32 @@ public class PlayerNetworkData : NetworkBehaviour
         RPC_SetReady(ready);
     }
 
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_SetCharacterIndex(int value)
+    {
+        CharacterIndex = Mathf.Clamp(value, 0, 3);
+
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.SavePlayerCharacter(
+                Object.InputAuthority.PlayerId,
+                CharacterIndex);
+
+            Debug.Log(
+                $"[Character Save] Player={Object.InputAuthority.PlayerId} Character={CharacterIndex}");
+        }
+        else
+        {
+            Debug.LogWarning("[Character Save] GameManager.Instance == null");
+        }
+    }
+    
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_SetReady(bool value)
+    {
+        IsReady = value;
+        Debug.Log($"[PlayerNetworkData] Player {Object.InputAuthority.PlayerId} IsReady = {value}");
+    }
     public void SetPlayerName(string newName)
     {
         if (!HasInputAuthority) return;
@@ -174,12 +202,6 @@ public class PlayerNetworkData : NetworkBehaviour
         RPC_SetCharacterIndex(index);
     }
 
-    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    private void RPC_SetReady(bool value)
-    {
-        IsReady = value;
-        Debug.Log($"[PlayerNetworkData] Player {Object.InputAuthority.PlayerId} IsReady = {value}");
-    }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     private void RPC_SetPlayerName(string value)
@@ -193,9 +215,5 @@ public class PlayerNetworkData : NetworkBehaviour
         ColorID = value;
     }
 
-    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    private void RPC_SetCharacterIndex(int value)
-    {
-        CharacterIndex = Mathf.Clamp(value, 0, 3);
-    }
+    
 }

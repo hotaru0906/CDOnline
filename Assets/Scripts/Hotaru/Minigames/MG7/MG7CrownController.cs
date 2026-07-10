@@ -59,11 +59,8 @@ public class MG7CrownController : BaseMinigameController
     {
         CrownActive = false;
 
-        if (MG7Crown.Instance != null)
-        {
-            MG7Crown.Instance.SetVisible(false);
-            MG7Crown.Instance.Detach();
-        }
+        RPC_SetCrownVisible(false);
+        RPC_DetachCrown();
     }
 
     // ----------------------------------------------------------------
@@ -102,9 +99,7 @@ public class MG7CrownController : BaseMinigameController
         CrownActive = true;
 
         RPC_MoveCrown(newHolder);
-
-        if (MG7Crown.Instance != null)
-            MG7Crown.Instance.SetVisible(true);
+        RPC_SetCrownVisible(true);
 
         Debug.Log($"[MG7Crown] Crown → P{newHolder}");
     }
@@ -230,6 +225,7 @@ public class MG7CrownController : BaseMinigameController
     private void OnCrownHolderChanged()
     {
         Debug.Log($"[MG7Crown] CrownHolder changed → P{CrownHolder}");
+        TryAttachCrownToHolder(CrownHolder);
     }
 
     // ----------------------------------------------------------------
@@ -239,6 +235,27 @@ public class MG7CrownController : BaseMinigameController
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_MoveCrown(PlayerRef holderRef)
     {
+        TryAttachCrownToHolder(holderRef);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SetCrownVisible(bool visible)
+    {
+        if (MG7Crown.Instance != null)
+            MG7Crown.Instance.SetVisible(visible);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_DetachCrown()
+    {
+        if (MG7Crown.Instance != null)
+            MG7Crown.Instance.Detach();
+    }
+
+    private void TryAttachCrownToHolder(PlayerRef holderRef)
+    {
+        if (holderRef == PlayerRef.None) return;
+
         var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
         foreach (var p in players)
         {

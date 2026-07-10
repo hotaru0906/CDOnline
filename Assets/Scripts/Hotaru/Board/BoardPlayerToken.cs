@@ -9,7 +9,9 @@ using System.Collections;
 public class BoardPlayerToken : MonoBehaviour
 {
     [Header("Identity")]
-    public int ownerPlayerId = -1;    // PlayerId của player sở hữu
+    public int ownerPlayerId = -1;
+
+    // Slot cố định của Token trong scene
     public int playerSlotIndex = 0;   // 0-3, khớp với slot trong BoardManager.TurnOrder
 
     [Header("Visual")]
@@ -82,6 +84,22 @@ public class BoardPlayerToken : MonoBehaviour
 
         _visualSetupRoutine = StartCoroutine(EnsureVisualReady());
         SnapToNode(startNodeID);
+    }
+
+    public void RefreshCharacter()
+    {
+        _currentCharacterIndex = -1;
+
+        if (_spawnedModelVisual != null)
+        {
+            Destroy(_spawnedModelVisual);
+            _spawnedModelVisual = null;
+        }
+
+        if (_visualSetupRoutine != null)
+            StopCoroutine(_visualSetupRoutine);
+
+        _visualSetupRoutine = StartCoroutine(EnsureVisualReady());
     }
 
     private void OnDestroy()
@@ -162,14 +180,30 @@ public class BoardPlayerToken : MonoBehaviour
             return true;
 
         var playerData = FindPlayerData(ownerPlayerId);
+
         if (playerData == null)
         {
+            Debug.LogWarning($"[BoardPlayerToken] Cannot find PlayerNetworkData for {ownerPlayerId}");
             return false;
         }
 
-        int characterIndex = Mathf.Clamp(playerData.CharacterIndex, 0, 3);
-        if (_spawnedModelVisual != null && _currentCharacterIndex == characterIndex)
+        int characterIndex = 0;
+
+        if (GameManager.Instance != null)
+        {
+            characterIndex = GameManager.Instance.GetPlayerCharacter(ownerPlayerId);
+        }
+
+        Debug.Log(
+            $"[BOARD TOKEN] " +
+            $"Player={ownerPlayerId} " +
+            $"CharacterIndex={characterIndex}");
+
+        if (_spawnedModelVisual != null &&
+            _currentCharacterIndex == characterIndex)
+        {
             return true;
+        }
 
         return BuildModelVisual(playerData, characterIndex);
     }
@@ -194,19 +228,19 @@ public class BoardPlayerToken : MonoBehaviour
         var parent = modelAnchor != null ? modelAnchor : transform;
         GameObject source = null;
 
-        var switcher = playerData.GetComponent<PlayerModelSwitcher>();
-        if (switcher != null)
-            source = switcher.GetActiveModel();
+        if (fallbackCharacterModels != null &&
+            characterIndex >= 0 &&
+            characterIndex < fallbackCharacterModels.Length)
+        {
+            source = fallbackCharacterModels[characterIndex];
+        }
 
         if (source == null)
         {
-            playerData.UpdateCharacterModel();
-            if (switcher != null)
-                source = switcher.GetActiveModel();
+            Debug.LogError(
+                $"[BoardToken] Missing fallback model for CharacterIndex={characterIndex}");
+            return false;
         }
-
-        if (source == null && fallbackCharacterModels != null && characterIndex < fallbackCharacterModels.Length)
-            source = fallbackCharacterModels[characterIndex];
 
         if (source == null)
         {

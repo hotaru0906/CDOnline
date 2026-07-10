@@ -30,7 +30,11 @@ public class PlayerInfoItemUI : MonoBehaviour
     {
         _playerData = player;
 
-        if (_playerData == null) return;
+        if (_playerData == null)
+            return;
+
+        if (_playerData.Object == null || !_playerData.Object.IsValid)
+            return;
 
         // Player name
         if (playerNameText != null)
@@ -48,7 +52,12 @@ public class PlayerInfoItemUI : MonoBehaviour
     /// </summary>
     public void UpdateData()
     {
-        if (_playerData == null) return;
+        if (_playerData == null)
+            return;
+
+        // Object chưa Spawn hoặc đã Despawn
+        if (_playerData.Object == null || !_playerData.Object.IsValid)
+            return;
 
         // Update name (có thể thay đổi)
         if (playerNameText != null)

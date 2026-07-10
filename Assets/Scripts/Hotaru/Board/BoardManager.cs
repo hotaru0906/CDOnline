@@ -1208,6 +1208,19 @@ public class BoardManager : NetworkBehaviour
 
         GameManager.Instance?.SaveBoardPositions(NodeSlot0, NodeSlot1, NodeSlot2, NodeSlot3);
 
+        for (int slot = 0; slot < ActivePlayerCount; slot++)
+        {
+            int playerId = GetPlayerIDAtSlot(slot);
+            int nodeId = GetNodeIDAtSlot(slot);
+
+            if (playerId >= 0)
+            {
+                GameManager.Instance.SavePlayerBoardPosition(playerId, nodeId);
+
+                Debug.Log($"[BoardManager] Save Position Player={playerId} Node={nodeId}");
+            }
+        }
+
         // Lưu Board items của từng slot
         for (int i = 0; i < ActivePlayerCount; i++)
         {
@@ -1228,6 +1241,17 @@ public class BoardManager : NetworkBehaviour
                 inv.BoardItems.Get(1),
                 inv.BoardItems.Get(2),
                 inv.BoardItems.Get(3));
+
+            GameManager.Instance?.SaveBoardItemsByPlayer(
+            pid,
+            inv.BoardItems.Get(0),
+            inv.BoardItems.Get(1),
+            inv.BoardItems.Get(2),
+            inv.BoardItems.Get(3));
+
+        Debug.Log(
+            $"[BoardItem Save] Player={pid} " +
+            $"Items=[{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
         }
 
         DistributeRouletteRewards();
@@ -1352,14 +1376,28 @@ public class BoardManager : NetworkBehaviour
 
     public void RestoreBoardPositions(int[] nodeSlots)
     {
-        if (!HasStateAuthority) return;
-        if (nodeSlots == null || nodeSlots.Length < 4) return;
+        if (!HasStateAuthority)
+            return;
 
-        for (int i = 0; i < 4; i++)
-            SetNodeIDAtSlot(i, nodeSlots[i]);
+        for (int slot = 0; slot < ActivePlayerCount; slot++)
+        {
+            int playerId = GetPlayerIDAtSlot(slot);
 
-        RPC_SnapTokensToSavedPositions(nodeSlots[0], nodeSlots[1], nodeSlots[2], nodeSlots[3]);
-        Debug.Log($"[BoardManager] Restored: [{string.Join(", ", nodeSlots)}]");
+            if (GameManager.Instance.TryGetPlayerBoardPosition(playerId, out int nodeId))
+            {
+                SetNodeIDAtSlot(slot, nodeId);
+
+                Debug.Log($"[Restore] Slot={slot} Player={playerId} Node={nodeId}");
+            }
+        }
+
+        RPC_SnapTokensToSavedPositions(
+            NodeSlot0,
+            NodeSlot1,
+            NodeSlot2,
+            NodeSlot3);
+
+        Debug.Log("[BoardManager] Restore bằng PlayerId hoàn tất");
     }
 
     public BoardPlayerToken GetTokenByPlayerId(int playerId)
