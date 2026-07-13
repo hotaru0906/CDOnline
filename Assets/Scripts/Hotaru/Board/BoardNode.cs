@@ -11,6 +11,7 @@ public enum TileType
     Item,
     Steal,
     Toss,
+    Trap,
     Jackpot,
     Gamble
 }
@@ -105,6 +106,7 @@ public class BoardNode : MonoBehaviour
         TileType.Item    => Color.green,
         TileType.Steal   => Color.red,
         TileType.Toss    => Color.magenta,
+        TileType.Trap    => Color.black,
         TileType.Jackpot => new Color(1f, 0.85f, 0f),
         TileType.Gamble  => new Color(1f, 0.5f, 0f),
         _                => Color.white

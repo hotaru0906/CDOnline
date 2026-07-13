@@ -1,4 +1,5 @@
 using UnityEngine;
+using Fusion;
 
 public class Chest : BoardCollectable
 {
@@ -11,14 +12,23 @@ public class Chest : BoardCollectable
 
     public bool IsOpened { get; private set; }
 
+    public int ChestIndex { get; private set; } = -1;
+
+    [Networked]
+    public int BoardNodeID { get; set; } = -1;
+
+    public void SetChestIndex(int index)
+    {
+        ChestIndex = index;
+    }
+
     public void SetBoardNode(BoardNode node)
     {
         boardNode = node;
 
-        if (boardNode == null)
-            return;
+        BoardNodeID = node.nodeID;
 
-        transform.position = boardNode.transform.position + Vector3.up * 0.6f;
+        transform.position = node.transform.position + Vector3.up * 0.6f;
     }
 
     public void Open()
@@ -39,5 +49,37 @@ public class Chest : BoardCollectable
     private void Awake()
     {
         animator = GetComponent<Animator>();
+    }
+
+    public override void Spawned()
+    {
+        base.Spawned();
+
+        Debug.Log($"CHEST Spawned on {Runner.LocalPlayer.PlayerId}  Object={Object.Id}");
+
+        BoardChestManager.Instance?.RegisterChest(this);
+    }
+
+    public override void Render()
+    {
+        base.Render();
+
+        if (BoardNodeID < 0)
+            return;
+
+        BoardNode node = BoardNodePath.Instance.GetNodeByID(BoardNodeID);
+
+        if (node == null)
+            return;
+
+        if (boardNode != node)
+        {
+            boardNode = node;
+
+            transform.position =
+                node.transform.position + Vector3.up * 0.6f;
+
+            Debug.Log($"[Chest] Sync Node {BoardNodeID}");
+        }
     }
 }

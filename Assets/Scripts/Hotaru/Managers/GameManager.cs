@@ -147,8 +147,14 @@ public class GameManager : NetworkBehaviour
     [Networked] public NetworkBool KeyCollected3 { get; private set; } = false;
     // ===== CHEST STATE =====
 
-    [Networked]
-    public int ChestNode { get; private set; } = -1;
+    [Networked] public int ChestNode0 { get; private set; } = -1;
+    [Networked] public int ChestNode1 { get; private set; } = -1;
+    [Networked] public int ChestNode2 { get; private set; } = -1;
+    [Networked] public int ChestNode3 { get; private set; } = -1;
+    [Networked] public int ChestNode4 { get; private set; } = -1;
+    [Networked] public int ChestNode5 { get; private set; } = -1;
+    [Networked] public int ChestNode6 { get; private set; } = -1;
+    [Networked] public int ChestNode7 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S0 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S2 { get; private set; } = -1;
@@ -368,22 +374,43 @@ public class GameManager : NetworkBehaviour
         return KeyNode0 != -1;
     }
 
-    public void SaveChestState(int nodeId)
+    public void SaveChestState(int index, int nodeId)
     {
         if (!HasStateAuthority)
             return;
 
-        ChestNode = nodeId;
+        switch (index)
+        {
+            case 0: ChestNode0 = nodeId; break;
+            case 1: ChestNode1 = nodeId; break;
+            case 2: ChestNode2 = nodeId; break;
+            case 3: ChestNode3 = nodeId; break;
+            case 4: ChestNode4 = nodeId; break;
+            case 5: ChestNode5 = nodeId; break;
+            case 6: ChestNode6 = nodeId; break;
+            case 7: ChestNode7 = nodeId; break;
+        }
     }
 
-    public int GetChestNode()
+    public int GetChestNode(int index)
     {
-        return ChestNode;
+        return index switch
+        {
+            0 => ChestNode0,
+            1 => ChestNode1,
+            2 => ChestNode2,
+            3 => ChestNode3,
+            4 => ChestNode4,
+            5 => ChestNode5,
+            6 => ChestNode6,
+            7 => ChestNode7,
+            _ => -1
+        };
     }
 
     public bool HasSavedChestState()
     {
-        return ChestNode != -1;
+        return ChestNode0 != -1;
     }
 
     public void SaveBoardItems(int slot, int s0, int s1, int s2, int s3)

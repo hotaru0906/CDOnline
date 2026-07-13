@@ -16,7 +16,11 @@ public class BoardChestManager : NetworkBehaviour
 
     // 3. Runtime
     [SerializeField]
-    private Chest currentChest;
+    private List<Chest> spawnedChests = new();
+
+    private const int CHEST_COUNT = 8;
+
+    private Chest interactionChest;
 
     private const int CHEST_KEY_COST = 10;
 
@@ -24,11 +28,48 @@ public class BoardChestManager : NetworkBehaviour
 
     public bool IsInteractionActive { get; private set; }
 
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowChestUI(int playerId, int keyCount)
+    {
+        if (Runner.LocalPlayer.PlayerId != playerId)
+            return;
+
+        ChestUI.Instance.Show(keyCount);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_EndInteraction()
+    {
+        EndInteraction();
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_OpenChest()
+    {
+        OnOpenButtonPressed();
+    }
     private void Awake()
     {
         Instance = this;
     }
 
+    public void RegisterChest(Chest chest)
+    {
+        if (chest == null)
+            return;
+
+        if (spawnedChests.Contains(chest))
+            return;
+
+        if (!spawnedChests.Contains(chest))
+        {
+            spawnedChests.Add(chest);
+
+            chest.SetChestIndex(spawnedChests.Count - 1);
+        }
+
+        Debug.Log($"[ChestManager] Register Chest {chest.ChestIndex}");
+    }
     // 4. Spawned
     public override void Spawned()
     {
@@ -51,24 +92,13 @@ public class BoardChestManager : NetworkBehaviour
             return;
         }
 
-        if (GameManager.Instance.HasSavedChestState())
-        {
-            RestoreChest();
-        }
-        else
-        {
-            BoardNode randomNode = GetRandomSpawnNode();
-
-            SpawnChest(randomNode);
-
-            SaveChest();
-        }
+        SpawnInitialChests();
     }
 
     // 5. SpawnChest
-    private void SpawnChest(BoardNode node)
+    private void SpawnChest(Chest chest, BoardNode node)
     {
-        if (currentChest == null)
+        if (chest == null)
             return;
 
         if (node == null)
@@ -77,55 +107,117 @@ public class BoardChestManager : NetworkBehaviour
             return;
         }
 
-        currentChest.IsCollected = false;
+        chest.IsCollected = false;
 
-        currentChest.SetBoardNode(node);
+        chest.SetBoardNode(node);
 
-        currentChest.Show();   // <-- thêm dòng này
+        chest.Show();
 
-        Debug.Log($"[BoardChestManager] Chest moved to Node {node.nodeID}");
+        Debug.Log($"[BoardChestManager] Chest {chest.ChestIndex} moved to Node {node.nodeID}");
+    }
+
+    private void SpawnInitialChests()
+    {
+        
+        spawnedChests.Clear();
+
+        if (chestSpawnNodes.Count == 0)
+            return;
+
+        List<BoardNode> availableNodes = new(chestSpawnNodes);
+
+        // Shuffle
+        for (int i = 0; i < availableNodes.Count; i++)
+        {
+            int r = Random.Range(i, availableNodes.Count);
+
+            (availableNodes[i], availableNodes[r]) =
+                (availableNodes[r], availableNodes[i]);
+        }
+
+        int spawnCount = Mathf.Min(CHEST_COUNT, availableNodes.Count);
+
+        for (int i = 0; i < spawnCount; i++)
+        {
+            Chest chest = Runner.Spawn(
+            chestPrefab,
+            Vector3.zero,
+            Quaternion.identity);
+
+        Debug.Log($"HOST Spawn: {chest.Object.Id}");
+
+        chest.SetBoardNode(availableNodes[i]);
+        chest.Show();
+
+        }
+
+        Debug.Log($"[BoardChestManager] Spawned {spawnedChests.Count} chests.");
+        
     }
 
     private void SaveChest()
     {
-        if (currentChest == null)
-            return;
+        foreach (Chest chest in spawnedChests)
+        {
+            if (chest == null)
+                continue;
 
-        if (currentChest.BoardNode == null)
-            return;
+            if (chest.BoardNode == null)
+                continue;
 
-        GameManager.Instance.SaveChestState(currentChest.BoardNode.nodeID);
+            GameManager.Instance.SaveChestState(
+                chest.ChestIndex,
+                chest.BoardNode.nodeID);
 
-        Debug.Log($"[Chest] Saved Node {currentChest.BoardNode.nodeID}");
+            Debug.Log($"[Chest] Saved Chest {chest.ChestIndex} -> Node {chest.BoardNode.nodeID}");
+        }
     }
 
     private void RestoreChest()
     {
-        int nodeId = GameManager.Instance.GetChestNode();
-
-        BoardNode node = BoardNodePath.Instance.GetNodeByID(nodeId);
-
-        if (node == null)
+        for (int i = 0; i < spawnedChests.Count; i++)
         {
-            Debug.LogError($"[Chest] Cannot restore node {nodeId}");
-            return;
+            Chest chest = spawnedChests[i];
+
+            if (chest == null)
+                continue;
+
+            int nodeId = GameManager.Instance.GetChestNode(chest.ChestIndex);
+
+            if (nodeId < 0)
+                continue;
+
+            BoardNode node = BoardNodePath.Instance.GetNodeByID(nodeId);
+
+            if (node == null)
+            {
+                Debug.LogWarning($"[Chest] Cannot restore node {nodeId}");
+                continue;
+            }
+
+            SpawnChest(chest, node);
         }
-
-        SpawnChest(node);
-
-        Debug.Log($"[Chest] Restored Node {nodeId}");
     }
 
     public bool TryOpenChest(int playerId, int nodeId)
     {
-        if (currentChest == null)
+        interactionChest = null;
+
+        foreach (Chest chest in spawnedChests)
         {
-            Debug.LogWarning("[Chest] Current Chest is NULL");
-            return false;
+            if (chest == null)
+                continue;
+
+            if (chest.IsOnNode(nodeId))
+            {
+                interactionChest = chest;
+                break;
+            }
         }
 
-        if (!currentChest.IsOnNode(nodeId))
+        if (interactionChest == null)
         {
+            Debug.Log($"[Chest] No chest found at Node {nodeId}");
             return false;
         }
 
@@ -145,7 +237,7 @@ public class BoardChestManager : NetworkBehaviour
 
             Debug.Log($"ChestUI.Instance = {ChestUI.Instance}");
 
-            ChestUI.Instance.Show(inventory.GetKeyCount());
+            RPC_ShowChestUI(playerId, inventory.GetKeyCount());
 
             Debug.Log($"[Chest] Player {playerId} needs {CHEST_KEY_COST} keys.");
 
@@ -154,7 +246,7 @@ public class BoardChestManager : NetworkBehaviour
 
         IsInteractionActive = true;
 
-        ChestUI.Instance.Show(inventory.GetKeyCount());
+        RPC_ShowChestUI(playerId, inventory.GetKeyCount());
 
         Debug.Log($"[Chest] Player {playerId} can open the Chest.");
 
@@ -199,11 +291,19 @@ public class BoardChestManager : NetworkBehaviour
         }
 
         Debug.Log("[Chest] Keys Consumed Successfully!");
-        currentChest.Open();
+
+        if (interactionChest == null)
+        {
+            Debug.LogError("[Chest] Interaction Chest is NULL");
+            EndInteraction();
+            return;
+        }
+
+        interactionChest.Open();
 
         currentInventory.AddChest();
 
-        currentChest.Hide();
+        interactionChest.Hide();
 
         if (currentInventory.GetChestCount() >= 2)
         {
@@ -216,7 +316,7 @@ public class BoardChestManager : NetworkBehaviour
 
         BoardNode newNode = GetRandomSpawnNode();
 
-        SpawnChest(newNode);
+        SpawnChest(interactionChest, newNode);
 
         SaveChest();
 

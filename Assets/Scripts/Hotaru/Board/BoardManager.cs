@@ -26,6 +26,7 @@ public class BoardManager : NetworkBehaviour
     [SerializeField] private BoardDice dice;
     [SerializeField] private BoardItemPool boardItemPool;
     [SerializeField] private ItemPool rouletteItemPool;
+    [SerializeField] private TrapTile trapTile;
 
     [Header("Tokens")]
     [SerializeField] private BoardPlayerToken[] tokens = new BoardPlayerToken[4];
@@ -192,6 +193,11 @@ public class BoardManager : NetworkBehaviour
 
         if (dice == null)
             dice = FindFirstObjectByType<BoardDice>();
+
+        if (trapTile == null)
+        {
+            Debug.LogError("TrapTile reference is missing!");
+        }
 
         Debug.Log("[BoardManager] Spawned");
     }
@@ -850,9 +856,26 @@ public class BoardManager : NetworkBehaviour
                     break;
                 yield return StartCoroutine(
                     MoveOneStep(slot, nextNode));
+
                 _currentMoveNode = nextNode;
 
                 SetNodeIDAtSlot(slot, nextNode.nodeID);
+
+                // ===== Chest Check =====
+
+                bool chestHandled =
+                    BoardChestManager.Instance != null &&
+                    BoardChestManager.Instance.TryOpenChest(
+                        playerId,
+                        nextNode.nodeID);
+
+                if (chestHandled)
+                {
+                    while (BoardChestManager.Instance.IsInteractionActive)
+                        yield return null;
+                }
+
+                // =======================
 
                 _remainingSteps--;
 
@@ -913,6 +936,32 @@ public class BoardManager : NetworkBehaviour
                 ResolveToss(playerId);
                 yield return new WaitForSeconds(tileResolveDuration);
                 break;
+            case TileType.Trap:
+            {
+                BoardPlayerToken token = GetTokenByPlayerId(playerId);
+
+                int lostKeys = 0;
+
+                PlayerItemInventory inventory =
+                    PlayerItemInventory.GetForPlayer(playerId);
+
+                if (inventory != null)
+                {
+                    // Mỗi lần Trap làm mất tối đa 10 Key
+                    lostKeys = inventory.RemoveKeys(10);
+                }
+
+                if (token != null && trapTile != null)
+                {
+                    trapTile.Trigger(token.transform.position, lostKeys);
+                }
+
+                RPC_PlayerLanded(playerId, finalNodeID, tileType);
+
+                yield return new WaitForSeconds(tileResolveDuration);
+
+                break;
+            }
             case TileType.Item:
                 ResolveItem(playerId);
                 RPC_PlayerLanded(playerId, finalNodeID, tileType);

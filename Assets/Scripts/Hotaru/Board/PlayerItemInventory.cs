@@ -331,6 +331,36 @@ public class PlayerItemInventory : NetworkBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Remove up to amount keys.
+    /// Returns the actual number removed.
+    /// </summary>
+    public int RemoveKeys(int amount)
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[PlayerItemInventory] RemoveKeys chỉ được gọi trên Host!");
+            return 0;
+        }
+
+        if (amount <= 0)
+            return 0;
+
+        int removed = Mathf.Min(KeyCount, amount);
+
+        KeyCount -= removed;
+
+        if (GameManager.Instance != null)
+            GameManager.Instance.SavePlayerResourceState(
+                Object.InputAuthority.PlayerId,
+                KeyCount,
+                ChestCount);
+
+        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} -{removed} Key (Remain={KeyCount})");
+
+        return removed;
+    }
+
     public int GetKeyCount()
     {
         return KeyCount;
