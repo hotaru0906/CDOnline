@@ -53,6 +53,7 @@ public class BoardInventoryUI : MonoBehaviour
 
             hands[i].gameObject.SetActive(true);
             hands[i].Initialize(pid, pid == localId);
+            hands[i].Hide();
         }
     }
 
@@ -94,11 +95,23 @@ public class BoardInventoryUI : MonoBehaviour
         // Expand/collapse
         for (int i = 0; i < hands.Length; i++)
         {
-            if (hands[i] == null) continue;
-            if (bm.GetPlayerIDAtSlot(i) == playerId)
+            if (hands[i] == null)
+                continue;
+
+            bool isMyTurn =
+                hands[i].IsLocalPlayer &&
+                bm.GetPlayerIDAtSlot(i) == playerId;
+
+            if (isMyTurn)
+            {
+                hands[i].Show();
                 hands[i].Expand();
+            }
             else
+            {
                 hands[i].Collapse();
+                hands[i].Hide();
+            }
         }
     }
 

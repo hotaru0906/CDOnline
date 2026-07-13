@@ -34,10 +34,15 @@ public class BoardHandUI : MonoBehaviour
     private readonly List<BoardCardUI> _cards = new();
     private RectTransform _rect;
     private Coroutine _scaleRoutine;
+    private CanvasGroup _canvasGroup;
 
     private void Awake()
     {
         _rect = GetComponent<RectTransform>();
+
+        _canvasGroup = GetComponent<CanvasGroup>();
+        if (_canvasGroup == null)
+            _canvasGroup = gameObject.AddComponent<CanvasGroup>();
     }
 
     // =====================================================================
@@ -77,6 +82,22 @@ public class BoardHandUI : MonoBehaviour
         _isExpanded = false;
         ArrangeCards();
         ScaleTo(collapsedScale);
+    }
+
+    public void Show()
+    {
+        gameObject.SetActive(true);
+
+        _canvasGroup.alpha = 1f;
+        _canvasGroup.interactable = true;
+        _canvasGroup.blocksRaycasts = true;
+    }
+
+    public void Hide()
+    {
+        _canvasGroup.alpha = 0f;
+        _canvasGroup.interactable = false;
+        _canvasGroup.blocksRaycasts = false;
     }
 
     // =====================================================================

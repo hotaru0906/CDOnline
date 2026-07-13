@@ -42,11 +42,13 @@ public class ChestUI : MonoBehaviour
     {
         Hide();
 
-        BoardChestManager.Instance.EndInteraction();
+        BoardChestManager.Instance.RPC_EndInteraction();
     }
 
     private void OnOpenClicked()
     {
-        BoardChestManager.Instance.OnOpenButtonPressed();
+        Hide();
+
+        BoardChestManager.Instance.RPC_OpenChest();
     }
 }
