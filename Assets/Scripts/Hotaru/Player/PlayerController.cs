@@ -24,6 +24,7 @@ public enum MinigameAction
 
 [RequireComponent(typeof(NetworkCharacterController))]
 [RequireComponent(typeof(PlayerAnimator))]
+[RequireComponent(typeof(PlayerModelSwitcher))]
 public class PlayerController : NetworkBehaviour
 {
     [Header("Movement")]
@@ -89,6 +90,7 @@ public class PlayerController : NetworkBehaviour
 
     private NetworkCharacterController _networkCC;
     private PlayerAnimator _playerAnimator;
+    private PlayerModelSwitcher _modelSwitcher;
 
     private CameraOrbit _cameraOrbit;
     private Transform _cameraTransform;
@@ -107,6 +109,7 @@ public class PlayerController : NetworkBehaviour
     {
         _networkCC = GetComponent<NetworkCharacterController>();
         _playerAnimator = GetComponent<PlayerAnimator>();
+        _modelSwitcher = GetComponent<PlayerModelSwitcher>();
 
         _normalScale = transform.localScale;
 
@@ -523,6 +526,33 @@ public class PlayerController : NetworkBehaviour
             targetScale,
             crouchScaleSpeed * Runner.DeltaTime
         );
+    }
+
+    public void ActivateRagdoll()
+    {
+        var ragdoll = GetActiveModelRagdoll();
+        if (ragdoll == null)
+        {
+            Debug.LogWarning($"[PlayerController] Cannot activate ragdoll: active model has no Regdoll component on player {name}");
+            return;
+        }
+
+        ragdoll.ActivateRagdoll();
+    }
+
+    public void DeactivateRagdoll()
+    {
+        var ragdoll = GetActiveModelRagdoll();
+        if (ragdoll == null)
+            return;
+
+        ragdoll.DeactivateRagdoll();
+    }
+
+    private Regdoll GetActiveModelRagdoll()
+    {
+        var activeModel = _modelSwitcher != null ? _modelSwitcher.GetActiveModel() : null;
+        return activeModel != null ? activeModel.GetComponentInChildren<Regdoll>(true) : null;
     }
 
     /// <param name="force">Hướng và độ mạnh của lực.</param>

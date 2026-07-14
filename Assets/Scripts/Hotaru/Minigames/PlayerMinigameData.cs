@@ -57,6 +57,7 @@ public class PlayerMinigameData : NetworkBehaviour
     private Color[] originalColors;
     private bool _lastInvincibleState;
     private bool _lastEliminatedState;
+    private bool _lastDeadState;
 
     #endregion
 
@@ -69,6 +70,7 @@ public class PlayerMinigameData : NetworkBehaviour
 
         _lastInvincibleState = IsInvincible;
         _lastEliminatedState = IsEliminated;
+        _lastDeadState = IsDead;
 
         if (HasStateAuthority && CurrentRespawnPosition == Vector3.zero)
             CurrentRespawnPosition = transform.position;
@@ -100,6 +102,20 @@ public class PlayerMinigameData : NetworkBehaviour
 
             if (IsEliminated)
                 OnPlayerEliminated?.Invoke(this);
+        }
+
+        if (_lastDeadState != IsDead)
+        {
+            _lastDeadState = IsDead;
+
+            if (IsDead)
+            {
+                playerController?.ActivateRagdoll();
+            }
+            else
+            {
+                playerController?.DeactivateRagdoll();
+            }
         }
     }
 
