@@ -53,6 +53,7 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private float scoreboardDisplayDuration = 3f; // Thời gian hiển thị scoreboard trước khi chuyển sang Voting
     private Coroutine _scoreboardCoroutine;
     private Coroutine _countdownCoroutine;
+    private Coroutine _startVotingCoroutine;
     #endregion
 
     #region Minigame Data
@@ -1714,8 +1715,11 @@ public class GameManager : NetworkBehaviour
         if (CursorManager.Instance != null)
             CursorManager.Instance.ShowCursor();
 
-        if (HasStateAuthority && VotingManager.Instance != null)
-            StartCoroutine(StartVotingWhenReady());
+        if (HasStateAuthority && VotingManager.Instance != null && !VotingManager.Instance.IsVotingActive)
+        {
+            if (_startVotingCoroutine == null)
+                _startVotingCoroutine = StartCoroutine(StartVotingWhenReady());
+        }
         else if (VotingManager.Instance == null)
             Debug.LogError("[GameManager] VotingManager.Instance is NULL!");
     }
@@ -1730,10 +1734,8 @@ public class GameManager : NetworkBehaviour
         if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
             MinigameVotingManager.Instance.PrepareNextVotingRound();
 
-        // Đợi 1 frame để AvailableCount được set và replicate
-        yield return null;
-
         VotingManager.Instance.StartVoting();
+        _startVotingCoroutine = null;
     }
     protected virtual void HandleTutorialState()
     {
@@ -1776,12 +1778,7 @@ public class GameManager : NetworkBehaviour
         }
 
         // Lấy MinigameData - ưu tiên từ MinigameVotingManager
-        MinigameData minigameData = null;
-
-        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
-        {
-            minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(CurrentMinigameIndex);
-        }
+        MinigameData minigameData = CurrentMinigameData;
 
         // Fallback về availableMinigames nếu không lấy được từ MinigameVotingManager
         if (minigameData == null && availableMinigames != null && CurrentMinigameIndex >= 0 && CurrentMinigameIndex < availableMinigames.Length)
