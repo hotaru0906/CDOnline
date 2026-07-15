@@ -31,9 +31,6 @@ public class MinigameVotingManager : NetworkBehaviour
 
     [Networked]
     private int AvailableCount { get; set; }
-
-    [Networked, OnChangedRender(nameof(OnAvailableListVersionChanged))]
-    private int AvailableListVersion { get; set; }
     #endregion
 
     #region Events
@@ -190,7 +187,7 @@ public class MinigameVotingManager : NetworkBehaviour
             Debug.LogWarning("[MinigameVotingManager] No unplayed minigames left for voting");
             ClearAvailableMinigameIndices();
             AvailableCount = 0;
-            AvailableListVersion++;
+            RPC_NotifyMinigameListUpdated();
             return;
         }
 
@@ -209,7 +206,7 @@ public class MinigameVotingManager : NetworkBehaviour
             Debug.Log($"[MinigameVotingManager] Available slot {i}: Minigame {unplayedIndices[i]}");
         }
 
-        AvailableListVersion++;
+        RPC_NotifyMinigameListUpdated();
         Debug.Log($"[MinigameVotingManager] Available: {AvailableCount} minigames (from {unplayedIndices.Count} unplayed)");
     }
 
@@ -273,12 +270,16 @@ public class MinigameVotingManager : NetworkBehaviour
     public int PlayedMinigameCount => IsReady ? PlayedCount : 0;
     #endregion
 
-    private void OnAvailableListVersionChanged()
+    #region RPCs
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_NotifyMinigameListUpdated()
     {
         RebuildPlayedCacheFromNetwork();
-        Debug.Log($"[MinigameVotingManager] Minigame list version {AvailableListVersion} received");
+        Debug.Log("[MinigameVotingManager] Minigame list updated notification received");
         OnMinigameListUpdated?.Invoke();
     }
+    #endregion
 
     #region Helper Methods
     private List<int> BuildUnplayedIndices()

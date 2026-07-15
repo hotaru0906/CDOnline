@@ -80,34 +80,24 @@ public class VotingUI : MonoBehaviour
 
     private void SubscribeToEvents()
     {
-        UnsubscribeFromEvents();
-
         var vm = VotingManager.Instance;
-        if (vm != null)
-        {
-            vm.OnTimerUpdated += UpdateTimer;
-            vm.OnVoteCountChanged += UpdateVoteCount;
-            vm.OnVotingStarted += OnVotingStarted;
-            vm.OnVotingEnded += OnVotingEnded;
-        }
+        if (vm == null) return;
 
-        if (MinigameVotingManager.Instance != null)
-            MinigameVotingManager.Instance.OnMinigameListUpdated += RefreshMinigameCards;
+        vm.OnTimerUpdated += UpdateTimer;
+        vm.OnVoteCountChanged += UpdateVoteCount;
+        vm.OnVotingStarted += OnVotingStarted;
+        vm.OnVotingEnded += OnVotingEnded;
     }
 
     private void UnsubscribeFromEvents()
     {
         var vm = VotingManager.Instance;
-        if (vm != null)
-        {
-            vm.OnTimerUpdated -= UpdateTimer;
-            vm.OnVoteCountChanged -= UpdateVoteCount;
-            vm.OnVotingStarted -= OnVotingStarted;
-            vm.OnVotingEnded -= OnVotingEnded;
-        }
+        if (vm == null) return;
 
-        if (MinigameVotingManager.Instance != null)
-            MinigameVotingManager.Instance.OnMinigameListUpdated -= RefreshMinigameCards;
+        vm.OnTimerUpdated -= UpdateTimer;
+        vm.OnVoteCountChanged -= UpdateVoteCount;
+        vm.OnVotingStarted -= OnVotingStarted;
+        vm.OnVotingEnded -= OnVotingEnded;
     }
 
     private void Setup()
@@ -251,13 +241,31 @@ public class VotingUI : MonoBehaviour
     private void OnVotingStarted()
     {
         Debug.Log("[VotingUI] Voting started");
-        RefreshMinigameCards();
+        StartCoroutine(SetupWhenAvailableCountReady());
     }
 
-    private void RefreshMinigameCards()
+    private System.Collections.IEnumerator SetupWhenAvailableCountReady()
     {
-        if (!isActiveAndEnabled || MinigameVotingManager.Instance == null)
-            return;
+        if (MinigameVotingManager.Instance == null) yield break;
+
+        // Chờ AvailableCount sync từ host — tối đa 2s
+        float timeout = 2f;
+        float elapsed = 0f;
+        int prevCount = -1;
+
+        while (elapsed < timeout)
+        {
+            int current = MinigameVotingManager.Instance.GetAvailableMinigameCount();
+
+            // Đợi khi count > 0 và ổn định (không thay đổi trong 1 frame)
+            if (current > 0 && current == prevCount)
+                break;
+
+            prevCount = current;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
         Setup();
         ResetUI();
     }

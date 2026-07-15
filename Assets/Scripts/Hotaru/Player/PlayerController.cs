@@ -718,11 +718,6 @@ public class PlayerController : NetworkBehaviour
             {
                 GetComponent<MG7CrownPlayer>()?.OnAttackHit(other);
             }
-            if (MG8Controller.Instance != null &&
-            MG8Controller.Instance.IsGameStarted)
-            {
-                MG8Controller.Instance.OnPlayerHit(this, other);
-            }
         }
     }
 
