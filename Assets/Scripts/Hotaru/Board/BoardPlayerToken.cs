@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 
 /// <summary>
 /// Token đại diện cho 1 player trên bàn cờ.
@@ -57,6 +58,8 @@ public class BoardPlayerToken : MonoBehaviour
     private int _currentCharacterIndex = -1;
     private Coroutine _visualSetupRoutine;
     private Coroutine _moveRoutine;
+    private readonly Queue<int> _movementQueue = new();
+    private bool _movementRunning = false;
 
     /// <summary>
     /// Gọi bởi BoardManager khi board phase bắt đầu để gán player và snap về node 0.
@@ -146,10 +149,19 @@ public class BoardPlayerToken : MonoBehaviour
     /// </summary>
     public void AnimateMovement(int[] pathNodeIDs)
     {
-        if (_moveRoutine != null)
-            StopCoroutine(_moveRoutine);
+        if (pathNodeIDs == null || pathNodeIDs.Length == 0)
+            return;
 
-        _moveRoutine = StartCoroutine(MoveCoroutine(pathNodeIDs));
+        foreach (int nodeID in pathNodeIDs)
+        {
+            _movementQueue.Enqueue(nodeID);
+        }
+
+        if (_movementRunning)
+            return;
+
+        _movementRunning = true;
+        _moveRoutine = StartCoroutine(ProcessMovementQueue());
     }
 
     private IEnumerator EnsureVisualReady()
@@ -286,84 +298,15 @@ public class BoardPlayerToken : MonoBehaviour
             tokenRenderer.enabled = visible;
     }
 
-    private IEnumerator MoveCoroutine(int[] pathNodeIDs)
+    private IEnumerator ProcessMovementQueue()
     {
         IsMoving = true;
 
-        var currentNode = BoardNodePath.Instance?.GetNodeByID(CurrentNodeID);
-
-    if (currentNode != null)
-    {
-        Vector3 start = transform.position;
-        Vector3 center = currentNode.GetCenterPosition() + Vector3.up * 0.5f;
-
-        float elapsed = 0f;
-        const float duration = 0.15f;
-
-        while (elapsed < duration)
+        while (_movementQueue.Count > 0)
         {
-            elapsed += Time.deltaTime;
+            int nodeID = _movementQueue.Dequeue();
 
-            transform.position = Vector3.Lerp(
-                start,
-                center,
-                elapsed / duration);
-
-            yield return null;
-        }
-
-        transform.position = center;
-    }
-
-        foreach (int nodeID in pathNodeIDs)
-        {
-            var node = BoardNodePath.Instance?.GetNodeByID(nodeID);
-            if (node == null) continue;
-
-            Vector3 from = transform.position;
-            Vector3 to = node.WorldPosition + Vector3.up * 0.5f;
-
-            //========================
-            // Quay người trước
-            //========================
-
-            Vector3 dir = to - from;
-            dir.y = 0f;
-
-            if (dir.sqrMagnitude > 0.001f)
-            {
-                Quaternion targetRotation = Quaternion.LookRotation(dir);
-
-                while (Quaternion.Angle(transform.rotation, targetRotation) > 1f)
-                {
-                    transform.rotation = Quaternion.Slerp(
-                        transform.rotation,
-                        targetRotation,
-                        Time.deltaTime * rotateSpeed);
-
-                    yield return null;
-                }
-
-                transform.rotation = targetRotation;
-            }
-
-            float duration = 1f / moveSpeed;
-            float elapsed = 0f;
-
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
-                float hop = Mathf.Sin(t * Mathf.PI) * hopHeight;
-                transform.position = Vector3.Lerp(from, to, t) + Vector3.up * hop;
-
-                yield return null;
-            }
-
-            transform.position = to;
-            CurrentNodeID = nodeID;
-
-            PlayStepSound();
+            yield return MoveSingleStep(nodeID);
         }
 
         var finalNode = BoardNodePath.Instance?.GetNodeByID(CurrentNodeID);
@@ -373,22 +316,70 @@ public class BoardPlayerToken : MonoBehaviour
             int count = BoardManager.Instance.GetPlayerCountOnNode(CurrentNodeID);
 
             if (count <= 1)
-            {
-                transform.position =
-                    finalNode.GetCenterPosition()
-                    + Vector3.up * 0.5f;
-            }
+                transform.position = finalNode.GetCenterPosition() + Vector3.up * 0.5f;
             else
-            {
-                transform.position =
-                    finalNode.GetSpawnPosition(playerSlotIndex)
-                    + Vector3.up * 0.5f;
-            }
+                transform.position = finalNode.GetSpawnPosition(playerSlotIndex) + Vector3.up * 0.5f;
         }
 
         IsMoving = false;
+        _movementRunning = false;
 
         OnMoveFinished?.Invoke(this);
+    }
+
+    private IEnumerator MoveSingleStep(int nodeID)
+    {
+        var node = BoardNodePath.Instance?.GetNodeByID(nodeID);
+
+        if (node == null)
+            yield break;
+
+        Vector3 from = transform.position;
+        Vector3 to = node.WorldPosition + Vector3.up * 0.5f;
+
+        Vector3 dir = to - from;
+        dir.y = 0;
+
+        if (dir.sqrMagnitude > 0.001f)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(dir);
+
+            while (Quaternion.Angle(transform.rotation, targetRotation) > 1f)
+            {
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation,
+                    targetRotation,
+                    Time.deltaTime * rotateSpeed);
+
+                yield return null;
+            }
+
+            transform.rotation = targetRotation;
+        }
+
+        float duration = 1f / moveSpeed;
+        float elapsed = 0;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+
+            float t = Mathf.SmoothStep(0, 1, elapsed / duration);
+
+            float hop = Mathf.Sin(t * Mathf.PI) * hopHeight;
+
+            transform.position =
+                Vector3.Lerp(from, to, t)
+                + Vector3.up * hop;
+
+            yield return null;
+        }
+
+        transform.position = to;
+
+        CurrentNodeID = nodeID;
+
+        PlayStepSound();
     }
 
     

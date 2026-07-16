@@ -47,8 +47,6 @@ public class ChestUI : MonoBehaviour
 
     private void OnOpenClicked()
     {
-        Hide();
-
         BoardChestManager.Instance.RPC_OpenChest();
     }
 }

@@ -287,6 +287,12 @@ public class BoardChestManager : NetworkBehaviour
         if (!currentInventory.ConsumeKey(CHEST_KEY_COST))
         {
             Debug.Log("[Chest] Not enough Keys!");
+
+            // Giữ UI mở.
+            RPC_ShowChestUI(
+                currentInventory.Object.InputAuthority.PlayerId,
+                currentInventory.GetKeyCount());
+
             return;
         }
 
@@ -304,6 +310,7 @@ public class BoardChestManager : NetworkBehaviour
         currentInventory.AddChest();
 
         interactionChest.Hide();
+        ChestUI.Instance?.Hide();
 
         if (currentInventory.GetChestCount() >= 2)
         {
