@@ -694,8 +694,8 @@ public class PlayerController : NetworkBehaviour
         {
             if (hit.gameObject == gameObject) continue;
 
-            var other = hit.GetComponent<PlayerController>();
-            if (other == null) continue;
+            var other = hit.GetComponentInParent<PlayerController>();
+            if (other == null || other == this) continue;
 
             bool hitSuccess = other.TryApplyStun(); // SỬA: dùng stun thay knockback
             if (!hitSuccess) continue;

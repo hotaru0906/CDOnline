@@ -468,7 +468,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 2bd3b810443483d44adf16be12c0f8d8, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 5866666021909216657, guid: 2bd3b810443483d44adf16be12c0f8d8, type: 3}
       propertyPath: m_Controller
@@ -1950,11 +1950,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1a787a1d6f3c23840990b88b433e8ba4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  animator: {fileID: 0}
-  rootColliders: []
-  ragdollColliders: []
   ragdollRigidbodies: []
-  activationForce: 4
+  ragdollColliders: []
 --- !u!1 &927523037 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 4961919941817280852, guid: 222de22865f22f648b0f76dab5e49ec3, type: 3}
@@ -2414,7 +2411,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 2bd3b810443483d44adf16be12c0f8d8, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3203953672348551973, guid: 2bd3b810443483d44adf16be12c0f8d8, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
@@ -3124,6 +3121,7 @@ MonoBehaviour:
   - {fileID: 1501806180}
   - {fileID: 1501806179}
   - {fileID: 1501806178}
+  - {fileID: 1501806182}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &1501806178
 MonoBehaviour:
@@ -3175,6 +3173,7 @@ MonoBehaviour:
   isRunningParam: IsRunning
   jumpTrigger: Jump
   attackTrigger: Attack
+  mg8AttackTrigger: Attack sword
   isSittingParam: isSitting
 --- !u!114 &1501806180
 MonoBehaviour:
@@ -3220,6 +3219,19 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &1501806182
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1501806170}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf3cb3a869611f14fba952b8d0500d94, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  characterModels: []
 --- !u!1001 &1592788625
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4147,7 +4159,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5592837990340640676, guid: d9827f85881965d4fbecb06e32fd2cc5, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7771047553752117587, guid: d9827f85881965d4fbecb06e32fd2cc5, type: 3}
       propertyPath: m_Controller
@@ -4175,6 +4187,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 5592837990340640676, guid: d9827f85881965d4fbecb06e32fd2cc5, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1501806177}
+    - targetCorrespondingSourceObject: {fileID: 5592837990340640676, guid: d9827f85881965d4fbecb06e32fd2cc5, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1501806182}
   m_SourcePrefab: {fileID: 100100000, guid: d9827f85881965d4fbecb06e32fd2cc5, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

@@ -43,7 +43,10 @@ public class MG8PlayerData : NetworkBehaviour
         foreach (var itemObject in itemInHandObjects)
         {
             if (itemObject != null)
+            {
                 itemObject.SetActive(false);
+                SetItemCollidersEnabled(itemObject, false);
+            }
         }
 
         var networkData = GetComponent<PlayerNetworkData>();
@@ -55,8 +58,19 @@ public class MG8PlayerData : NetworkBehaviour
             itemInHandObjects[characterIndex] != null)
         {
             itemInHandObjects[characterIndex].SetActive(true);
+            SetItemCollidersEnabled(itemInHandObjects[characterIndex], false);
         }
 
         Debug.Log($"[MG8PlayerData] HasItem={HasItem}, CharacterIndex={characterIndex}");
+    }
+
+    private void SetItemCollidersEnabled(GameObject itemObject, bool enabled)
+    {
+        if (itemObject == null) return;
+
+        foreach (var collider in itemObject.GetComponentsInChildren<Collider>(true))
+        {
+            collider.enabled = enabled;
+        }
     }
 }

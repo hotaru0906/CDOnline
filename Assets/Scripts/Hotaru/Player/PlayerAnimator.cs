@@ -12,6 +12,8 @@ public class PlayerAnimator : NetworkBehaviour
     [SerializeField] private string isRunningParam = "IsRunning";
     [SerializeField] private string jumpTrigger = "Jump";
     [SerializeField] private string attackTrigger = "Attack";
+    [Tooltip("Trigger to use only when MG8 is active.")]
+    [SerializeField] private string mg8AttackTrigger = "Attack sword";
     [SerializeField] private string isSittingParam = "isSitting";
 
     private PlayerController _playerController;
@@ -91,8 +93,14 @@ public class PlayerAnimator : NetworkBehaviour
         {
             _isAttacking = true;
 
-            animator.ResetTrigger(attackTrigger);
-            animator.SetTrigger(attackTrigger);
+            string triggerToUse = attackTrigger;
+            if (MG8Controller.Instance != null && MG8Controller.Instance.IsGameStarted)
+            {
+                triggerToUse = mg8AttackTrigger;
+            }
+
+            animator.ResetTrigger(triggerToUse);
+            animator.SetTrigger(triggerToUse);
         }
         else if (!isAttacking)
         {
