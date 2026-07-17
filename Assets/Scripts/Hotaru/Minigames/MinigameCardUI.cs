@@ -75,7 +75,7 @@ public class MinigameCardUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
             button.onClick.AddListener(OnVoteClicked);
         }
 
-        UpdateVoteCount(0);
+        HideVoteCount();
         SetSelected(false);
         ResetVisual();
     }
@@ -286,6 +286,14 @@ public class MinigameCardUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         }
     }
 
+    public void HideVoteCount()
+    {
+        if (voteCountText != null)
+        {
+            voteCountText.text = string.Empty;
+        }
+    }
+
     public void SetInteractable(bool interactable)
     {
         if (button != null)
@@ -318,7 +326,7 @@ public class MinigameCardUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         hasVoted = false;
         isDraggingForSelection = false;
         isInConfirmZone = false;
-        UpdateVoteCount(0);
+        HideVoteCount();
         SetSelected(false);
         SetInteractable(true);
         ResetVisual();

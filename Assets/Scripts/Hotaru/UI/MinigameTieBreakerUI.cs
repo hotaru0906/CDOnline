@@ -11,13 +11,13 @@ public class MinigameTieBreakerUI : MonoBehaviour
 {
     [Header("UI References")]
     [SerializeField] private Image[] candidateIcons;
-    [SerializeField] private TMP_Text[] candidateNames;
     [SerializeField] private TMP_Text statusText;
-    [SerializeField] private Image selectedMinigameIcon;
-    [SerializeField] private TMP_Text selectedMinigameName;
 
     [Header("Spin Settings")]
     [SerializeField] private float highlightInterval = 0.1f;
+    [SerializeField] private float spinDuration = 2.2f;
+    [SerializeField] private float wheelSlotAngle = 60f;
+    [SerializeField] private RectTransform wheelRoot;
 
     private Coroutine spinCoroutine;
     private bool subscribed;
@@ -96,9 +96,11 @@ public class MinigameTieBreakerUI : MonoBehaviour
 
     private void PopulateCandidates(int[] candidateIndices)
     {
+        int[] wheelOrder = BuildWheelOrder(candidateIndices);
+
         for (int i = 0; i < candidateIcons.Length; i++)
         {
-            bool active = candidateIndices != null && i < candidateIndices.Length;
+            bool active = i < wheelOrder.Length;
 
             if (candidateIcons[i] != null)
             {
@@ -106,16 +108,12 @@ public class MinigameTieBreakerUI : MonoBehaviour
                 candidateIcons[i].color = Color.white;
             }
 
-            if (candidateNames != null && i < candidateNames.Length && candidateNames[i] != null)
-            {
-                candidateNames[i].gameObject.SetActive(active);
-            }
-
             if (!active)
                 continue;
 
+            int slotCandidateIndex = wheelOrder[i];
             MinigameData data = MinigameVotingManager.Instance != null
-                ? MinigameVotingManager.Instance.GetMinigameByAvailableIndex(candidateIndices[i])
+                ? MinigameVotingManager.Instance.GetMinigameByAvailableIndex(slotCandidateIndex)
                 : null;
 
             if (candidateIcons[i] != null)
@@ -123,67 +121,110 @@ public class MinigameTieBreakerUI : MonoBehaviour
                 candidateIcons[i].sprite = data != null ? data.icon : null;
             }
 
-            if (candidateNames != null && i < candidateNames.Length && candidateNames[i] != null)
-            {
-                candidateNames[i].text = data != null ? data.minigameName : $"Minigame #{candidateIndices[i] + 1}";
-            }
         }
 
         if (statusText != null)
         {
-            statusText.text = "Dang quay de chon minigame...";
-        }
-
-        if (selectedMinigameIcon != null)
-        {
-            selectedMinigameIcon.sprite = null;
-            selectedMinigameIcon.color = new Color(1f, 1f, 1f, 0f);
-        }
-
-        if (selectedMinigameName != null)
-        {
-            selectedMinigameName.text = string.Empty;
+            statusText.text = "Selecting...";
         }
     }
 
-    private IEnumerator RunSpin(int[] candidateIndices, int winnerIndex, float duration)
+    private IEnumerator RunSpin(int[] candidateIndices, int winnerIndex, float delayBeforeSpin)
     {
         if (candidateIndices == null || candidateIndices.Length == 0)
-            yield break;
-
-        float elapsed = 0f;
-        int lastHighlighted = -1;
-
-        while (elapsed < duration)
         {
-            int randomSlot = Random.Range(0, candidateIndices.Length);
-            HighlightSlot(lastHighlighted, false);
-            HighlightSlot(randomSlot, true);
-            lastHighlighted = randomSlot;
-
-            yield return new WaitForSeconds(highlightInterval);
-            elapsed += highlightInterval;
+            spinCoroutine = null;
+            yield break;
         }
 
-        HighlightSlot(lastHighlighted, false);
-
-        int winnerSlot = -1;
-        for (int i = 0; i < candidateIndices.Length; i++)
+        if (delayBeforeSpin > 0f)
         {
-            if (candidateIndices[i] == winnerIndex)
+            yield return new WaitForSeconds(delayBeforeSpin);
+        }
+
+        int[] wheelOrder = BuildWheelOrder(candidateIndices);
+        int winnerSlot = GetWinnerSlot(wheelOrder, winnerIndex);
+        float targetAngle = -(winnerSlot * wheelSlotAngle);
+        float extraSpin = 1080f + Random.Range(0f, 360f);
+        float startAngle = wheelRoot != null ? wheelRoot.localEulerAngles.z : 0f;
+        float targetRotation = startAngle + extraSpin + (wheelSlotAngle * 0.5f) + (winnerSlot * wheelSlotAngle);
+
+        float elapsed = 0f;
+        while (elapsed < spinDuration)
+        {
+            float t = elapsed / spinDuration;
+            float easedT = 1f - Mathf.Pow(1f - t, 3f);
+            float angle = startAngle + (targetRotation - startAngle) * easedT;
+
+            if (wheelRoot != null)
             {
-                winnerSlot = i;
-                break;
+                wheelRoot.localRotation = Quaternion.Euler(0f, 0f, angle);
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (wheelRoot != null)
+        {
+            wheelRoot.localRotation = Quaternion.Euler(0f, 0f, targetRotation + targetAngle);
+        }
+
+        HighlightSlot(winnerSlot, true);
+        ShowWinner(winnerIndex);
+        spinCoroutine = null;
+    }
+
+    private int[] BuildWheelOrder(int[] candidateIndices)
+    {
+        int[] wheelOrder = new int[candidateIcons != null ? candidateIcons.Length : 6];
+
+        if (candidateIndices == null || candidateIndices.Length == 0)
+        {
+            return wheelOrder;
+        }
+
+        int candidateCount = candidateIndices.Length;
+
+        if (candidateCount == 2)
+        {
+            for (int i = 0; i < wheelOrder.Length; i++)
+            {
+                wheelOrder[i] = candidateIndices[i % 2];
+            }
+        }
+        else if (candidateCount == 3)
+        {
+            for (int i = 0; i < wheelOrder.Length; i++)
+            {
+                wheelOrder[i] = candidateIndices[i % 3];
+            }
+        }
+        else
+        {
+            for (int i = 0; i < wheelOrder.Length; i++)
+            {
+                wheelOrder[i] = candidateIndices[i % candidateCount];
             }
         }
 
-        if (winnerSlot >= 0)
+        return wheelOrder;
+    }
+
+    private int GetWinnerSlot(int[] wheelOrder, int winnerIndex)
+    {
+        if (wheelOrder == null)
+            return -1;
+
+        for (int i = 0; i < wheelOrder.Length; i++)
         {
-            HighlightSlot(winnerSlot, true);
+            if (wheelOrder[i] == winnerIndex)
+            {
+                return i;
+            }
         }
 
-        ShowWinner(winnerIndex);
-        spinCoroutine = null;
+        return -1;
     }
 
     private void HighlightSlot(int slot, bool active)
@@ -203,20 +244,10 @@ public class MinigameTieBreakerUI : MonoBehaviour
             ? MinigameVotingManager.Instance.GetMinigameByAvailableIndex(winnerIndex)
             : null;
 
-        if (selectedMinigameIcon != null)
-        {
-            selectedMinigameIcon.sprite = winnerData != null ? winnerData.icon : null;
-            selectedMinigameIcon.color = Color.white;
-        }
-
-        if (selectedMinigameName != null)
-        {
-            selectedMinigameName.text = winnerData != null ? winnerData.minigameName : $"Minigame #{winnerIndex + 1}";
-        }
-
         if (statusText != null)
         {
-            statusText.text = "Minigame duoc chon:";
+            string winnerName = winnerData != null ? winnerData.minigameName : $"Minigame #{winnerIndex + 1}";
+            statusText.text = $"Minigame selected: {winnerName}";
         }
     }
 }

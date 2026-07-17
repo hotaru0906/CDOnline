@@ -51,7 +51,8 @@ public class VotingManager : NetworkBehaviour
     [SerializeField] private float votingDuration = 10f;
     [SerializeField] private float quickEndTime = 3f; // Thời gian còn lại khi tất cả đã vote
     [SerializeField] private bool instantEndWhenAllVoted = false; // End ngay khi tất cả vote
-    [SerializeField] private float tieBreakDuration = 3f;
+    [SerializeField] private float tieBreakUiDelay = 2f; // Chờ 2s sau khi hiện tổng vote rồi mới mở wheel
+    [SerializeField] private float tieBreakSpinDuration = 2.2f; // Thời gian wheel quay
     #endregion
 
     #region Events
@@ -128,11 +129,8 @@ public class VotingManager : NetworkBehaviour
                 EndVoting();
                 return;
             }
-            if (RemainingTime > quickEndTime)
-            {
-                RemainingTime = quickEndTime;
-                Debug.Log($"[VotingManager] All voted - reducing remaining time to {quickEndTime}s");
-            }
+            RemainingTime = quickEndTime;
+            Debug.Log($"[VotingManager] All voted - setting remaining time to {quickEndTime}s");
         }
 
         // Update timer (host only)
@@ -220,6 +218,12 @@ public class VotingManager : NetworkBehaviour
 
         IsVotingActive = false;
 
+        // Only reveal the final tally if at least one vote was cast.
+        if (TotalVotes > 0)
+        {
+            RevealVoteCounts();
+        }
+
         List<int> topIndices = GetTopVotedIndices();
         if (topIndices.Count <= 1)
         {
@@ -291,13 +295,11 @@ public class VotingManager : NetworkBehaviour
 
         Debug.Log($"[VotingManager] Vote received for #{minigameIndex} (weight: {voteWeight}). New count: {currentCount + voteWeight}. Total votes: {TotalVotes}/{TotalVoteWeight}");
 
-        // Notify all clients about the vote update
-        RPC_BroadcastVoteUpdate(minigameIndex, currentCount + voteWeight);
-
         // Timer reduction + instant end handled in FixedUpdateNetwork
         if (TotalVotes >= TotalVoteWeight)
         {
             Debug.Log("[VotingManager] All players have voted!");
+            RevealVoteCounts();
             RPC_NotifyAllVoted();
         }
     }
@@ -425,6 +427,7 @@ public class VotingManager : NetworkBehaviour
         if (!HasStateAuthority || tiedIndices == null || tiedIndices.Count == 0)
             return;
 
+        // TODO: replace this random tie-break fallback with a configurable rule later.
         pendingTieWinnerIndex = tiedIndices[UnityEngine.Random.Range(0, tiedIndices.Count)];
 
         int candidateCount = Mathf.Min(tiedIndices.Count, 10);
@@ -434,14 +437,14 @@ public class VotingManager : NetworkBehaviour
             candidates[i] = tiedIndices[i];
         }
 
-        Debug.Log($"[VotingManager] Tie detected between {candidateCount} options. Starting tie-break for {tieBreakDuration}s. Winner preselected: #{pendingTieWinnerIndex}");
-        RPC_OnTieBreakStarted(candidates, pendingTieWinnerIndex, tieBreakDuration);
+        Debug.Log($"[VotingManager] Tie detected between {candidateCount} options. Opening tie-break UI after {tieBreakUiDelay}s. Winner preselected: #{pendingTieWinnerIndex}");
+        RPC_OnTieBreakStarted(candidates, pendingTieWinnerIndex, tieBreakUiDelay);
         StartCoroutine(CompleteTieBreakAfterDelay());
     }
 
     private IEnumerator CompleteTieBreakAfterDelay()
     {
-        yield return new WaitForSeconds(tieBreakDuration);
+        yield return new WaitForSeconds(tieBreakUiDelay + tieBreakSpinDuration);
 
         if (!HasStateAuthority)
             yield break;
@@ -452,6 +455,18 @@ public class VotingManager : NetworkBehaviour
         RPC_OnTieBreakEnded(WinnerIndex);
         RPC_OnVotingEnded(WinnerIndex);
         StartWinningMinigame(WinnerIndex);
+    }
+
+    private void RevealVoteCounts()
+    {
+        if (MinigameCount <= 0)
+            return;
+
+        for (int i = 0; i < MinigameCount; i++)
+        {
+            int count = VoteCounts.Get(i);
+            RPC_BroadcastVoteUpdate(i, count);
+        }
     }
 
     private void StartWinningMinigame(int winnerIndex)

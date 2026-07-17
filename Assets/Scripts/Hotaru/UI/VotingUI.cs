@@ -182,12 +182,6 @@ public class VotingUI : MonoBehaviour
         if (VotingManager.Instance != null && VotingManager.Instance.IsReady && VotingManager.Instance.IsVotingActive)
         {
             UpdateTimer(VotingManager.Instance.RemainingTime);
-
-            for (int i = 0; i < cards.Count; i++)
-            {
-                int count = VotingManager.Instance.GetVoteCount(i);
-                cards[i].UpdateVoteCount(count);
-            }
         }
     }
 
