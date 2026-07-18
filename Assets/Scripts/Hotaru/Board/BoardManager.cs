@@ -277,8 +277,10 @@ public class BoardManager : NetworkBehaviour
         }
 
         RPC_InitializeTokens(rankOrder, count);
+
         Debug.Log($"[BoardManager] Board phase started — {string.Join(", ", rankOrder)}");
-        StartTurn();
+
+        StartCoroutine(BeginBoardIntro());
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -307,6 +309,29 @@ public class BoardManager : NetworkBehaviour
     #endregion
 
     #region Turn Flow
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayBoardIntro()
+    {
+        if (BoardIntroController.Instance != null)
+        {
+            StartCoroutine(BoardIntroController.Instance.PlayIntro());
+        }
+    }
+
+    private IEnumerator BeginBoardIntro()
+    {
+        yield return null;
+        yield return null;
+
+        RPC_PlayBoardIntro();
+
+        yield return new WaitForSeconds(12f);
+
+        StartTurn();
+    }
+    
+
     private void StartTurn()
     {
         if (!HasStateAuthority) return;
@@ -437,23 +462,27 @@ public class BoardManager : NetworkBehaviour
         // 2. Dice bắt đầu quay
         RPC_StartDiceSpin();
 
-        // Quay khoảng 0.8 giây
-        yield return new WaitForSeconds(0.8f);
-
-        // Giữ thêm 1 giây
-        yield return new WaitForSeconds(1.0f);
+        // 3. Quay
+        yield return new WaitForSeconds(1.2f);
 
         // 4. Dice dừng quay
         RPC_StopDiceSpin();
 
-        // 3. Hiện số
+        // 5. Cho người chơi thấy xúc xắc đã dừng
+        yield return new WaitForSeconds(0.5f);
+
+        // 6. Hiện UI kết quả
         RPC_ShowDiceResult(playerId, result);
 
-        // 5. Ẩn xúc xắc
+        // 7. Giữ UI một chút để người chơi nhìn
+        yield return new WaitForSeconds(1.2f);
+
+        // 8. Ẩn xúc xắc
         RPC_HideDice();
 
-        // 6. Di chuyển
-        yield return StartCoroutine(ExecuteMovementStepByStep(slot, playerId, result));
+        // 9. Di chuyển
+        yield return StartCoroutine(
+            ExecuteMovementStepByStep(slot, playerId, result));
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
