@@ -70,6 +70,7 @@ public class VotingManager : NetworkBehaviour
     private bool hasVoted = false;
     private int localVoteIndex = -1;
     private int pendingTieWinnerIndex = -1;
+    private bool hasReachedAllVotedQuickEnd = false;
     #endregion
 
     /// <summary>
@@ -121,16 +122,26 @@ public class VotingManager : NetworkBehaviour
         if (!HasStateAuthority) return;
         if (!IsReady || !IsVotingActive) return;
 
-        // Khi tất cả đã vote, rút ngắn thời gian còn lại
+        // Khi tất cả đã vote, rút ngắn thời gian còn lại một lần rồi tiếp tục đếm xuống
         if (TotalVoteWeight > 0 && TotalVotes >= TotalVoteWeight)
         {
-            if (instantEndWhenAllVoted)
+            if (!hasReachedAllVotedQuickEnd)
             {
-                EndVoting();
-                return;
+                hasReachedAllVotedQuickEnd = true;
+
+                if (instantEndWhenAllVoted)
+                {
+                    EndVoting();
+                    return;
+                }
+
+                RemainingTime = quickEndTime;
+                Debug.Log($"[VotingManager] All voted - setting remaining time to {quickEndTime}s");
             }
-            RemainingTime = quickEndTime;
-            Debug.Log($"[VotingManager] All voted - setting remaining time to {quickEndTime}s");
+        }
+        else
+        {
+            hasReachedAllVotedQuickEnd = false;
         }
 
         // Update timer (host only)
@@ -179,6 +190,7 @@ public class VotingManager : NetworkBehaviour
         // Reset local vote state trên Host
         hasVoted = false;
         localVoteIndex = -1;
+        hasReachedAllVotedQuickEnd = false;
 
         // Đếm số player và tính tổng vote weight
         var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
