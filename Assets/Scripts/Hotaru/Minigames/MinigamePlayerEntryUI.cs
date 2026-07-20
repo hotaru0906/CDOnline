@@ -8,6 +8,7 @@ public class MinigamePlayerEntryUI : MonoBehaviour
     [SerializeField] private Sprite[] characterAvatars;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text livesText;
+    [SerializeField] private TMP_Text scoreText;
     [SerializeField] private Slider hpSlider;  // HP bar slider (0-100)
     [SerializeField] private GameObject eliminatedOverlay;
     [SerializeField] private Image backgroundImage;
@@ -20,7 +21,8 @@ public class MinigamePlayerEntryUI : MonoBehaviour
         string playerName,
         int lives,
         Color slotColor,
-        bool isEliminated)
+        bool isEliminated,
+        int score = 0)
     {
         PlayerId = playerId;
 
@@ -29,6 +31,9 @@ public class MinigamePlayerEntryUI : MonoBehaviour
 
         if (livesText != null)
             livesText.text = lives.ToString();
+
+        if (scoreText != null)
+            scoreText.text = score.ToString();
 
         if (iconImage != null)
             iconImage.color = Color.white;;
@@ -53,6 +58,12 @@ public class MinigamePlayerEntryUI : MonoBehaviour
 
         if (nameText != null)
             nameText.color = eliminated ? Color.gray : Color.white;
+    }
+
+    public void UpdateScore(int score)
+    {
+        if (scoreText != null)
+            scoreText.text = score.ToString();
     }
 
     public void SetCharacterAvatar(int characterIndex)

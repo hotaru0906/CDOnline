@@ -1,6 +1,6 @@
-
 using Fusion;
 using UnityEngine;
+using System.Collections;
 
 public enum PlayerState
 {
@@ -78,6 +78,8 @@ public class PlayerController : NetworkBehaviour
 
     [Networked] private TickTimer StunTimer { get; set; }
     [Networked] private float KnockbackTimer { get; set; }
+    [Networked] private float SpeedMultiplier { get; set; } = 1f;
+    [Networked] private float BoostTimer { get; set; }
 
     public bool IsInHitCooldown =>
         HitCooldownTimer.ExpiredOrNotRunning(Runner) == false;
@@ -175,7 +177,15 @@ public class PlayerController : NetworkBehaviour
         UpdateExternalVelocity();
 
         if (HasStateAuthority && KnockbackTimer > 0f)
-            KnockbackTimer = Mathf.Max(0f, KnockbackTimer - Runner.DeltaTime);
+            KnockbackTimer = Mathf.Max(0f, KnockbackTimer - Runner.DeltaTime); if (HasStateAuthority && BoostTimer > 0f)
+        {
+            BoostTimer -= Runner.DeltaTime;
+            if (BoostTimer <= 0f)
+            {
+                BoostTimer = 0f;
+                SpeedMultiplier = 1f;
+            }
+        }
 
         if (HasStateAuthority && IsStunned && StunTimer.Expired(Runner))
             IsStunned = false;
@@ -207,6 +217,7 @@ public class PlayerController : NetworkBehaviour
 
         bool canMove = CanPerformAction(MinigameAction.Move);
 
+
         // Knockback: player không tự di chuyển được, nhưng ExternalVelocity vẫn tác động
         Vector3 moveDirection = (canMove && !IsKnockbacked)
             ? CalculateMoveDirection(input.MoveDirection, input.CameraForward)
@@ -237,7 +248,7 @@ public class PlayerController : NetworkBehaviour
             else
                 targetSpeed = walkSpeed;
         }
-
+        targetSpeed *= SpeedMultiplier;
         Vector3 finalMovement =
             moveDirection.normalized * targetSpeed;
 
@@ -724,6 +735,25 @@ public class PlayerController : NetworkBehaviour
                 MG8Controller.Instance.OnPlayerHit(this, other);
             }
         }
+    }
+    public void ApplySpeedBoost(float multiplier, float duration)
+    {
+        if (!HasStateAuthority) return;
+        SpeedMultiplier = multiplier;
+        BoostTimer = duration;
+    }
+
+    public void ApplyTemporaryFreeze(float duration)
+    {
+        if (!HasStateAuthority) return;
+        SetFrozen(true);
+        StartCoroutine(UnfreezeAfter(duration));
+    }
+
+    private IEnumerator UnfreezeAfter(float duration)
+    {
+        yield return new WaitForSeconds(duration);
+        SetFrozen(false);
     }
 
     public void ForceIdle()
