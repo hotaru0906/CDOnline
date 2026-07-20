@@ -5,176 +5,97 @@ using TMPro;
 
 public class AudioSettings : MonoBehaviour
 {
-    [Header("=== Audio Mixer ===")]
-    [SerializeField] private AudioMixer audioMixer;
+    [Header("=== Mixer ===")]
+    [SerializeField] private AudioMixer mixer;
 
-    [Header("=== Sliders ===")]
+    [Header("=== Sliders (Min 0 / Max 1) ===")]
     [SerializeField] private Slider masterSlider;
     [SerializeField] private Slider musicSlider;
     [SerializeField] private Slider sfxSlider;
 
+    [Header("=== Label % (optional) ===")]
+    [SerializeField] private TMP_Text masterLabel;
+    [SerializeField] private TMP_Text musicLabel;
+    [SerializeField] private TMP_Text sfxLabel;
 
-    [Header("=== Value Labels ===")]
-    [SerializeField] private TextMeshProUGUI masterValueText;
-    [SerializeField] private TextMeshProUGUI musicValueText;
-    [SerializeField] private TextMeshProUGUI sfxValueText;
+    // Tên exposed parameter trong AudioMixer
+    private const string P_MASTER = "MasterVolume";
+    private const string P_MUSIC  = "MusicVolume";
+    private const string P_SFX    = "SFXVolume";
 
+    // Key PlayerPrefs
+    private const string K_MASTER = "audio_master";
+    private const string K_MUSIC  = "audio_music";
+    private const string K_SFX    = "audio_sfx";
 
-    [Header("=== Toggles ===")]
-    [SerializeField] private Toggle bgmToggle;
-    [SerializeField] private Toggle sfxToggle;
+    private const float DEFAULT_VOL = 0.8f;
+    private const float MIN_VOL     = 0.0001f; // tránh log10(0) = -Infinity
 
-    // ----------------------------------------------------------------
-    // Awake — set Mixer TRƯỚC khi AudioManager.Start() play nhạc
-    // ----------------------------------------------------------------
     private void Awake()
     {
-        ApplyMixerFromPrefs();
+        LoadAudio();
     }
 
-    private void Start()
+    private void OnEnable()
     {
-        LoadSliderValues();
-        BindSliderEvents();
+        if (masterSlider) masterSlider.onValueChanged.AddListener(SetMaster);
+        if (musicSlider)  musicSlider.onValueChanged.AddListener(SetMusic);
+        if (sfxSlider)    sfxSlider.onValueChanged.AddListener(SetSFX);
     }
 
-    // ----------------------------------------------------------------
-    // Set mixer ngay từ PlayerPrefs — không cần slider
-    // Gọi trong Awake để đảm bảo âm thanh đúng ngay từ đầu
-    // ----------------------------------------------------------------
-    private void ApplyMixerFromPrefs()
+    private void OnDisable()
     {
-        if (audioMixer == null) return;
-
-        audioMixer.SetFloat("MasterVolume", SliderToDB(PlayerPrefs.GetFloat("MasterVolume", 1f)));
-        audioMixer.SetFloat("MusicVolume",  SliderToDB(PlayerPrefs.GetFloat("MusicVolume",  1f)));
-        audioMixer.SetFloat("SFXVolume",    SliderToDB(PlayerPrefs.GetFloat("SFXVolume",    1f)));
-
+        if (masterSlider) masterSlider.onValueChanged.RemoveListener(SetMaster);
+        if (musicSlider)  musicSlider.onValueChanged.RemoveListener(SetMusic);
+        if (sfxSlider)    sfxSlider.onValueChanged.RemoveListener(SetSFX);
     }
 
-    // ----------------------------------------------------------------
-    // Load giá trị vào slider — gọi trong Start()
-    // Slider.onValueChanged sẽ tự gọi SetXVolume() khi set value
-    // ----------------------------------------------------------------
-    private void LoadSliderValues()
+    #region Set
+    public void SetMaster(float v) => Apply(P_MASTER, K_MASTER, v, masterLabel);
+    public void SetMusic (float v) => Apply(P_MUSIC,  K_MUSIC,  v, musicLabel);
+    public void SetSFX   (float v) => Apply(P_SFX,    K_SFX,    v, sfxLabel);
+
+    private void Apply(string param, string key, float linear, TMP_Text label)
     {
-        // Tắt event trước khi set slider tránh trigger 2 lần
-        masterSlider.onValueChanged.RemoveAllListeners();
-        musicSlider.onValueChanged.RemoveAllListeners();
-        sfxSlider.onValueChanged.RemoveAllListeners();
+        linear = Mathf.Clamp01(linear);
 
+        // Chuyển tuyến tính (0..1) sang decibel cho tai người nghe mượt
+        float db = Mathf.Log10(Mathf.Max(linear, MIN_VOL)) * 20f;
+        if (linear <= MIN_VOL) db = -80f; // tắt hẳn
 
-        masterSlider.value = PlayerPrefs.GetFloat("MasterVolume", 1f);
-        musicSlider.value  = PlayerPrefs.GetFloat("MusicVolume",  1f);
-        sfxSlider.value    = PlayerPrefs.GetFloat("SFXVolume",    1f);
+        if (mixer != null) mixer.SetFloat(param, db);
 
-
-        // Cập nhật label %
-        UpdateLabel(masterValueText, masterSlider.value);
-        UpdateLabel(musicValueText,  musicSlider.value);
-        UpdateLabel(sfxValueText,    sfxSlider.value);
-
-
-        // Load toggle
-        if (AudioManager.Instance != null)
-        {
-            if (bgmToggle != null) bgmToggle.isOn = AudioManager.Instance.IsBGMOn;
-            if (sfxToggle != null) sfxToggle.isOn = AudioManager.Instance.IsSFXOn;
-        }
+        PlayerPrefs.SetFloat(key, linear); // ghi ngay khi kéo
+        if (label != null) label.text = Mathf.RoundToInt(linear * 100f) + "%";
     }
+    #endregion
 
-    private void BindSliderEvents()
+    #region Load / Reset
+    public void LoadAudio()
     {
-        masterSlider.onValueChanged.AddListener(SetMasterVolume);
-        musicSlider.onValueChanged.AddListener(SetMusicVolume);
-        sfxSlider.onValueChanged.AddListener(SetSFXVolume);
+        float m  = PlayerPrefs.GetFloat(K_MASTER, DEFAULT_VOL);
+        float mu = PlayerPrefs.GetFloat(K_MUSIC,  DEFAULT_VOL);
+        float s  = PlayerPrefs.GetFloat(K_SFX,    DEFAULT_VOL);
 
+        // SetValueWithoutNotify để không bắn onValueChanged khi đang load
+        if (masterSlider) masterSlider.SetValueWithoutNotify(m);
+        if (musicSlider)  musicSlider.SetValueWithoutNotify(mu);
+        if (sfxSlider)    sfxSlider.SetValueWithoutNotify(s);
 
-        if (bgmToggle != null) bgmToggle.onValueChanged.AddListener(SetBGMEnabled);
-        if (sfxToggle != null) sfxToggle.onValueChanged.AddListener(SetSFXEnabled);
-    }
-
-    // ----------------------------------------------------------------
-    // Set Volume — gọi khi kéo slider
-    // ----------------------------------------------------------------
-
-    public void SetMasterVolume(float value)
-    {
-        audioMixer.SetFloat("MasterVolume", SliderToDB(value));
-        UpdateLabel(masterValueText, value);
-        PlayerPrefs.SetFloat("MasterVolume", value);
-    }
-
-    public void SetMusicVolume(float value)
-    {
-        audioMixer.SetFloat("MusicVolume", SliderToDB(value));
-        UpdateLabel(musicValueText, value);
-        PlayerPrefs.SetFloat("MusicVolume", value);
-    }
-
-    public void SetSFXVolume(float value)
-    {
-        audioMixer.SetFloat("SFXVolume", SliderToDB(value));
-        UpdateLabel(sfxValueText, value);
-        PlayerPrefs.SetFloat("SFXVolume", value);
-    }
-
-
-
-    // ----------------------------------------------------------------
-    // Toggle BGM / SFX
-    // ----------------------------------------------------------------
-
-    public void SetBGMEnabled(bool isOn)
-    {
-        if (AudioManager.Instance != null)
-            AudioManager.Instance.SetBGM(isOn);
-        PlayerPrefs.SetInt("BGM_On", isOn ? 1 : 0);
-    }
-
-    public void SetSFXEnabled(bool isOn)
-    {
-        if (AudioManager.Instance != null)
-            AudioManager.Instance.SetSFX(isOn);
-        PlayerPrefs.SetInt("SFX_On", isOn ? 1 : 0);
-    }
-
-    // ----------------------------------------------------------------
-    // Apply / Reset
-    // ----------------------------------------------------------------
-
-    public void ApplySettings()
-    {
-        PlayerPrefs.Save();
-        Debug.Log("[AudioSettings] Settings saved.");
+        Apply(P_MASTER, K_MASTER, m,  masterLabel);
+        Apply(P_MUSIC,  K_MUSIC,  mu, musicLabel);
+        Apply(P_SFX,    K_SFX,    s,  sfxLabel);
     }
 
     public void ResetAudio()
     {
-        masterSlider.value = 1f;
-        musicSlider.value  = 1f;
-        sfxSlider.value    = 1f;
+        if (masterSlider) masterSlider.SetValueWithoutNotify(DEFAULT_VOL);
+        if (musicSlider)  musicSlider.SetValueWithoutNotify(DEFAULT_VOL);
+        if (sfxSlider)    sfxSlider.SetValueWithoutNotify(DEFAULT_VOL);
 
-
-        if (bgmToggle != null) bgmToggle.isOn = true;
-        if (sfxToggle != null) sfxToggle.isOn = true;
-
-        PlayerPrefs.Save();
+        Apply(P_MASTER, K_MASTER, DEFAULT_VOL, masterLabel);
+        Apply(P_MUSIC,  K_MUSIC,  DEFAULT_VOL, musicLabel);
+        Apply(P_SFX,    K_SFX,    DEFAULT_VOL, sfxLabel);
     }
-
-    // ----------------------------------------------------------------
-    // Helpers
-    // ----------------------------------------------------------------
-
-    private float SliderToDB(float value)
-    {
-        value = Mathf.Clamp(value, 0.0001f, 1f);
-        return Mathf.Log10(value) * 20f;
-    }
-
-    private void UpdateLabel(TextMeshProUGUI label, float value)
-    {
-        if (label != null)
-            label.text = Mathf.RoundToInt(value * 100) + "%";
-    }
+    #endregion
 }

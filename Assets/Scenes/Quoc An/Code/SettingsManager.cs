@@ -31,16 +31,20 @@ public class SettingsManager : MonoBehaviour
     [Header("=== Menu Manager Reference ===")]
     [SerializeField] private MenuManager menuManager;
 
+    [Header("=== Options ===")]
+    [SerializeField] private KeyCode closeKey = KeyCode.Escape;
+
     [Header("=== Events ===")]
     public UnityEvent OnSettingsOpened;
     public UnityEvent OnSettingsClosed;
 
     private GameObject _currentPanel;
-    private bool _isOpen = false; // THÊM: tránh gọi trùng lặp
+    private bool _isOpen = false;
+
+    public bool IsOpen => _isOpen;
 
     private void Awake()
     {
-        // Tạo CanvasGroup nếu chưa có
         if (settingsCanvasGroup == null && settingsCanvas != null)
         {
             settingsCanvasGroup = settingsCanvas.GetComponent<CanvasGroup>();
@@ -48,108 +52,114 @@ public class SettingsManager : MonoBehaviour
                 settingsCanvasGroup = settingsCanvas.AddComponent<CanvasGroup>();
         }
 
+        // Đăng ký listener ở Awake: an toàn hơn Start
+        BindButton(btnAudio,    () => SwitchTab(audioPanel));
+        BindButton(btnGraphics, () => SwitchTab(graphicsPanel));
+        BindButton(btnGameplay, () => SwitchTab(gameplayPanel));
+        BindButton(btnApply,    ApplySettings);
+        BindButton(btnReset,    ResetAllSettings);
+        BindButton(btnBack,     CloseSettings);
+
+        SwitchTab(audioPanel);
         HideSettingsImmediate();
     }
 
-    private void Start()
+    private void BindButton(Button b, UnityEngine.Events.UnityAction action)
     {
-        btnAudio.onClick.AddListener(() => SwitchTab(audioPanel));
-        btnGraphics.onClick.AddListener(() => SwitchTab(graphicsPanel));
-        btnGameplay.onClick.AddListener(() => SwitchTab(gameplayPanel));
+        if (b == null) { Debug.LogWarning("[SettingsManager] Thiếu button trong Inspector."); return; }
+        b.onClick.RemoveAllListeners(); // tránh đăng ký chồng
+        b.onClick.AddListener(action);
+    }
 
-        btnApply.onClick.AddListener(ApplySettings);
-        btnReset.onClick.AddListener(ResetAllSettings);
-        btnBack.onClick.AddListener(CloseSettings);
-
-        SwitchTab(audioPanel);
+    private void Update()
+    {
+        if (_isOpen && Input.GetKeyDown(closeKey))
+            CloseSettings();
     }
 
     public void SwitchTab(GameObject targetPanel)
     {
-        audioPanel.SetActive(false);
-        graphicsPanel.SetActive(false);
-        gameplayPanel.SetActive(false);
+        if (targetPanel == null || targetPanel == _currentPanel) return;
+
+        if (audioPanel)    audioPanel.SetActive(false);
+        if (graphicsPanel) graphicsPanel.SetActive(false);
+        if (gameplayPanel) gameplayPanel.SetActive(false);
 
         targetPanel.SetActive(true);
         _currentPanel = targetPanel;
+
+        UpdateTabVisual();
+    }
+
+    private void UpdateTabVisual()
+    {
+        SetTabSelected(btnAudio,    _currentPanel == audioPanel);
+        SetTabSelected(btnGraphics, _currentPanel == graphicsPanel);
+        SetTabSelected(btnGameplay, _currentPanel == gameplayPanel);
+    }
+
+    private void SetTabSelected(Button b, bool selected)
+    {
+        if (b == null) return;
+        b.interactable = !selected; // tab đang mở thì disable, nhìn là biết ngay
     }
 
     public void ApplySettings()
     {
         PlayerPrefs.Save();
-        Debug.Log("✅ Settings Saved!");
+        Debug.Log("[SettingsManager] Settings saved.");
     }
 
     public void ResetAllSettings()
     {
-        audioSettings.ResetAudio();
-        graphicsSettings.ResetGraphics();
-        gameplaySettings.ResetGameplay();
-        Debug.Log("🔄 Settings Reset to Default!");
+        if (audioSettings)    audioSettings.ResetAudio();
+        if (graphicsSettings) graphicsSettings.ResetGraphics();
+        if (gameplaySettings) gameplaySettings.ResetGameplay();
+        PlayerPrefs.Save();
+        Debug.Log("[SettingsManager] Settings reset to default.");
     }
 
-    /// <summary>
-    /// Mở Settings — chỉ lo việc hiện CanvasGroup.
-    /// MenuManager tự lo việc ẩn menu trước khi gọi hàm này.
-    /// </summary>
-    public void OpenSettings()
+    /// <returns>true nếu thật sự mở, false nếu đang mở sẵn</returns>
+    public bool OpenSettings()
     {
-        if (_isOpen) return; // tránh gọi trùng
+        if (_isOpen) return false;
         _isOpen = true;
 
         ShowSettingsImmediate();
         SwitchTab(audioPanel);
 
-        // Không gọi menuManager.OnSettingsOpened() ở đây nữa
-        // MenuManager.ShowSettings() đã tự gọi OnSettingsOpened() trước rồi
-
         OnSettingsOpened?.Invoke();
-        Debug.Log("[SettingsManager] Settings opened.");
+        return true;
     }
 
-    /// <summary>
-    /// Đóng Settings — hiện lại menu.
-    /// </summary>
     public void CloseSettings()
     {
-        if (!_isOpen) return; // tránh gọi trùng
+        if (!_isOpen) return;
         _isOpen = false;
 
+        ApplySettings();          // lưu luôn khi thoát
         HideSettingsImmediate();
 
-        // Báo MenuManager khôi phục màn hình trước đó
         if (menuManager != null)
             menuManager.OnSettingsClosed();
 
         OnSettingsClosed?.Invoke();
-        Debug.Log("[SettingsManager] Settings closed.");
     }
 
-    private void ShowSettingsImmediate()
+    private void ShowSettingsImmediate()  => SetCanvasVisible(true);
+    private void HideSettingsImmediate()  => SetCanvasVisible(false);
+
+    private void SetCanvasVisible(bool visible)
     {
         if (settingsCanvasGroup != null)
         {
-            settingsCanvasGroup.alpha = 1f;
-            settingsCanvasGroup.interactable = true;
-            settingsCanvasGroup.blocksRaycasts = true;
+            settingsCanvasGroup.alpha          = visible ? 1f : 0f;
+            settingsCanvasGroup.interactable   = visible;
+            settingsCanvasGroup.blocksRaycasts = visible;
         }
-        else
+        else if (settingsCanvas != null)
         {
-            settingsCanvas?.SetActive(true);
-        }
-    }
-
-    private void HideSettingsImmediate()
-    {
-        if (settingsCanvasGroup != null)
-        {
-            settingsCanvasGroup.alpha = 0f;
-            settingsCanvasGroup.interactable = false;
-            settingsCanvasGroup.blocksRaycasts = false;
-        }
-        else
-        {
-            settingsCanvas?.SetActive(false);
+            settingsCanvas.SetActive(visible);
         }
     }
 }
