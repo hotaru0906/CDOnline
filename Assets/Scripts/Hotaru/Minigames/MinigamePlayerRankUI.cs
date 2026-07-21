@@ -67,7 +67,8 @@ public class MinigamePlayerRankUI : MonoBehaviour
                 playerName: name,
                 lives: p.HP,  // Sử dụng HP thay vì Lives
                 slotColor: SlotColors[i],
-                isEliminated: p.IsEliminated
+                isEliminated: p.IsEliminated,
+                score: p.Score
             );
 
             if (net != null)
@@ -104,6 +105,16 @@ public class MinigamePlayerRankUI : MonoBehaviour
         {
             if (e == null || e.PlayerId != playerId) continue;
             e.UpdateHP(hp);
+            return;
+        }
+    }
+
+    public void UpdateScoreForPlayer(int playerId, int score)
+    {
+        foreach (var e in entries)
+        {
+            if (e == null || e.PlayerId != playerId) continue;
+            e.UpdateScore(score);
             return;
         }
     }

@@ -114,4 +114,9 @@ public class MinigameHUDController : MonoBehaviour
     {
         playerRankPanel?.UpdateHPForPlayer(playerId, hp);
     }
+
+    public void UpdatePlayerScore(int playerId, int score)
+    {
+        playerRankPanel?.UpdateScoreForPlayer(playerId, score);
+    }
 }

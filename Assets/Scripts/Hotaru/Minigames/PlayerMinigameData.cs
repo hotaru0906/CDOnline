@@ -31,7 +31,8 @@ public class PlayerMinigameData : NetworkBehaviour
     [Networked] public NetworkBool HasFinished { get; private set; }
     [Networked] public float FinishTime { get; private set; }
     [Networked] public float DistanceProgress { get; private set; }
-    [Networked] public int Score { get; private set; }
+    [Networked, OnChangedRender(nameof(OnScoreChangedRender))]
+    public int Score { get; private set; }
     [Networked] public int HiddenScore { get; private set; }
 
     [Networked, OnChangedRender(nameof(OnHPChangedRender))]
@@ -426,6 +427,11 @@ public class PlayerMinigameData : NetworkBehaviour
     private void OnHPChangedRender()
     {
         MinigameHUDController.Instance?.UpdatePlayerHP(Object.InputAuthority.PlayerId, HP);
+    }
+
+    private void OnScoreChangedRender()
+    {
+        MinigameHUDController.Instance?.UpdatePlayerScore(Object.InputAuthority.PlayerId, Score);
     }
 
     #endregion
