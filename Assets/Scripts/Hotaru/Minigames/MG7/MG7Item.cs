@@ -21,6 +21,8 @@ public class MG7Item : NetworkBehaviour
     [Header("Falling")]
     [SerializeField] private float gravity = 9.8f;
     [SerializeField] private float groundCheckDistance = 100f;
+    [SerializeField] private float groundCheckOffset = 0.2f;
+    [SerializeField] private float groundSnapOffset = 0.02f;
     [SerializeField] private LayerMask groundLayerMask = ~0;
 
     [Header("Pickup")]
@@ -119,13 +121,15 @@ public class MG7Item : NetworkBehaviour
 
         VerticalVelocity -= gravity * Runner.DeltaTime;
         Vector3 pos = NetworkPosition + Vector3.up * (VerticalVelocity * Runner.DeltaTime);
+        Vector3 rayOrigin = pos + Vector3.up * groundCheckOffset;
 
-        if (Physics.Raycast(NetworkPosition + Vector3.up * 0.1f, Vector3.down,
+        if (Physics.Raycast(rayOrigin, Vector3.down,
                 out RaycastHit hit, groundCheckDistance, groundLayerMask))
         {
-            if (pos.y <= hit.point.y)
+            float groundY = hit.point.y + GetGroundSnapOffset();
+            if (pos.y <= groundY)
             {
-                pos.y = hit.point.y;
+                pos.y = groundY;
                 HasLanded = true;
                 VerticalVelocity = 0f;
 
@@ -136,6 +140,26 @@ public class MG7Item : NetworkBehaviour
         }
 
         NetworkPosition = pos;
+    }
+
+    private float GetGroundSnapOffset()
+    {
+        Collider col = GetComponent<Collider>();
+        if (col != null)
+            return col.bounds.extents.y + groundSnapOffset;
+
+        if (visualMesh != null)
+        {
+            Collider childCol = visualMesh.GetComponentInChildren<Collider>();
+            if (childCol != null)
+                return childCol.bounds.extents.y + groundSnapOffset;
+
+            Renderer renderer = visualMesh.GetComponentInChildren<Renderer>();
+            if (renderer != null)
+                return renderer.bounds.extents.y + groundSnapOffset;
+        }
+
+        return groundSnapOffset;
     }
 
     // ----------------------------------------------------------------
