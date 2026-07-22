@@ -13,10 +13,12 @@ public class MinigameVotingManager : NetworkBehaviour
     private HashSet<MinigameData> playedMinigameSO = new HashSet<MinigameData>();
 
     [Header("Settings")]
-    [SerializeField] private int displayCount = 3; // Số minigame hiển thị để vote mỗi lần
+    [SerializeField] private int displayCount = 5; // Số minigame hiển thị để vote mỗi lần
     [SerializeField] private bool shuffleMinigames = true;
+    [SerializeField] private int cooldownRoundsAfterPlay = 3; // Sau khi chơi, minigame sẽ bị ẩn trong N lượt chơi khác rồi xuất hiện lại
 
     private const int InvalidIndex = -1;
+    private int[] minigameCooldowns;
 
     #region Networked Properties
 
@@ -155,25 +157,27 @@ public class MinigameVotingManager : NetworkBehaviour
         if (actualIndex < 0 || actualIndex >= allMinigames.Count)
             return;
 
-        // Kiểm tra đã chơi bằng networked indices để đảm bảo đồng bộ tuyệt đối host/client.
-        if (IsMinigamePlayed(actualIndex))
+        EnsureCooldownArray();
+
+        for (int i = 0; i < allMinigames.Count; i++)
         {
-            Debug.Log($"[MinigameVotingManager] Minigame index {actualIndex} already marked as played");
-            return;
+            if (minigameCooldowns[i] > 0)
+            {
+                minigameCooldowns[i] = Mathf.Max(0, minigameCooldowns[i] - 1);
+            }
         }
 
-        // Thêm vào danh sách đã chơi
+        int cooldownToApply = Mathf.Max(0, cooldownRoundsAfterPlay);
+        minigameCooldowns[actualIndex] = cooldownToApply;
+
         if (PlayedCount < PlayedMinigameIndices.Length)
         {
             PlayedMinigameIndices.Set(PlayedCount, actualIndex);
             PlayedCount++;
-            playedMinigameSO.Add(allMinigames[actualIndex]);
-            Debug.Log($"[MinigameVotingManager] Marked minigame {allMinigames[actualIndex].name} as played. Total played: {PlayedCount}");
         }
-        else
-        {
-            Debug.LogWarning("[MinigameVotingManager] PlayedMinigameIndices is full, cannot track more played minigames");
-        }
+
+        playedMinigameSO.Add(allMinigames[actualIndex]);
+        Debug.Log($"[MinigameVotingManager] Marked minigame {allMinigames[actualIndex].name} as played. Cooldown: {cooldownToApply} rounds");
     }
 
     public void PrepareNextVotingRound()
@@ -182,35 +186,36 @@ public class MinigameVotingManager : NetworkBehaviour
 
         Debug.Log("[MinigameVotingManager] Preparing next voting round...");
 
-        var unplayedIndices = BuildUnplayedIndices();
+        EnsureCooldownArray();
+        var candidateIndices = BuildAvailableCandidateIndices();
 
-        // Không còn lựa chọn hợp lệ thì trả list rỗng (không cho random lại game đã chơi).
-        if (unplayedIndices.Count == 0)
+        if (candidateIndices.Count == 0)
         {
-            Debug.LogWarning("[MinigameVotingManager] No unplayed minigames left for voting");
-            ClearAvailableMinigameIndices();
-            AvailableCount = 0;
-            AvailableListVersion++;
-            return;
+            Debug.LogWarning("[MinigameVotingManager] No minigames available for voting; falling back to all minigames");
+            candidateIndices = new List<int>();
+            for (int i = 0; i < allMinigames.Count; i++)
+            {
+                candidateIndices.Add(i);
+            }
         }
 
         if (shuffleMinigames)
         {
-            ShuffleList(unplayedIndices);
+            ShuffleList(candidateIndices);
         }
 
-        int count = Mathf.Min(displayCount, unplayedIndices.Count, AvailableMinigameIndices.Length);
+        int count = Mathf.Min(displayCount, candidateIndices.Count, AvailableMinigameIndices.Length);
         ClearAvailableMinigameIndices();
         AvailableCount = count;
 
         for (int i = 0; i < count; i++)
         {
-            AvailableMinigameIndices.Set(i, unplayedIndices[i]);
-            Debug.Log($"[MinigameVotingManager] Available slot {i}: Minigame {unplayedIndices[i]}");
+            AvailableMinigameIndices.Set(i, candidateIndices[i]);
+            Debug.Log($"[MinigameVotingManager] Available slot {i}: Minigame {candidateIndices[i]}");
         }
 
         AvailableListVersion++;
-        Debug.Log($"[MinigameVotingManager] Available: {AvailableCount} minigames (from {unplayedIndices.Count} unplayed)");
+        Debug.Log($"[MinigameVotingManager] Available: {AvailableCount} minigames (from {candidateIndices.Count} candidates)");
     }
 
     public void PrepareNextVotingRoundForRoulette()
@@ -228,6 +233,12 @@ public class MinigameVotingManager : NetworkBehaviour
         Debug.Log("[MinigameVotingManager] Resetting played minigames");
         PlayedCount = 0;
         playedMinigameSO.Clear();
+
+        EnsureCooldownArray();
+        for (int i = 0; i < minigameCooldowns.Length; i++)
+        {
+            minigameCooldowns[i] = 0;
+        }
 
         // Clear array
         for (int i = 0; i < PlayedMinigameIndices.Length; i++)
@@ -281,17 +292,67 @@ public class MinigameVotingManager : NetworkBehaviour
     }
 
     #region Helper Methods
-    private List<int> BuildUnplayedIndices()
+    private List<int> BuildAvailableCandidateIndices()
     {
-        List<int> unplayedIndices = new List<int>();
+        EnsureCooldownArray();
+
+        List<int> eligibleIndices = new List<int>();
+        List<int> blockedIndices = new List<int>();
+
         for (int i = 0; i < allMinigames.Count; i++)
         {
-            if (!IsMinigamePlayed(i))
+            if (minigameCooldowns[i] <= 0)
             {
-                unplayedIndices.Add(i);
+                eligibleIndices.Add(i);
+            }
+            else
+            {
+                blockedIndices.Add(i);
             }
         }
-        return unplayedIndices;
+
+        if (eligibleIndices.Count >= displayCount)
+        {
+            if (shuffleMinigames)
+            {
+                ShuffleList(eligibleIndices);
+            }
+            return eligibleIndices;
+        }
+
+        List<int> combinedIndices = new List<int>(eligibleIndices);
+        blockedIndices.Sort((a, b) => minigameCooldowns[a].CompareTo(minigameCooldowns[b]));
+
+        for (int i = 0; i < blockedIndices.Count && combinedIndices.Count < displayCount; i++)
+        {
+            combinedIndices.Add(blockedIndices[i]);
+        }
+
+        if (shuffleMinigames)
+        {
+            ShuffleList(combinedIndices);
+        }
+
+        return combinedIndices;
+    }
+
+    private void EnsureCooldownArray()
+    {
+        if (minigameCooldowns == null || minigameCooldowns.Length != allMinigames.Count)
+        {
+            int[] nextCooldowns = new int[allMinigames.Count];
+
+            if (minigameCooldowns != null)
+            {
+                int copyCount = Mathf.Min(minigameCooldowns.Length, nextCooldowns.Length);
+                for (int i = 0; i < copyCount; i++)
+                {
+                    nextCooldowns[i] = minigameCooldowns[i];
+                }
+            }
+
+            minigameCooldowns = nextCooldowns;
+        }
     }
 
     private void RebuildPlayedCacheFromNetwork()
