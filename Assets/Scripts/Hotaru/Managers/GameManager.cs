@@ -85,6 +85,8 @@ public class GameManager : NetworkBehaviour
 
     [Networked]
     public int CurrentMinigameActualIndex { get; private set; } = -1;
+    [Networked]
+    public NetworkBool HasPlayedBoardIntro { get; set; }
 
     /// <summary>
     /// Loại voting hiện tại

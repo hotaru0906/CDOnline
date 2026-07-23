@@ -37,6 +37,12 @@ public class BoardChestManager : NetworkBehaviour
         ChestUI.Instance.Show(keyCount);
     }
 
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_HideChestUI()
+    {
+        ChestUI.Instance?.Hide();
+    }
+
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_EndInteraction()
     {
@@ -274,6 +280,11 @@ public class BoardChestManager : NetworkBehaviour
     public void EndInteraction()
     {
         IsInteractionActive = false;
+
+        RPC_HideChestUI();
+
+        interactionChest = null;
+        currentInventory = null;
     }
     
     public void OnOpenButtonPressed()
@@ -310,7 +321,8 @@ public class BoardChestManager : NetworkBehaviour
         currentInventory.AddChest();
 
         interactionChest.Hide();
-        ChestUI.Instance?.Hide();
+
+        RPC_HideChestUI();
 
         if (currentInventory.GetChestCount() >= 2)
         {
