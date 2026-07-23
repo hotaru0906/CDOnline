@@ -89,59 +89,32 @@ public class MenuManager : MonoBehaviour
 
     public void ShowSettings()
     {
-        if (settingsManager != null)
-        {
-            // Ẩn màn hình hiện tại trước khi mở Setting
+        if (settingsManager == null) return;
+
+        // Chỉ ẩn menu KHI settings mở thành công
+        if (settingsManager.OpenSettings())
             OnSettingsOpened();
-            settingsManager.OpenSettings();
-        }
     }
 
-    /// <summary>
-    /// ✅ Dùng CanvasGroup thay vì SetActive
-    /// </summary>
-    public void OnSettingsOpened()
+    private void SetScreenVisible(GameObject screen, bool visible)
     {
-        if (_currentScreen != null)
-        {
-            // ✅ Nếu là MainMenu → dùng CanvasGroup
-            if (_currentScreen == canvasMainMenu && mainMenuCanvasGroup != null)
-            {
-                mainMenuCanvasGroup.alpha = 0f;
-                mainMenuCanvasGroup.interactable = false;
-                mainMenuCanvasGroup.blocksRaycasts = false;
-            }
-            else
-            {
-                _currentScreen.SetActive(false); // Fallback cho screen khác
-            }
-        }
+        if (screen == null) return;
 
-        Debug.Log("🔧 Settings opened - Menu hidden");
+        if (screen == canvasMainMenu && mainMenuCanvasGroup != null)
+        {
+            mainMenuCanvasGroup.alpha          = visible ? 1f : 0f;
+            mainMenuCanvasGroup.interactable   = visible;
+            mainMenuCanvasGroup.blocksRaycasts = visible;
+            screen.SetActive(true); // luôn active, chỉ đổi alpha
+        }
+        else
+        {
+            screen.SetActive(visible);
+        }
     }
 
-    /// <summary>
-    /// ✅ Dùng CanvasGroup thay vì SetActive
-    /// </summary>
-    public void OnSettingsClosed()
-    {
-        if (_currentScreen != null)
-        {
-            // ✅ Nếu là MainMenu → dùng CanvasGroup
-            if (_currentScreen == canvasMainMenu && mainMenuCanvasGroup != null)
-            {
-                mainMenuCanvasGroup.alpha = 1f;
-                mainMenuCanvasGroup.interactable = true;
-                mainMenuCanvasGroup.blocksRaycasts = true;
-            }
-            else
-            {
-                _currentScreen.SetActive(true); // Fallback cho screen khác
-            }
-        }
-
-        Debug.Log("🏠 Settings closed - Menu restored");
-    }
+    public void OnSettingsOpened() => SetScreenVisible(_currentScreen, false);
+    public void OnSettingsClosed() => SetScreenVisible(_currentScreen, true);
 
     public void ShowItemUI()
     {
@@ -157,26 +130,35 @@ public class MenuManager : MonoBehaviour
 
     public void GoBack()
     {
+        // Nếu Settings đang mở thì Back = đóng Settings
+        if (settingsManager != null && settingsManager.IsOpen)
+        {
+            settingsManager.CloseSettings();
+            return;
+        }
+
         if (_screenHistory.Count == 0) return;
 
         if (_currentScreen == canvasItemUI && customizationManager != null)
             customizationManager.Deactivate();
 
-        _currentScreen.SetActive(false);
+        SetScreenVisible(_currentScreen, false);
         _currentScreen = _screenHistory.Pop();
-        _currentScreen.SetActive(true);
+        SetScreenVisible(_currentScreen, true);
     }
 
     private void SwitchScreen(GameObject targetScreen)
     {
+        if (targetScreen == null || targetScreen == _currentScreen) return;
+
         if (_currentScreen != null)
         {
             _screenHistory.Push(_currentScreen);
-            _currentScreen.SetActive(false);
+            SetScreenVisible(_currentScreen, false);
         }
 
         _currentScreen = targetScreen;
-        _currentScreen.SetActive(true);
+        SetScreenVisible(_currentScreen, true);
     }
     #endregion
 
