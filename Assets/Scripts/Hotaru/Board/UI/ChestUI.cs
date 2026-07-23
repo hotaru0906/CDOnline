@@ -40,8 +40,6 @@ public class ChestUI : MonoBehaviour
 
     private void OnCancelClicked()
     {
-        Hide();
-
         BoardChestManager.Instance.RPC_EndInteraction();
     }
 
