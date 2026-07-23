@@ -255,15 +255,38 @@ public class MG7Item : NetworkBehaviour
     private void RPC_PlayPickupVFX()
     {
         if (visualMesh != null) visualMesh.SetActive(false);
-        if (pickupVFX != null) pickupVFX.Play();
-        if (pickupOrExplodeAudio != null) pickupOrExplodeAudio.Play();
+        SpawnDetachedVFX(pickupVFX);
+        PlayClipAtPointFromSource();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_PlayExplosionVFX()
     {
         if (visualMesh != null) visualMesh.SetActive(false);
-        if (explosionVFX != null) explosionVFX.Play();
-        if (pickupOrExplodeAudio != null) pickupOrExplodeAudio.Play();
+        SpawnDetachedVFX(explosionVFX);
+        PlayClipAtPointFromSource();
+    }
+
+    private void SpawnDetachedVFX(ParticleSystem vfxPrefab)
+    {
+        if (vfxPrefab == null) return;
+
+        var instance = Instantiate(vfxPrefab.gameObject, transform.position, transform.rotation);
+        var ps = instance.GetComponent<ParticleSystem>();
+        if (ps == null) return;
+
+        ps.Play();
+
+        var main = ps.main;
+        float lifetime = main.duration + main.startLifetime.constantMax + 0.5f;
+        Destroy(instance, lifetime);
+    }
+
+    private void PlayClipAtPointFromSource()
+    {
+        if (pickupOrExplodeAudio == null || pickupOrExplodeAudio.clip == null)
+            return;
+
+        AudioSource.PlayClipAtPoint(pickupOrExplodeAudio.clip, transform.position, pickupOrExplodeAudio.volume);
     }
 }
