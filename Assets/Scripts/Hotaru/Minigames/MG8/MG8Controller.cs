@@ -3,208 +3,106 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// MG8 — Killer Chase.
-/// - Host chọn ngẫu nhiên 1 player làm Killer khi phase Playing bắt đầu.
-/// - Chỉ Killer được gây damage.
-/// - Runner cố sống sót tới hết giờ.
-///
-/// Ranking:
-/// 1) Killer giết hết Runner: Killer rank 1, Runner xếp theo thời gian sống lâu nhất.
-/// 2) Killer không giết ai: Killer rank cuối, Runner xếp theo HP giảm dần.
-/// 3) Killer giết một phần: Runner còn sống > Killer > Runner đã bị loại.
+/// MG8 - The Floor Is Lava.
+/// Lava rises continuously. Touching it permanently eliminates a player.
 /// </summary>
 public class MG8Controller : BaseMinigameController
 {
     public new static MG8Controller Instance =>
         BaseMinigameController.Instance as MG8Controller;
 
-    [Header("Killer Settings")]
-    [SerializeField] private int startingHP = 100;
-    [SerializeField] private int killerDamage = 20;
+    [Header("Lava")]
+    [SerializeField] private GameObject lava;
+    [SerializeField] private float lavaRiseSpeed = 0.15f;
 
-    [Networked, OnChangedRender(nameof(OnKillerChanged))]
-    public PlayerRef Killer { get; private set; }
+    [Networked, OnChangedRender(nameof(OnLavaScaleChanged))]
+    private float LavaScaleY { get; set; }
 
     private readonly List<PlayerRef> _eliminationOrder = new();
-    private int _runnerKillCount;
-
-    #region Overrides
 
     protected override void OnGamePlayingStarted()
     {
         if (!HasStateAuthority) return;
 
         _eliminationOrder.Clear();
-        _runnerKillCount = 0;
-        Killer = PlayerRef.None;
+        LavaScaleY = lava != null ? lava.transform.localScale.y : 0f;
+        ApplyLavaScale();
 
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        if (allData.Length == 0)
-        {
-            Debug.LogWarning("[MG8Killer] No players found.");
-            return;
-        }
-
         foreach (var playerData in allData)
         {
-            playerData.SetHP(startingHP);
             playerData.OnPlayerEliminated -= HandlePlayerEliminated;
             playerData.OnPlayerEliminated += HandlePlayerEliminated;
-
-            var brawlData = playerData.GetComponent<MG8PlayerData>();
-            if (brawlData != null)
-                brawlData.DropItem();
         }
-
-        int randomIndex = UnityEngine.Random.Range(0, allData.Length);
-        AssignKiller(allData[randomIndex].Object.InputAuthority);
 
         UpdateAlivePlayerCount();
         MinigameHUDController.Instance?.RefreshPlayers();
-
-        Debug.Log($"[MG8Killer] Started with {allData.Length} players. Killer = P{Killer.PlayerId}");
     }
 
     protected override void OnGameOver()
     {
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-
         foreach (var playerData in allData)
-        {
             playerData.OnPlayerEliminated -= HandlePlayerEliminated;
-
-            if (!HasStateAuthority) continue;
-
-            var brawlData = playerData.GetComponent<MG8PlayerData>();
-            if (brawlData != null)
-                brawlData.DropItem();
-        }
     }
 
-    #endregion
-
-    #region Killer Setup
-
-    private void AssignKiller(PlayerRef killerRef)
+    public override void FixedUpdateNetwork()
     {
-        if (!HasStateAuthority) return;
+        base.FixedUpdateNetwork();
 
-        Killer = killerRef;
+        if (!HasStateAuthority || CurrentPhase != MinigamePhase.Playing || IsGameEnded)
+            return;
 
-        var allBrawlData = FindObjectsByType<MG8PlayerData>(FindObjectsSortMode.None);
-        foreach (var brawlData in allBrawlData)
-        {
-            if (brawlData.Object.InputAuthority == Killer)
-                brawlData.PickupItem();
-            else
-                brawlData.DropItem();
-        }
-
-        RPC_AnnounceKiller(Killer);
+        LavaScaleY += lavaRiseSpeed * Runner.DeltaTime;
+        ApplyLavaScale();
     }
 
-    public bool IsKiller(PlayerRef playerRef)
+    public void EliminatePlayer(PlayerMinigameData playerData)
     {
-        return Killer != PlayerRef.None && Killer == playerRef;
+        if (!HasStateAuthority || playerData == null || IsGameEnded) return;
+        if (CurrentPhase != MinigamePhase.Playing || playerData.IsEliminated) return;
+
+        playerData.EliminateImmediately();
     }
-
-    private void OnKillerChanged()
-    {
-        Debug.Log($"[MG8Killer] Killer changed -> P{Killer.PlayerId}");
-    }
-
-    #endregion
-
-    #region Hit Logic
 
     public void OnPlayerHit(PlayerController attacker, PlayerController target)
     {
-        if (!HasStateAuthority) return;
-        if (!IsGameStarted || IsGameEnded) return;
-        if (attacker == null || target == null) return;
-
-        PlayerRef attackerRef = attacker.Object.InputAuthority;
-        PlayerRef targetRef = target.Object.InputAuthority;
-
-        // Chỉ Killer được gây damage và không thể tự đánh chính mình.
-        if (!IsKiller(attackerRef) || attackerRef == targetRef)
-            return;
-
-        var targetMinigameData = target.GetComponent<PlayerMinigameData>();
-        if (targetMinigameData == null || !targetMinigameData.CanTakeDamage())
-            return;
-
-        var attackerBrawlData = attacker.GetComponent<MG8PlayerData>();
-        if (attackerBrawlData == null || !attackerBrawlData.HasItem)
-            return;
-
-        targetMinigameData.TakeDamage(killerDamage);
-        RPC_OnKillerHit(attackerRef, targetRef);
-
-        Debug.Log($"[MG8Killer] Killer P{attackerRef.PlayerId} hit P{targetRef.PlayerId} for {killerDamage} damage.");
     }
-
-    #endregion
-
-    #region Elimination & Win Condition
 
     private void HandlePlayerEliminated(PlayerMinigameData data)
     {
         if (!HasStateAuthority || data == null) return;
 
-        PlayerRef eliminatedRef = data.Object.InputAuthority;
-
-        if (!_eliminationOrder.Contains(eliminatedRef))
-        {
-            _eliminationOrder.Add(eliminatedRef);
-
-            if (eliminatedRef != Killer)
-                _runnerKillCount++;
-
-            Debug.Log($"[MG8Killer] P{eliminatedRef.PlayerId} eliminated. Runner kills = {_runnerKillCount}");
-        }
+        PlayerRef playerRef = data.Object.InputAuthority;
+        if (!_eliminationOrder.Contains(playerRef))
+            _eliminationOrder.Add(playerRef);
 
         UpdateAlivePlayerCount();
+        RPC_SwitchEliminatedPlayerCamera(playerRef);
         CheckWinCondition();
     }
 
     protected override void CheckWinCondition()
     {
-        if (!HasStateAuthority || Killer == PlayerRef.None) return;
+        if (!HasStateAuthority || IsGameEnded) return;
 
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        if (allData.Length == 0) return;
-
-        int aliveRunnerCount = 0;
-        bool killerEliminated = false;
-
+        var alive = new List<PlayerMinigameData>();
         foreach (var playerData in allData)
         {
-            PlayerRef playerRef = playerData.Object.InputAuthority;
-
-            if (playerRef == Killer)
-            {
-                killerEliminated = playerData.IsEliminated;
-                continue;
-            }
-
             if (!playerData.IsEliminated)
-                aliveRunnerCount++;
+                alive.Add(playerData);
         }
 
-        // Killer đã loại toàn bộ Runner.
-        if (aliveRunnerCount == 0)
+        if (alive.Count == 1)
         {
-            FinalizeRanks();
-            EndGame(Killer);
-            return;
+            FinalizeRanks(allData);
+            EndGame(alive[0].Object.InputAuthority);
         }
-
-        // Trường hợp Killer bị loại bởi trap/hazard ngoài ý muốn.
-        if (killerEliminated)
+        else if (alive.Count == 0)
         {
-            FinalizeRanks();
-            EndGame(GetHighestRankedPlayer());
+            FinalizeRanks(allData);
+            EndGame(PlayerRef.None);
         }
     }
 
@@ -212,141 +110,106 @@ public class MG8Controller : BaseMinigameController
     {
         if (!HasStateAuthority || IsGameEnded) return;
 
-        Debug.Log("[MG8Killer] Time's up.");
-
-        FinalizeRanks();
-        EndGame(GetHighestRankedPlayer());
+        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        var ranking = BuildFinalRanking(allData);
+        FinalizeRanks(allData, ranking);
+        EndGame(ranking.Count > 0 ? ranking[0] : PlayerRef.None);
     }
 
-    #endregion
-
-    #region Ranking
-
-    private void FinalizeRanks()
+    private void FinalizeRanks(PlayerMinigameData[] allData)
     {
-        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        var finalOrder = BuildFinalRanking(allData);
+        FinalizeRanks(allData, BuildFinalRanking(allData));
+    }
 
-        for (int i = 0; i < finalOrder.Count; i++)
+    private void FinalizeRanks(PlayerMinigameData[] allData, List<PlayerRef> ranking)
+    {
+        for (int i = 0; i < ranking.Count; i++)
         {
-            PlayerMinigameData playerData = GetPlayerData(finalOrder[i], allData);
-            if (playerData != null)
-                playerData.SetFinished(i + 1, 0f);
+            foreach (var playerData in allData)
+            {
+                if (playerData.Object.InputAuthority == ranking[i])
+                {
+                    playerData.SetFinished(i + 1, 0f);
+                    break;
+                }
+            }
         }
 
         ApplyHiddenScores();
-
-        Debug.Log($"[MG8Killer] Final ranking: {FormatRanking(finalOrder)}");
     }
 
-    /// <summary>
-    /// Trả về thứ tự rank 1 -> N.
-    /// </summary>
     private List<PlayerRef> BuildFinalRanking(PlayerMinigameData[] allData)
     {
-        var ranking = new List<PlayerRef>();
-        var survivingRunners = new List<PlayerMinigameData>();
-        var eliminatedRunners = new List<PlayerRef>();
-
-        int totalRunnerCount = 0;
+        var alive = new List<PlayerMinigameData>();
+        var eliminated = new HashSet<PlayerRef>();
 
         foreach (var playerData in allData)
         {
-            PlayerRef playerRef = playerData.Object.InputAuthority;
-            if (playerRef == Killer) continue;
-
-            totalRunnerCount++;
-
-            if (!playerData.IsEliminated)
-                survivingRunners.Add(playerData);
+            if (playerData.IsEliminated)
+                eliminated.Add(playerData.Object.InputAuthority);
+            else
+                alive.Add(playerData);
         }
 
-        // Runner sống sót xếp theo HP giảm dần; hòa HP thì PlayerId nhỏ hơn đứng trước.
-        survivingRunners.Sort((a, b) =>
+        alive.Sort((a, b) =>
         {
-            int hpCompare = b.HP.CompareTo(a.HP);
-            if (hpCompare != 0) return hpCompare;
-            return a.Object.InputAuthority.PlayerId.CompareTo(b.Object.InputAuthority.PlayerId);
+            int yCompare = b.transform.position.y.CompareTo(a.transform.position.y);
+            return yCompare != 0
+                ? yCompare
+                : a.Object.InputAuthority.PlayerId.CompareTo(b.Object.InputAuthority.PlayerId);
         });
 
-        // _eliminationOrder[0] chết sớm nhất.
-        // Duyệt ngược để người sống lâu hơn đứng trên.
+        var ranking = new List<PlayerRef>();
+        foreach (var playerData in alive)
+            ranking.Add(playerData.Object.InputAuthority);
+
         for (int i = _eliminationOrder.Count - 1; i >= 0; i--)
         {
-            PlayerRef playerRef = _eliminationOrder[i];
-            if (playerRef != Killer && !eliminatedRunners.Contains(playerRef))
-                eliminatedRunners.Add(playerRef);
+            if (eliminated.Contains(_eliminationOrder[i]))
+            {
+                ranking.Add(_eliminationOrder[i]);
+                eliminated.Remove(_eliminationOrder[i]);
+            }
         }
 
-        bool killerKilledEveryone = totalRunnerCount > 0 && _runnerKillCount >= totalRunnerCount;
-        bool killerKilledNobody = _runnerKillCount == 0;
-
-        if (killerKilledEveryone)
-        {
-            // Killer top 1; các nạn nhân xếp theo thời gian sống lâu nhất.
-            ranking.Add(Killer);
-            ranking.AddRange(eliminatedRunners);
-        }
-        else if (killerKilledNobody)
-        {
-            // Tất cả Runner sống: Runner xếp theo HP, Killer đứng cuối.
-            foreach (var runner in survivingRunners)
-                ranking.Add(runner.Object.InputAuthority);
-
-            // An toàn cho trường hợp Runner bị hazard nhưng không do Killer giết.
-            ranking.AddRange(eliminatedRunners);
-            ranking.Add(Killer);
-        }
-        else
-        {
-            // Runner còn sống > Killer > Runner đã bị loại.
-            foreach (var runner in survivingRunners)
-                ranking.Add(runner.Object.InputAuthority);
-
-            ranking.Add(Killer);
-            ranking.AddRange(eliminatedRunners);
-        }
-
-        // Fallback: đảm bảo mọi player đều có rank đúng một lần.
-        foreach (var playerData in allData)
-        {
-            PlayerRef playerRef = playerData.Object.InputAuthority;
-            if (!ranking.Contains(playerRef))
-                ranking.Add(playerRef);
-        }
+        foreach (var playerRef in eliminated)
+            ranking.Add(playerRef);
 
         return ranking;
     }
 
-    private PlayerRef GetHighestRankedPlayer()
+    private void ApplyLavaScale()
     {
-        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        var ranking = BuildFinalRanking(allData);
-        return ranking.Count > 0 ? ranking[0] : PlayerRef.None;
+        if (lava == null) return;
+
+        Vector3 scale = lava.transform.localScale;
+        scale.y = LavaScaleY;
+        lava.transform.localScale = scale;
     }
 
-    private PlayerMinigameData GetPlayerData(PlayerRef playerRef, PlayerMinigameData[] allData)
+    private void OnLavaScaleChanged() => ApplyLavaScale();
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SwitchEliminatedPlayerCamera(PlayerRef eliminatedRef)
     {
-        foreach (var playerData in allData)
+        if (Runner.LocalPlayer != eliminatedRef) return;
+
+        var targets = new List<PlayerController>();
+        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
+        foreach (var data in allData)
         {
-            if (playerData.Object.InputAuthority == playerRef)
-                return playerData;
+            if (data.IsEliminated || data.Object.InputAuthority == eliminatedRef) continue;
+
+            var player = data.GetComponent<PlayerController>();
+            if (player != null) targets.Add(player);
         }
 
-        return null;
+        if (targets.Count == 0 || CameraManager.Instance == null) return;
+
+        targets.Sort((a, b) => a.Object.InputAuthority.PlayerId.CompareTo(b.Object.InputAuthority.PlayerId));
+        CameraManager.Instance.UpdatePlayerTarget(targets[0].transform);
+        CameraManager.Instance.SwitchToThirdPersonCamera();
     }
-
-    private string FormatRanking(List<PlayerRef> ranking)
-    {
-        var parts = new List<string>();
-        for (int i = 0; i < ranking.Count; i++)
-            parts.Add($"#{i + 1}=P{ranking[i].PlayerId}");
-        return string.Join(", ", parts);
-    }
-
-    #endregion
-
-    #region Scoreboard
 
     protected override void BuildScoreboardResults()
     {
@@ -364,64 +227,9 @@ public class MG8Controller : BaseMinigameController
             {
                 Player = playerData.Object.InputAuthority,
                 Rank = playerData.FinishRank > 0 ? playerData.FinishRank : i + 1,
-                Score = playerData.HP,
+                Score = Mathf.RoundToInt(playerData.transform.position.y),
                 IsValid = true
             });
         }
     }
-
-    protected override void LogScoreboardInfo()
-    {
-        Debug.Log("========== SCOREBOARD (MG8 Killer Chase) ==========");
-
-        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        var sorted = new List<PlayerMinigameData>(allData);
-        sorted.Sort((a, b) => a.FinishRank.CompareTo(b.FinishRank));
-
-        foreach (var playerData in sorted)
-        {
-            var networkData = playerData.GetComponent<PlayerNetworkData>();
-            string playerName = networkData != null
-                ? networkData.PlayerName.ToString()
-                : $"P{playerData.Object.InputAuthority.PlayerId}";
-
-            string role = playerData.Object.InputAuthority == Killer ? "Killer" : "Runner";
-            Debug.Log($"[Scoreboard] #{playerData.FinishRank}: {playerName} | {role} | {playerData.HP} HP");
-        }
-
-        Debug.Log("====================================================");
-    }
-
-    #endregion
-
-    #region RPCs
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_AnnounceKiller(PlayerRef killerRef)
-    {
-        Debug.Log($"[MG8Killer] P{killerRef.PlayerId} is the Killer.");
-        // Có thể nối UI, VFX hoặc âm thanh thông báo vai trò tại đây.
-    }
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnKillerHit(PlayerRef attackerId, PlayerRef targetId)
-    {
-        Debug.Log($"[MG8Killer] P{attackerId.PlayerId} dealt damage to P{targetId.PlayerId}.");
-
-        if (SFXManager.Instance == null) return;
-
-        var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
-        foreach (var playerData in allData)
-        {
-            if (playerData.Object.InputAuthority != targetId) continue;
-
-            AudioClip clip = SFXManager.Instance.AttackSound;
-            if (clip != null)
-                SFXManager.Instance.PlaySFX3D(clip, playerData.transform.position, 1f);
-
-            break;
-        }
-    }
-
-    #endregion
 }

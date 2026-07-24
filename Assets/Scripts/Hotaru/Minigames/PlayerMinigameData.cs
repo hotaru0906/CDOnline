@@ -300,6 +300,17 @@ public class PlayerMinigameData : NetworkBehaviour
 
     public bool CanTakeDamage() => !IsInvincible && !IsDead && !IsEliminated;
 
+    public void EliminateImmediately()
+    {
+        if (!HasStateAuthority || IsEliminated) return;
+
+        IsDead = true;
+        IsEliminated = true;
+        RespawnTimer = default;
+        playerController?.SetFrozen(true);
+        Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} eliminated permanently");
+    }
+
     #endregion
 
     #region Death & Respawn

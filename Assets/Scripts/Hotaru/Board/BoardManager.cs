@@ -324,9 +324,14 @@ public class BoardManager : NetworkBehaviour
         yield return null;
         yield return null;
 
-        RPC_PlayBoardIntro();
+        if (!GameManager.Instance.HasPlayedBoardIntro)
+        {
+            GameManager.Instance.HasPlayedBoardIntro = true;
 
-        yield return new WaitForSeconds(12f);
+            RPC_PlayBoardIntro();
+
+            yield return new WaitForSeconds(12f);
+        }
 
         StartTurn();
     }
@@ -976,9 +981,13 @@ public class BoardManager : NetworkBehaviour
 
                 if (inventory != null)
                 {
-                    // Mỗi lần Trap làm mất tối đa 10 Key
-                    lostKeys = inventory.RemoveKeys(10);
-                }
+                    int currentKeys = inventory.GetKeyCount();
+
+                    // Mất 50% số Key (làm tròn xuống)
+                    int keysToLose = currentKeys / 2;
+
+                    lostKeys = inventory.RemoveKeys(keysToLose);
+}
 
                 if (token != null && trapTile != null)
                 {
