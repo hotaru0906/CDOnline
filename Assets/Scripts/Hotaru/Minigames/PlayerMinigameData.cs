@@ -323,6 +323,8 @@ public class PlayerMinigameData : NetworkBehaviour
         Debug.Log($"[PlayerMinigameData] MG_AllowRespawn: {canRespawn}");
 
         IsDead = true;
+        playerController?.ActivateRagdoll();
+        Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} ragdoll activated on death");
 
         if (canRespawn)
         {
@@ -343,6 +345,8 @@ public class PlayerMinigameData : NetworkBehaviour
         {
             playerController.Teleport(CurrentRespawnPosition);
             playerController.ResetVelocity();
+            playerController.DeactivateRagdoll();
+            Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} ragdoll deactivated on respawn");
         }
         else
         {

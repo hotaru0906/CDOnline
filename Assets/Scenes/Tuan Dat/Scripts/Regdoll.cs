@@ -7,6 +7,8 @@ public class Regdoll : MonoBehaviour
     [Tooltip("Optional: nếu để trống, hệ thống sẽ tự lấy các Rigidbody/Collider trong con.")]
     [SerializeField] private Rigidbody[] ragdollRigidbodies;
     [SerializeField] private Collider[] ragdollColliders;
+    [Tooltip("Nếu bật, Animator sẽ bị tắt khi ragdoll kích hoạt. Đây là chế độ nên dùng cho chết/respawn.")]
+    [SerializeField] private bool disableAnimatorOnRagdoll = true;
 
     private Animator _animator;
     private bool _isRagdollActive;
@@ -29,7 +31,7 @@ public class Regdoll : MonoBehaviour
         if (_isRagdollActive)
             return;
 
-        if (_animator != null)
+        if (disableAnimatorOnRagdoll && _animator != null)
             _animator.enabled = false;
 
         SetRagdollState(true);
@@ -43,7 +45,7 @@ public class Regdoll : MonoBehaviour
 
         SetRagdollState(false);
 
-        if (_animator != null)
+        if (disableAnimatorOnRagdoll && _animator != null)
             _animator.enabled = true;
 
         _isRagdollActive = false;

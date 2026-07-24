@@ -318,8 +318,15 @@ public class PlayerController : NetworkBehaviour
             AttackTimer = attackDuration;
 
             Debug.Log("[PlayerController] ATTACK!");
-            CheckAttackHit();
         }
+    }
+
+    public void AttackHitEvent()
+    {
+        if (!IsAttacking)
+            return;
+
+        CheckAttackHit();
     }
 
     private void UpdateState()
@@ -544,8 +551,14 @@ public class PlayerController : NetworkBehaviour
         var ragdoll = GetActiveModelRagdoll();
         if (ragdoll == null)
         {
-            Debug.LogWarning($"[PlayerController] Cannot activate ragdoll: active model has no Regdoll component on player {name}");
-            return;
+            ragdoll = GetComponentInChildren<Regdoll>(true);
+            if (ragdoll == null)
+            {
+                Debug.LogWarning($"[PlayerController] Cannot activate ragdoll: no Regdoll component found on player {name}");
+                return;
+            }
+
+            Debug.LogWarning($"[PlayerController] ActivateRagdoll fallback to any Regdoll on player {name}");
         }
 
         ragdoll.ActivateRagdoll();
@@ -554,6 +567,9 @@ public class PlayerController : NetworkBehaviour
     public void DeactivateRagdoll()
     {
         var ragdoll = GetActiveModelRagdoll();
+        if (ragdoll == null)
+            ragdoll = GetComponentInChildren<Regdoll>(true);
+
         if (ragdoll == null)
             return;
 
