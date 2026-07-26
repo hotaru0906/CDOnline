@@ -67,12 +67,8 @@ public class BoardChestManager : NetworkBehaviour
         if (spawnedChests.Contains(chest))
             return;
 
-        if (!spawnedChests.Contains(chest))
-        {
-            spawnedChests.Add(chest);
-
-            chest.SetChestIndex(spawnedChests.Count - 1);
-        }
+        spawnedChests.Add(chest);
+        chest.SetChestIndex(spawnedChests.Count - 1);
 
         Debug.Log($"[ChestManager] Register Chest {chest.ChestIndex}");
     }
@@ -146,15 +142,18 @@ public class BoardChestManager : NetworkBehaviour
         for (int i = 0; i < spawnCount; i++)
         {
             Chest chest = Runner.Spawn(
-            chestPrefab,
-            Vector3.zero,
-            Quaternion.identity);
+                chestPrefab,
+                Vector3.zero,
+                Quaternion.identity);
 
-        Debug.Log($"HOST Spawn: {chest.Object.Id}");
+            if (chest == null)
+                continue;
 
-        chest.SetBoardNode(availableNodes[i]);
-        chest.Show();
+            Debug.Log($"HOST Spawn: {chest.Object.Id}");
 
+            RegisterChest(chest);
+            chest.SetBoardNode(availableNodes[i]);
+            chest.Show();
         }
 
         Debug.Log($"[BoardChestManager] Spawned {spawnedChests.Count} chests.");

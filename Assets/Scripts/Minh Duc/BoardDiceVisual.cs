@@ -1,5 +1,3 @@
-using System.Linq.Expressions;
-using Unity.Cinemachine;
 using UnityEngine;
 
 public class BoardDiceVisual : MonoBehaviour
@@ -15,17 +13,17 @@ public class BoardDiceVisual : MonoBehaviour
     [Header("Hover")]
     [SerializeField] private float hoverHeight = 0.4f;
     [SerializeField] private float hoverSpeed = 2f;
-    
+
     [SerializeField] private GameObject diceMesh;
 
     [Header("Spin")]
     [SerializeField] private float spinSpeed = 900f;
+    [SerializeField] private Vector3[] faceEulerRotations = new Vector3[12];
 
     private bool isSpinning = false;
-
     private Transform targetAnchor;
-
     private bool isFollowing = false;
+
     private void Awake()
     {
         Instance = this;
@@ -51,23 +49,17 @@ public class BoardDiceVisual : MonoBehaviour
             }
         }
 
-        if (isSpinning)
+        if (isSpinning && pivot != null)
         {
             Vector3 spinAxis = new Vector3(1f, 0.3f, 0.8f).normalized;
-
-            pivot.Rotate(
-                spinAxis,
-                spinSpeed * Time.deltaTime,
-                Space.Self);
+            pivot.Rotate(spinAxis, spinSpeed * Time.deltaTime, Space.Self);
         }
     }
 
     public void ShowAt(Transform anchor)
     {
         targetAnchor = anchor;
-
         isFollowing = true;
-
         diceMesh.SetActive(true);
     }
 
@@ -85,7 +77,26 @@ public class BoardDiceVisual : MonoBehaviour
 
     public void StopSpin()
     {
+        StopSpin(1);
+    }
+
+    public void StopSpin(int faceValue)
+    {
         isSpinning = false;
-        pivot.localRotation = Quaternion.identity;
+
+        if (pivot == null)
+            return;
+
+        int clampedFace = Mathf.Clamp(faceValue, 1, faceEulerRotations.Length);
+        int index = clampedFace - 1;
+
+        if (index >= 0 && index < faceEulerRotations.Length)
+        {
+            pivot.localRotation = Quaternion.Euler(faceEulerRotations[index]);
+        }
+        else
+        {
+            pivot.localRotation = Quaternion.identity;
+        }
     }
 }
