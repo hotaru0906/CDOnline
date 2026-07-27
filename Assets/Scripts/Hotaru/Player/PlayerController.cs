@@ -53,6 +53,7 @@ public class PlayerController : NetworkBehaviour
     [Header("Stun")]
     [SerializeField] private GameObject dizzyVFX; // Gắn object dizzy trong prefab, ban đầu inactive
     [SerializeField] private float stunDuration = 1f;
+    [SerializeField] private GameObject freezeVFX;
 
     [Header("UI")]
     [SerializeField] private GameObject crosshairUI;
@@ -105,7 +106,18 @@ public class PlayerController : NetworkBehaviour
     [Networked, OnChangedRender(nameof(OnFrozenChanged))]
     public NetworkBool IsFrozenNetworked { get; private set; }
 
-    public bool IsFrozen => IsFrozenNetworked;
+    [Networked]
+    private NetworkBool IsMovementLocked { get; set; }
+
+    public bool IsFrozen => IsFrozenNetworked || IsMovementLocked;
+
+    public void SetMovementLocked(bool locked)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        IsMovementLocked = locked;
+    }
 
     private void Awake()
     {
@@ -124,6 +136,11 @@ public class PlayerController : NetworkBehaviour
 
     public override void Spawned()
     {
+        if (freezeVFX != null)
+        {
+            freezeVFX.SetActive(false);
+        }
+        
         if (!HasInputAuthority)
         {
             if (crosshairUI != null)
@@ -476,6 +493,7 @@ public class PlayerController : NetworkBehaviour
                 RotateTowards(_targetMoveDirection);
             }
         }
+        RefreshFreezeVFX();
     }
 
     private void RotateToYaw(float yaw)
@@ -517,14 +535,36 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    public void SetFrozen(bool frozen)
+    public void SetFrozen(bool frozen, bool showVFX = true)
     {
-        if (!HasStateAuthority) return; // THÊM: chỉ host set
+        if (!HasStateAuthority)
+            return;
+
         IsFrozenNetworked = frozen;
+
+        // Nếu chỉ muốn khóa điều khiển (ví dụ ngồi ghế)
+        // thì tắt VFX ngay.
+        if (!showVFX && freezeVFX != null)
+        {
+            freezeVFX.SetActive(false);
+        }
     }
     private void OnFrozenChanged()
     {
-        // Có thể thêm visual feedback sau
+        RefreshFreezeVFX();
+    }
+
+    private void RefreshFreezeVFX()
+    {
+        if (freezeVFX == null)
+            return;
+
+        bool show =
+            GameManager.Instance != null &&
+            GameManager.Instance.CurrentState == GameState.Playing &&
+            IsFrozenNetworked;
+
+        freezeVFX.SetActive(show);
     }
 
     public void ResetVelocity()
@@ -761,8 +801,14 @@ public class PlayerController : NetworkBehaviour
 
     public void ApplyTemporaryFreeze(float duration)
     {
-        if (!HasStateAuthority) return;
+        if (!HasStateAuthority)
+            return;
+
+        ResetVelocity();      // Dừng ngay lập tức
+        ForceIdle();          // Hủy attack nếu đang đánh
+
         SetFrozen(true);
+
         StartCoroutine(UnfreezeAfter(duration));
     }
 
