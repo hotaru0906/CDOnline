@@ -204,10 +204,33 @@ public class MG7Item : NetworkBehaviour
                 break;
 
             case MG7ItemType.Freeze:
-                // Yêu cầu PlayerController có method ApplyTemporaryFreeze(duration) — xem ghi chú patch bên dưới.
-                pc.ApplyTemporaryFreeze(freezeDuration);
-                Debug.Log($"[MG7Item] P{pc.Object.InputAuthority} nhặt Freeze — tự đóng băng {freezeDuration}s");
+            {
+                PlayerController[] players =
+                    FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+
+                foreach (PlayerController player in players)
+                {
+                    if (player == null)
+                        continue;
+
+                    // Không đóng băng người vừa nhặt
+                    if (player == pc)
+                        continue;
+
+                    PlayerMinigameData otherData =
+                        player.GetComponent<PlayerMinigameData>();
+
+                    if (otherData == null || otherData.IsEliminated)
+                        continue;
+
+                    player.ApplyTemporaryFreeze(freezeDuration);
+                }
+
+                Debug.Log(
+                    $"[MG7Item] P{pc.Object.InputAuthority} nhặt Freeze -> Freeze tất cả người chơi khác trong {freezeDuration}s");
+
                 break;
+            }
         }
     }
 

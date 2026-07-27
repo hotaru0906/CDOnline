@@ -43,7 +43,7 @@ public class MG7ItemGameController : BaseMinigameController
 
     private float _spawnCountdown;
     private float _elapsedGameTime;
-
+    private bool _spawnFreezeNext = true;
     private void OnDrawGizmos()
     {
         Vector3 center = spawnAreaCenter != null ? spawnAreaCenter.position : transform.position;
@@ -91,9 +91,21 @@ public class MG7ItemGameController : BaseMinigameController
 
         if (_spawnCountdown <= 0f)
         {
-            SpawnRandomItem();
+            if (_spawnFreezeNext)
+            {
+                SpawnFreezeItem();
+            }
+            else
+            {
+                SpawnRandomItem();
+            }
 
-            float t = (rampDuration > 0f) ? Mathf.Clamp01(_elapsedGameTime / rampDuration) : 1f;
+            _spawnFreezeNext = !_spawnFreezeNext;
+
+            float t = (rampDuration > 0f)
+                ? Mathf.Clamp01(_elapsedGameTime / rampDuration)
+                : 1f;
+
             _spawnCountdown = Mathf.Lerp(initialSpawnInterval, minSpawnInterval, t);
         }
     }
@@ -107,8 +119,14 @@ public class MG7ItemGameController : BaseMinigameController
         }
 
         float totalWeight = 0f;
+
         foreach (var e in itemEntries)
+        {
+            if (e.type == MG7ItemType.Freeze)
+                continue;
+
             totalWeight += Mathf.Max(0f, e.weight);
+        }
 
         if (totalWeight <= 0f) return;
 
@@ -118,7 +136,11 @@ public class MG7ItemGameController : BaseMinigameController
 
         foreach (var e in itemEntries)
         {
+            if (e.type == MG7ItemType.Freeze)
+                continue;
+
             cumulative += Mathf.Max(0f, e.weight);
+
             if (roll <= cumulative)
             {
                 chosen = e;
@@ -136,6 +158,40 @@ public class MG7ItemGameController : BaseMinigameController
         Runner.Spawn(chosen.prefab, spawnPos, Quaternion.identity);
 
         Debug.Log($"[MG7ItemGame] Spawned {chosen.type} at {spawnPos} — next in {_spawnCountdown:F2}s");
+    }
+
+    private void SpawnFreezeItem()
+    {
+        if (itemEntries == null || itemEntries.Length == 0)
+            return;
+
+        ItemSpawnEntry freezeEntry = null;
+
+        foreach (var e in itemEntries)
+        {
+            if (e.type == MG7ItemType.Freeze)
+            {
+                freezeEntry = e;
+                break;
+            }
+        }
+
+        if (freezeEntry == null || freezeEntry.prefab == null)
+        {
+            Debug.LogWarning("[MG7ItemGame] Freeze prefab not found!");
+            return;
+        }
+
+        Vector3 center = spawnAreaCenter != null ? spawnAreaCenter.position : transform.position;
+
+        float x = Random.Range(-spawnAreaSize.x * 0.5f, spawnAreaSize.x * 0.5f);
+        float z = Random.Range(-spawnAreaSize.y * 0.5f, spawnAreaSize.y * 0.5f);
+
+        Vector3 spawnPos = center + new Vector3(x, spawnHeight, z);
+
+        Runner.Spawn(freezeEntry.prefab, spawnPos, Quaternion.identity);
+
+        Debug.Log("[MG7ItemGame] Spawned Freeze");
     }
 
     // ----------------------------------------------------------------

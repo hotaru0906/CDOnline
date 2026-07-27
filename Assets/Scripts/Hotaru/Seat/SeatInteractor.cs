@@ -58,7 +58,7 @@ public class SeatInteractor : NetworkBehaviour
         if (_playerController != null)
         {
             _playerController.SetMovementEnabled(!IsSitting);
-            _playerController.SetFrozen(IsSitting);
+            _playerController.SetMovementLocked(IsSitting);
         }
 
         if (SeatManager.Instance != null)
