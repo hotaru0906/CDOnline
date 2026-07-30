@@ -30,7 +30,7 @@ public class ChestUI : MonoBehaviour
         root.SetActive(true);
 
         keyText.text =
-            $"Need 10 Keys\n\nYou have {currentKeys} Keys";
+            $"Need 5 Keys\n\nYou have {currentKeys} Keys";
     }
 
     public void Hide()

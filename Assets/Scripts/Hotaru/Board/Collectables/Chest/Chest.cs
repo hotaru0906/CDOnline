@@ -36,6 +36,11 @@ public class Chest : BoardCollectable
         animator.Play("Take 001", 0, 0f);
     }
 
+    public void MarkOpened()
+    {
+        IsOpened = true;
+    }
+
     public bool IsOnNode(BoardNode node)
     {
         return boardNode == node;

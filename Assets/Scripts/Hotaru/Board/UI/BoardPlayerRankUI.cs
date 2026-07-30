@@ -6,6 +6,8 @@ public class BoardPlayerRankUI : MonoBehaviour
 {
     [SerializeField] private BoardPlayerRankEntryUI[] entries = new BoardPlayerRankEntryUI[4];
 
+    private bool _subscribed;
+
     private static readonly Color[] SlotColors =
     {
         new Color(0.9f, 0.2f, 0.2f),
@@ -21,12 +23,17 @@ public class BoardPlayerRankUI : MonoBehaviour
 
     private void OnDestroy()
     {
-        PlayerItemInventory.OnInventoryRegistered -= OnInventoryRegistered;
-        PlayerItemInventory.OnInventoryUnregistered -= OnInventoryUnregistered;
-        PlayerItemInventory.OnResourceChanged -= OnResourceChanged;
+        if (_subscribed)
+        {
+            PlayerItemInventory.OnInventoryRegistered -= OnInventoryRegistered;
+            PlayerItemInventory.OnInventoryUnregistered -= OnInventoryUnregistered;
+            PlayerItemInventory.OnResourceChanged -= OnResourceChanged;
 
-        if (BoardManager.Instance != null)
-            BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
+            if (BoardManager.Instance != null)
+                BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
+
+            _subscribed = false;
+        }
     }
 
     private IEnumerator WaitForBoardManager()
@@ -34,12 +41,31 @@ public class BoardPlayerRankUI : MonoBehaviour
         while (BoardManager.Instance == null)
             yield return null;
 
+        TrySubscribeToBoardManager();
+
+        Refresh();
+        yield return null;
+        yield return null;
+
+        var bm = BoardManager.Instance;
+        if (bm != null && bm.ActivePlayerCount > 0)
+        {
+            SetActiveTurn(bm.CurrentPlayerID);
+        }
+
+        Debug.Log("[BoardPlayerRankUI] Subscribed");
+    }
+
+    private void TrySubscribeToBoardManager()
+    {
+        if (_subscribed || BoardManager.Instance == null)
+            return;
+
         PlayerItemInventory.OnInventoryRegistered += OnInventoryRegistered;
         PlayerItemInventory.OnInventoryUnregistered += OnInventoryUnregistered;
         PlayerItemInventory.OnResourceChanged += OnResourceChanged;
         BoardManager.Instance.OnTurnStarted += OnTurnStarted;
-        Refresh();
-        Debug.Log("[BoardPlayerRankUI] Subscribed");
+        _subscribed = true;
     }
 
     // =====================================================================

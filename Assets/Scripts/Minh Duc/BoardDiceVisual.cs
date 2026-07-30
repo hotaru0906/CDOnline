@@ -11,8 +11,8 @@ public class BoardDiceVisual : MonoBehaviour
     [SerializeField] private float moveSpeed = 8f;
 
     [Header("Hover")]
-    [SerializeField] private float hoverHeight = 0.4f;
-    [SerializeField] private float hoverSpeed = 2f;
+    [SerializeField] private float hoverHeight = 0.8f;
+    [SerializeField] private float hoverSpeed = 2.2f;
 
     [SerializeField] private GameObject diceMesh;
 
@@ -34,19 +34,13 @@ public class BoardDiceVisual : MonoBehaviour
     {
         if (isFollowing && targetAnchor != null)
         {
-            Vector3 targetPos = targetAnchor.position;
-            targetPos.y += Mathf.Sin(Time.time * hoverSpeed) * hoverHeight;
+            float bob = Mathf.Sin(Time.time * hoverSpeed) * hoverHeight * 0.15f;
+            Vector3 targetPos = targetAnchor.position + Vector3.up * (hoverHeight + bob);
 
             transform.position = Vector3.Lerp(
                 transform.position,
                 targetPos,
                 Time.deltaTime * moveSpeed);
-
-            if (Vector3.Distance(transform.position, targetPos) < 0.05f)
-            {
-                transform.position = targetPos;
-                isFollowing = false;
-            }
         }
 
         if (isSpinning && pivot != null)
@@ -61,6 +55,12 @@ public class BoardDiceVisual : MonoBehaviour
         targetAnchor = anchor;
         isFollowing = true;
         diceMesh.SetActive(true);
+
+        if (targetAnchor != null)
+        {
+            Vector3 targetPos = targetAnchor.position + Vector3.up * (hoverHeight + 0.05f);
+            transform.position = targetPos;
+        }
     }
 
     public void Hide()
