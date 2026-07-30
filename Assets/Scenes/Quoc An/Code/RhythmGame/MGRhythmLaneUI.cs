@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using RhythmGame;
+using TMPro;
 
 /// <summary>
 /// Một lane trên màn hình, gắn với đúng một người chơi.
@@ -13,7 +14,7 @@ public class MGRhythmLaneUI : MonoBehaviour
 
     [Header("Icon nhân vật (cột sát trái)")]
     [SerializeField] private Image characterIcon;
-    [SerializeField] private Text nameText;
+    [SerializeField] private TMP_Text nameText;
     [SerializeField] private Image laneFrame;
 
     [Header("Hitbox + note")]
@@ -26,9 +27,9 @@ public class MGRhythmLaneUI : MonoBehaviour
     private float maxHP = 100f;
     [SerializeField] private Image hpFill;
     [SerializeField] private Image feverFill;
-    [SerializeField] private Text comboText;
-    [SerializeField] private Text judgeText;
-    [SerializeField] private Text scoreText;
+    [SerializeField] private TMP_Text comboText;
+    [SerializeField] private TMP_Text judgeText;
+    [SerializeField] private TMP_Text scoreText;
 
     [Header("Hiệu ứng")]
     [SerializeField] private GameObject feverBurstVfx;
