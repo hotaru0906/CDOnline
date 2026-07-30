@@ -34,6 +34,9 @@ public class BoardManager : NetworkBehaviour
     [Header("Tile Resolve")]
     [SerializeField] private float tileResolveDuration = 1.5f;
 
+    [Header("VFX")]
+    [SerializeField] private bool useShieldVfx = true;
+
     [Header("Debug")]
     [SerializeField] private bool showDebugPanel = true;
     [SerializeField] private bool useDebugRoll = false;
@@ -283,10 +286,28 @@ public class BoardManager : NetworkBehaviour
         }
 
         RPC_InitializeTokens(rankOrder, count);
+        StartCoroutine(RestoreShieldVisualsAfterInit());
 
         Debug.Log($"[BoardManager] Board phase started — {string.Join(", ", rankOrder)}");
 
         StartCoroutine(BeginBoardIntro());
+    }
+
+    private IEnumerator RestoreShieldVisualsAfterInit()
+    {
+        yield return null;
+
+        for (int i = 0; i < ActivePlayerCount; i++)
+        {
+            int pid = GetPlayerIDAtSlot(i);
+            if (pid < 0) continue;
+
+            bool active = false;
+            if (GameManager.Instance != null && GameManager.Instance.TryGetShieldState(pid, out bool savedShield))
+                active = savedShield;
+
+            SetShieldStateForPlayer(pid, active, saveToGameManager: false);
+        }
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -558,15 +579,20 @@ public class BoardManager : NetworkBehaviour
         var effect = (BoardItemEffect)effectId;
         int slot = CurrentSlot;
 
+        if (effect != BoardItemEffect.Shield && slot >= 0 && _hasShield[slot])
+        {
+            SetShieldStateForPlayer(userId, false);
+        }
+
         switch (effect)
         {
             case BoardItemEffect.RushForward:
-                _bonusSteps[slot] = 2;
+                _bonusSteps[slot] = 3;
                 RPC_ItemUsed(userId, effectId);
                 break;
 
             case BoardItemEffect.Shield:
-                _hasShield[slot] = true;
+                SetShieldStateForPlayer(userId, true);
                 RPC_ItemUsed(userId, effectId);
                 break;
 
@@ -645,7 +671,7 @@ public class BoardManager : NetworkBehaviour
     {
         if (targetSlot >= 0 && _hasShield[targetSlot])
         {
-            _hasShield[targetSlot] = false;
+            SetShieldStateForPlayer(GetPlayerIDAtSlot(targetSlot), false);
             RPC_ShieldBlocked(GetPlayerIDAtSlot(targetSlot), userId);
             yield break;
         }
@@ -656,7 +682,7 @@ public class BoardManager : NetworkBehaviour
             var currentNode = pathObj?.GetNodeByID(GetNodeIDAtSlot(targetSlot));
             if (pathObj != null && currentNode != null)
             {
-                var dest = pathObj.GetNodeBeforeSteps(currentNode, 2, out int[] pathIDs);
+                var dest = pathObj.GetNodeBeforeSteps(currentNode, 3, out int[] pathIDs);
                 SetNodeIDAtSlot(targetSlot, dest.nodeID);
                 if (pathIDs.Length > 0)
                 {
@@ -673,7 +699,7 @@ public class BoardManager : NetworkBehaviour
     {
         if (targetSlot >= 0 && _hasShield[targetSlot])
         {
-            _hasShield[targetSlot] = false;
+            SetShieldStateForPlayer(targetId, false);
             RPC_ShieldBlocked(targetId, userId);
             yield break;
         }
@@ -986,6 +1012,12 @@ public class BoardManager : NetworkBehaviour
 
                     int lostKeys = 0;
 
+                    int currentSlot = GetSlotByPlayerId(playerId);
+                    if (currentSlot >= 0 && _hasShield[currentSlot])
+                    {
+                        SetShieldStateForPlayer(playerId, false);
+                    }
+
                     PlayerItemInventory inventory =
                         PlayerItemInventory.GetForPlayer(playerId);
 
@@ -1155,7 +1187,7 @@ public class BoardManager : NetworkBehaviour
 
         if (targetSlotForShield >= 0 && _hasShield[targetSlotForShield])
         {
-            _hasShield[targetSlotForShield] = false;
+            SetShieldStateForPlayer(targetId, false);
             BoardState = BoardPhaseState.ResolvingTile;
             StealerPlayerId = -1;
             RPC_ShieldBlocked(targetId, stealerId);
@@ -1531,6 +1563,25 @@ public class BoardManager : NetworkBehaviour
         return null;
     }
 
+    public void SetShieldStateForPlayer(int playerId, bool active, bool saveToGameManager = true)
+    {
+        if (playerId < 0) return;
+
+        int slot = GetSlotByPlayerId(playerId);
+        if (slot < 0) return;
+
+        _hasShield[slot] = active;
+
+        if (saveToGameManager && GameManager.Instance != null)
+            GameManager.Instance.SaveShieldState(playerId, active);
+
+        if (HasStateAuthority)
+            RPC_SetShieldVisual(playerId, active);
+
+        var token = GetTokenByPlayerId(playerId);
+        token?.SetShieldActive(active);
+    }
+
     public void EndGame(int winnerPlayerId)
     {
         if (!HasStateAuthority)
@@ -1585,6 +1636,15 @@ public class BoardManager : NetworkBehaviour
     private void RPC_FocusBackToStealer(int stealerId)
     {
         BoardCameraController.Instance?.FocusOnPlayer(stealerId);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SetShieldVisual(int playerId, bool active)
+    {
+        if (!useShieldVfx) return;
+
+        var token = GetTokenByPlayerId(playerId);
+        token?.SetShieldActive(active);
     }
     #endregion
 

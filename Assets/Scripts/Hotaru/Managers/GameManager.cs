@@ -189,6 +189,11 @@ public class GameManager : NetworkBehaviour
     [Networked] public int ChestCount_P2 { get; private set; } = 0;
     [Networked] public int ChestCount_P3 { get; private set; } = 0;
 
+    [Networked] public NetworkBool ShieldActive_P0 { get; private set; } = false;
+    [Networked] public NetworkBool ShieldActive_P1 { get; private set; } = false;
+    [Networked] public NetworkBool ShieldActive_P2 { get; private set; } = false;
+    [Networked] public NetworkBool ShieldActive_P3 { get; private set; } = false;
+
     [Networked] public int ResourcePlayerId_P0 { get; private set; } = -1;
     [Networked] public int ResourcePlayerId_P1 { get; private set; } = -1;
     [Networked] public int ResourcePlayerId_P2 { get; private set; } = -1;
@@ -614,6 +619,36 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    public void SaveShieldState(int playerId, bool active)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        int slot = FindOrAssignShieldSlot(playerId);
+        if (slot < 0)
+            return;
+
+        switch (slot)
+        {
+            case 0: ShieldActive_P0 = active; break;
+            case 1: ShieldActive_P1 = active; break;
+            case 2: ShieldActive_P2 = active; break;
+            case 3: ShieldActive_P3 = active; break;
+        }
+    }
+
+    public bool TryGetShieldState(int playerId, out bool active)
+    {
+        switch (GetShieldSlotByPlayerId(playerId))
+        {
+            case 0: active = ShieldActive_P0; return true;
+            case 1: active = ShieldActive_P1; return true;
+            case 2: active = ShieldActive_P2; return true;
+            case 3: active = ShieldActive_P3; return true;
+            default: active = false; return false;
+        }
+    }
+
     public bool TryRestorePlayerResourceState(int playerId, PlayerItemInventory inventory)
     {
         if (!HasStateAuthority || inventory == null)
@@ -625,6 +660,35 @@ public class GameManager : NetworkBehaviour
         inventory.SetResourceCounts(keyCount, chestCount);
         Debug.Log($"[GameManager] Restored Resource P{playerId}: Key={keyCount}, Chest={chestCount}");
         return true;
+    }
+
+    private int FindOrAssignShieldSlot(int playerId)
+    {
+        int existed = GetShieldSlotByPlayerId(playerId);
+        if (existed >= 0)
+            return existed;
+
+        if (ResourcePlayerId_P0 < 0) return 0;
+        if (ResourcePlayerId_P1 < 0) return 1;
+        if (ResourcePlayerId_P2 < 0) return 2;
+        if (ResourcePlayerId_P3 < 0) return 3;
+
+        return Mathf.Abs(playerId) % 4;
+    }
+
+    private int GetShieldSlotByPlayerId(int playerId)
+    {
+        if (ShieldActive_P0 == true && ResourcePlayerId_P0 == playerId) return 0;
+        if (ShieldActive_P1 == true && ResourcePlayerId_P1 == playerId) return 1;
+        if (ShieldActive_P2 == true && ResourcePlayerId_P2 == playerId) return 2;
+        if (ShieldActive_P3 == true && ResourcePlayerId_P3 == playerId) return 3;
+
+        if (ResourcePlayerId_P0 == playerId) return 0;
+        if (ResourcePlayerId_P1 == playerId) return 1;
+        if (ResourcePlayerId_P2 == playerId) return 2;
+        if (ResourcePlayerId_P3 == playerId) return 3;
+
+        return -1;
     }
 
     private int FindOrAssignResourceSlot(int playerId)
@@ -1390,6 +1454,8 @@ public class GameManager : NetworkBehaviour
 
         BoardManager.Instance.StartBoardPhase(ranking);
 
+        yield return null;
+        RestoreBoardItems();
         RestorePlayerResourceStates();
 
         int[] saved = GetBoardPositions();
@@ -1472,57 +1538,91 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    public bool TryRestoreBoardItemsForPlayer(int playerId, PlayerItemInventory inventory)
+    {
+        if (!HasStateAuthority || inventory == null)
+            return false;
+
+        int[] savedItems = GetBoardItemsByPlayer(playerId);
+
+        bool hasAny = false;
+        foreach (var v in savedItems)
+        {
+            if (v != -1)
+            {
+                hasAny = true;
+                break;
+            }
+        }
+
+        if (!hasAny)
+            return false;
+
+        for (int s = 0; s < 4; s++)
+            inventory.RemoveBoardItem(s);
+
+        for (int s = 0; s < 4; s++)
+        {
+            if (savedItems[s] != -1)
+            {
+                bool ok = inventory.AddBoardItem((BoardItemEffect)savedItems[s]);
+                if (!ok)
+                    Debug.LogWarning($"[GameManager] Failed to restore board item {savedItems[s]} to P{playerId} at slot {s}");
+            }
+        }
+
+        Debug.Log($"[GameManager] Restored Board items for P{playerId}: [{string.Join(", ", savedItems)}]");
+        return true;
+    }
+
     public void RestoreBoardItems()
     {
-        Debug.Log($"Restore HasStateAuthority = {HasStateAuthority}");
+        if (!HasStateAuthority)
+        {
+            Debug.Log($"Restore HasStateAuthority = {HasStateAuthority}");
+            return;
+        }
 
-        for (int i = 0; i < 4; i++)
+        if (BoardManager.Instance == null)
+        {
+            Debug.LogWarning("[GameManager] RestoreBoardItems skipped because BoardManager is null.");
+            return;
+        }
+
+        if (BoardManager.Instance.ActivePlayerCount <= 0)
+        {
+            Debug.LogWarning("[GameManager] RestoreBoardItems skipped because board slots are not initialized yet.");
+            return;
+        }
+
+        for (int i = 0; i < BoardManager.Instance.ActivePlayerCount; i++)
         {
             int pid = BoardManager.Instance.GetPlayerIDAtSlot(i);
             if (pid < 0) continue;
 
             var inv = PlayerItemInventory.GetForPlayer(pid);
-
-            if (inv != null)
+            if (inv == null)
             {
-                Debug.Log($"Restore uses InstanceID={inv.GetInstanceID()}");
+                Debug.LogWarning($"[GameManager] No inventory for Player {pid} during board-item restore.");
+                continue;
             }
 
-            if (inv == null) continue;
+            TryRestoreBoardItemsForPlayer(pid, inv);
+        }
 
-            // <<< THÊM DÒNG NÀY
-            Debug.Log($"Inventory HasStateAuthority = {inv.HasStateAuthority}");
-
-            int[] savedi = GetBoardItemsByPlayer(pid);
-
-            bool hasAny = false;
-            foreach (var v in savedi)
-                if (v != -1)
-                {
-                    hasAny = true;
-                    break;
-                }
-
-            if (!hasAny) continue;
-
-            // Clear inventory
-            for (int s = 0; s < 4; s++)
-                inv.RemoveBoardItem(s);
-
-            // Restore inventory
-            for (int s = 0; s < 4; s++)
+        if (BoardManager.Instance != null)
+        {
+            for (int i = 0; i < BoardManager.Instance.ActivePlayerCount; i++)
             {
-                if (savedi[s] != -1)
-                {
-                    // <<< THAY DÒNG NÀY
-                    bool ok = inv.AddBoardItem((BoardItemEffect)savedi[s]);
+                int pid = BoardManager.Instance.GetPlayerIDAtSlot(i);
+                if (pid < 0) continue;
 
-                    // <<< THÊM DÒNG NÀY
-                    Debug.Log($"Restore Add returned = {ok}");
-                }
+                bool shieldActive = false;
+                if (TryGetShieldState(pid, out bool savedShield))
+                    shieldActive = savedShield;
+
+                BoardManager.Instance.SetShieldStateForPlayer(pid, shieldActive, saveToGameManager: false);
             }
-
-            Debug.Log($"[GameManager] Restored Board items slot {i}: [{string.Join(", ", savedi)}]");
         }
     }
 

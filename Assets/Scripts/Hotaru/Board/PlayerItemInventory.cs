@@ -93,7 +93,12 @@ public class PlayerItemInventory : NetworkBehaviour
             ChestCount = 0;
 
             if (GameManager.Instance != null)
+            {
                 GameManager.Instance.TryRestorePlayerResourceState(playerId, this);
+
+                if (GameManager.Instance.CurrentState == GameState.Board)
+                    GameManager.Instance.TryRestoreBoardItemsForPlayer(playerId, this);
+            }
         }
         Debug.Log($"[PlayerItemInventory] Registered for player {playerId}");
 

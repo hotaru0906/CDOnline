@@ -31,6 +31,9 @@ public class BoardPlayerToken : MonoBehaviour
 
     [Header("Audio")]
     [SerializeField] private AudioSource audioSource;
+
+    [Header("Shield VFX")]
+    [SerializeField] private ParticleSystem shieldVfxPrefab;
     [SerializeField] private AudioClip jumpSound;
 
     [SerializeField] private float rotateSpeed = 14f; // toc độ xoay khi di chuyển (độ/giây)
@@ -56,6 +59,7 @@ public class BoardPlayerToken : MonoBehaviour
 
     private GameObject _spawnedModelVisual;
     private int _currentCharacterIndex = -1;
+    private ParticleSystem _shieldVfxInstance;
     private Coroutine _visualSetupRoutine;
     private Coroutine _moveRoutine;
     private readonly Queue<int> _movementQueue = new();
@@ -141,6 +145,77 @@ public class BoardPlayerToken : MonoBehaviour
             if (dir.sqrMagnitude > 0.001f)
                 transform.rotation = Quaternion.LookRotation(dir);
         }
+    }
+
+    public void SetShieldActive(bool active)
+    {
+        if (shieldVfxPrefab != null || _shieldVfxInstance != null)
+        {
+            if (_shieldVfxInstance == null)
+                CreateShieldVfxInstance();
+
+            if (_shieldVfxInstance == null) return;
+
+            if (active)
+            {
+                _shieldVfxInstance.gameObject.SetActive(true);
+                if (!_shieldVfxInstance.isPlaying)
+                    _shieldVfxInstance.Play(true);
+            }
+            else
+            {
+                _shieldVfxInstance.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                _shieldVfxInstance.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    private void CreateShieldVfxInstance()
+    {
+        if (_shieldVfxInstance != null) return;
+
+        GameObject vfxGo;
+        if (shieldVfxPrefab != null)
+        {
+            vfxGo = Instantiate(shieldVfxPrefab.gameObject, transform);
+            _shieldVfxInstance = vfxGo.GetComponent<ParticleSystem>();
+        }
+        else
+        {
+            vfxGo = new GameObject("ShieldVFX");
+            vfxGo.transform.SetParent(transform, false);
+            vfxGo.transform.localPosition = Vector3.up * 1.2f;
+            _shieldVfxInstance = vfxGo.AddComponent<ParticleSystem>();
+        }
+
+        if (_shieldVfxInstance == null) return;
+
+        var main = _shieldVfxInstance.main;
+        main.loop = true;
+        main.prewarm = false;
+        main.startLifetime = 0.8f;
+        main.startSpeed = 1.3f;
+        main.startSize = 0.25f;
+        main.startColor = new Color(0.2f, 0.8f, 1f, 0.8f);
+
+        var emission = _shieldVfxInstance.emission;
+        emission.enabled = true;
+        emission.rateOverTime = 12f;
+
+        var shape = _shieldVfxInstance.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.25f;
+
+        var renderer = _shieldVfxInstance.GetComponent<ParticleSystemRenderer>();
+        if (renderer != null)
+        {
+            var mat = new Material(Shader.Find("Sprites/Default"));
+            mat.color = new Color(0.2f, 0.8f, 1f, 0.8f);
+            renderer.material = mat;
+        }
+
+        _shieldVfxInstance.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        _shieldVfxInstance.gameObject.SetActive(false);
     }
 
     /// <summary>
