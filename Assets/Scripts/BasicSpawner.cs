@@ -498,6 +498,7 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         if (GameManager.Instance != null &&
             GameManager.Instance.CurrentState == GameState.Board)
         {
+            yield return null;
             GameManager.Instance.RestoreBoardItems();
         }
 

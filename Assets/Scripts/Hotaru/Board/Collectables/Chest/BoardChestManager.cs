@@ -22,7 +22,8 @@ public class BoardChestManager : NetworkBehaviour
 
     private Chest interactionChest;
 
-    private const int CHEST_KEY_COST = 10;
+    private const int CHEST_KEY_COST = 5;
+    private bool isOpeningChestInProgress = false;
 
     private PlayerItemInventory currentInventory;
 
@@ -206,6 +207,12 @@ public class BoardChestManager : NetworkBehaviour
 
     public bool TryOpenChest(int playerId, int nodeId)
     {
+        if (isOpeningChestInProgress)
+        {
+            Debug.Log("[Chest] Chest opening already in progress.");
+            return false;
+        }
+
         interactionChest = null;
 
         foreach (Chest chest in spawnedChests)
@@ -226,6 +233,13 @@ public class BoardChestManager : NetworkBehaviour
             return false;
         }
 
+        if (interactionChest.IsOpened)
+        {
+            Debug.Log("[Chest] This chest is already opened.");
+            EndInteraction();
+            return false;
+        }
+
         PlayerItemInventory inventory =
             PlayerItemInventory.GetForPlayer(playerId);
 
@@ -236,27 +250,17 @@ public class BoardChestManager : NetworkBehaviour
             return false;
         }
 
+        IsInteractionActive = true;
+        RPC_ShowChestUI(playerId, inventory.GetKeyCount());
+
         if (inventory.GetKeyCount() < CHEST_KEY_COST)
         {
-            IsInteractionActive = true;
-
-            Debug.Log($"ChestUI.Instance = {ChestUI.Instance}");
-
-            RPC_ShowChestUI(playerId, inventory.GetKeyCount());
-
             Debug.Log($"[Chest] Player {playerId} needs {CHEST_KEY_COST} keys.");
-
             return true;
         }
 
-        IsInteractionActive = true;
-
-        RPC_ShowChestUI(playerId, inventory.GetKeyCount());
-
         Debug.Log($"[Chest] Player {playerId} can open the Chest.");
-
         return true;
-        
     }
 
     private BoardNode GetRandomSpawnNode()
@@ -279,6 +283,7 @@ public class BoardChestManager : NetworkBehaviour
     public void EndInteraction()
     {
         IsInteractionActive = false;
+        isOpeningChestInProgress = false;
 
         RPC_HideChestUI();
 
@@ -288,25 +293,17 @@ public class BoardChestManager : NetworkBehaviour
     
     public void OnOpenButtonPressed()
     {
+        if (isOpeningChestInProgress)
+        {
+            Debug.Log("[Chest] Open request ignored because chest opening is already in progress.");
+            return;
+        }
+
         if (currentInventory == null)
         {
             Debug.LogError("[Chest] Inventory NULL");
             return;
         }
-
-        if (!currentInventory.ConsumeKey(CHEST_KEY_COST))
-        {
-            Debug.Log("[Chest] Not enough Keys!");
-
-            // Giữ UI mở.
-            RPC_ShowChestUI(
-                currentInventory.Object.InputAuthority.PlayerId,
-                currentInventory.GetKeyCount());
-
-            return;
-        }
-
-        Debug.Log("[Chest] Keys Consumed Successfully!");
 
         if (interactionChest == null)
         {
@@ -315,7 +312,29 @@ public class BoardChestManager : NetworkBehaviour
             return;
         }
 
+        if (interactionChest.IsOpened)
+        {
+            Debug.Log("[Chest] Chest already opened.");
+            EndInteraction();
+            return;
+        }
+
+        if (!currentInventory.ConsumeKey(CHEST_KEY_COST))
+        {
+            Debug.Log("[Chest] Not enough Keys!");
+
+            RPC_ShowChestUI(
+                currentInventory.Object.InputAuthority.PlayerId,
+                currentInventory.GetKeyCount());
+
+            return;
+        }
+
+        isOpeningChestInProgress = true;
+        Debug.Log("[Chest] Keys Consumed Successfully!");
+
         interactionChest.Open();
+        interactionChest.MarkOpened();
 
         currentInventory.AddChest();
 
@@ -339,6 +358,6 @@ public class BoardChestManager : NetworkBehaviour
         SaveChest();
 
         EndInteraction();
-            }
+    }
 
 }

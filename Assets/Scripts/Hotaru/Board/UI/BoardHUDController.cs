@@ -60,11 +60,14 @@ public class BoardHUDController : MonoBehaviour
 
     public string GetPlayerName(int playerId)
     {
+        if (_nameCache.TryGetValue(playerId, out var cachedName) && !string.IsNullOrWhiteSpace(cachedName))
+            return cachedName;
+
         var all = Object.FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
 
         foreach (var p in all)
         {
-            if (p.Object == null)
+            if (p?.Object == null)
                 continue;
 
             if (p.Object.InputAuthority.PlayerId != playerId)
@@ -73,9 +76,14 @@ public class BoardHUDController : MonoBehaviour
             string playerName = p.PlayerName.ToString();
 
             if (!string.IsNullOrWhiteSpace(playerName))
+            {
+                _nameCache[playerId] = playerName;
                 return playerName;
+            }
 
-            return $"Player {playerId}";
+            playerName = $"Player {playerId}";
+            _nameCache[playerId] = playerName;
+            return playerName;
         }
 
         return $"Player {playerId}";
@@ -83,6 +91,23 @@ public class BoardHUDController : MonoBehaviour
 
     public void RefreshPlayerNames()
     {
+        _nameCache.Clear();
+
+        var all = Object.FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+        foreach (var p in all)
+        {
+            if (p?.Object == null)
+                continue;
+
+            int pid = p.Object.InputAuthority.PlayerId;
+            string playerName = p.PlayerName.ToString();
+
+            if (string.IsNullOrWhiteSpace(playerName))
+                playerName = $"Player {pid}";
+
+            _nameCache[pid] = playerName;
+        }
+
         playerRankPanel?.Refresh();
     }
 
