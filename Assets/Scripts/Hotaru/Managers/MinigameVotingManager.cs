@@ -126,11 +126,110 @@ public class MinigameVotingManager : NetworkBehaviour
         return actualIndex;
     }
 
+    public int GetAvailableIndexByActualIndex(int actualIndex)
+    {
+        if (!IsReady) return InvalidIndex;
+        if (actualIndex < 0 || actualIndex >= allMinigames.Count) return InvalidIndex;
+
+        for (int i = 0; i < AvailableCount; i++)
+        {
+            if (AvailableMinigameIndices.Get(i) == actualIndex)
+                return i;
+        }
+
+        return InvalidIndex;
+    }
+
     public MinigameData GetMinigameByActualIndex(int actualIndex)
     {
         if (!IsReady) return null;
         if (actualIndex < 0 || actualIndex >= allMinigames.Count) return null;
         return allMinigames[actualIndex];
+    }
+
+    public void MarkMinigamePlayedByActualIndex(int actualIndex)
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[MinigameVotingManager] Only Host can mark minigame as played");
+            return;
+        }
+
+        if (!IsReady)
+        {
+            Debug.LogWarning("[MinigameVotingManager] Cannot mark played - not spawned yet");
+            return;
+        }
+
+        if (actualIndex < 0 || actualIndex >= allMinigames.Count)
+        {
+            Debug.LogWarning($"[MinigameVotingManager] Invalid actual index: {actualIndex}");
+            return;
+        }
+
+        if (IsMinigamePlayed(actualIndex))
+        {
+            Debug.Log($"[MinigameVotingManager] Minigame {allMinigames[actualIndex].name} is already marked played; keeping cooldown");
+        }
+
+        EnsureCooldownArray();
+
+        for (int i = 0; i < allMinigames.Count; i++)
+        {
+            if (minigameCooldowns[i] > 0)
+            {
+                minigameCooldowns[i] = Mathf.Max(0, minigameCooldowns[i] - 1);
+            }
+        }
+
+        int cooldownToApply = Mathf.Max(0, cooldownRoundsAfterPlay);
+        minigameCooldowns[actualIndex] = cooldownToApply;
+
+        bool alreadyTracked = false;
+        for (int i = 0; i < PlayedCount; i++)
+        {
+            if (PlayedMinigameIndices.Get(i) == actualIndex)
+            {
+                alreadyTracked = true;
+                break;
+            }
+        }
+
+        if (!alreadyTracked && PlayedCount < PlayedMinigameIndices.Length)
+        {
+            PlayedMinigameIndices.Set(PlayedCount, actualIndex);
+            PlayedCount++;
+        }
+
+        playedMinigameSO.Add(allMinigames[actualIndex]);
+        Debug.Log($"[MinigameVotingManager] Marked minigame {allMinigames[actualIndex].name} as played. Cooldown: {cooldownToApply} rounds");
+    }
+
+    public int GetRandomEligibleActualMinigameIndexExcluding(HashSet<int> excludeActualIndices)
+    {
+        if (!IsReady) return InvalidIndex;
+
+        EnsureCooldownArray();
+        List<int> eligibleIndices = new List<int>();
+
+        for (int i = 0; i < allMinigames.Count; i++)
+        {
+            if (excludeActualIndices != null && excludeActualIndices.Contains(i))
+                continue;
+
+            if (IsMinigamePlayed(i))
+                continue;
+
+            if (i < minigameCooldowns.Length && minigameCooldowns[i] <= 0)
+            {
+                eligibleIndices.Add(i);
+            }
+        }
+
+        if (eligibleIndices.Count == 0)
+            return InvalidIndex;
+
+        return eligibleIndices[UnityEngine.Random.Range(0, eligibleIndices.Count)];
     }
 
     public void MarkMinigamePlayed(int availableIndex)
@@ -191,12 +290,11 @@ public class MinigameVotingManager : NetworkBehaviour
 
         if (candidateIndices.Count == 0)
         {
-            Debug.LogWarning("[MinigameVotingManager] No minigames available for voting; falling back to all minigames");
-            candidateIndices = new List<int>();
-            for (int i = 0; i < allMinigames.Count; i++)
-            {
-                candidateIndices.Add(i);
-            }
+            Debug.LogWarning("[MinigameVotingManager] No unplayed minigames available for voting. Clearing vote list permanently.");
+            ClearAvailableMinigameIndices();
+            AvailableCount = 0;
+            AvailableListVersion++;
+            return;
         }
 
         if (shuffleMinigames)
@@ -301,7 +399,13 @@ public class MinigameVotingManager : NetworkBehaviour
 
         for (int i = 0; i < allMinigames.Count; i++)
         {
-            if (minigameCooldowns[i] <= 0)
+            if (IsMinigamePlayed(i))
+            {
+                continue;
+            }
+
+            bool isBlocked = minigameCooldowns[i] > 0;
+            if (!isBlocked)
             {
                 eligibleIndices.Add(i);
             }

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,7 +18,13 @@ public class MinigameTieBreakerUI : MonoBehaviour
     [SerializeField] private float highlightInterval = 0.1f;
     [SerializeField] private float spinDuration = 2.2f;
     [SerializeField] private float wheelSlotAngle = 60f;
+    [SerializeField] private float wheelArrowOffsetAngle = 0f;
     [SerializeField] private RectTransform wheelRoot;
+    [SerializeField] private RectTransform arrowRoot;
+
+    [Header("Sprite Settings")]
+    [SerializeField] private bool useOverrideSprites = false;
+    [SerializeField] private Sprite[] overrideSprites;
 
     private Coroutine spinCoroutine;
     private bool subscribed;
@@ -113,12 +120,19 @@ public class MinigameTieBreakerUI : MonoBehaviour
 
             int slotCandidateIndex = wheelOrder[i];
             MinigameData data = MinigameVotingManager.Instance != null
-                ? MinigameVotingManager.Instance.GetMinigameByAvailableIndex(slotCandidateIndex)
+                ? MinigameVotingManager.Instance.GetMinigameByActualIndex(slotCandidateIndex)
                 : null;
 
             if (candidateIcons[i] != null)
             {
-                candidateIcons[i].sprite = data != null ? data.icon : null;
+                if (useOverrideSprites && overrideSprites != null && slotCandidateIndex >= 0 && slotCandidateIndex < overrideSprites.Length && overrideSprites[slotCandidateIndex] != null)
+                {
+                    candidateIcons[i].sprite = overrideSprites[slotCandidateIndex];
+                }
+                else
+                {
+                    candidateIcons[i].sprite = data != null ? data.icon : null;
+                }
             }
 
         }
@@ -127,6 +141,20 @@ public class MinigameTieBreakerUI : MonoBehaviour
         {
             statusText.text = "Selecting...";
         }
+    }
+
+    private Sprite[] GetOrderedSprites(Sprite[] sourceSprites, int count)
+    {
+        if (sourceSprites == null || sourceSprites.Length == 0)
+            return null;
+
+        Sprite[] result = new Sprite[count];
+        for (int i = 0; i < count; i++)
+        {
+            result[i] = sourceSprites[i % sourceSprites.Length];
+        }
+
+        return result;
     }
 
     private IEnumerator RunSpin(int[] candidateIndices, int winnerIndex, float delayBeforeSpin)
@@ -144,10 +172,28 @@ public class MinigameTieBreakerUI : MonoBehaviour
 
         int[] wheelOrder = BuildWheelOrder(candidateIndices);
         int winnerSlot = GetWinnerSlot(wheelOrder, winnerIndex);
-        float targetAngle = -(winnerSlot * wheelSlotAngle);
+        if (winnerSlot < 0)
+        {
+            winnerSlot = 0;
+            Debug.LogWarning($"[MinigameTieBreakerUI] Winner index {winnerIndex} not found in wheel order; falling back to slot 0.");
+        }
+
+        int resolvedWinnerIndex = wheelOrder[winnerSlot];
         float extraSpin = 1080f + Random.Range(0f, 360f);
         float startAngle = wheelRoot != null ? wheelRoot.localEulerAngles.z : 0f;
-        float targetRotation = startAngle + extraSpin + (wheelSlotAngle * 0.5f) + (winnerSlot * wheelSlotAngle);
+
+        float arrowAngle = 90f;
+        if (arrowRoot != null && wheelRoot != null)
+        {
+            Vector3 arrowVector = arrowRoot.position - wheelRoot.position;
+            arrowAngle = Mathf.Atan2(arrowVector.y, arrowVector.x) * Mathf.Rad2Deg;
+            Debug.Log($"[MinigameTieBreakerUI] arrowVector={arrowVector} arrowAngle={arrowAngle:F2} offset={wheelArrowOffsetAngle}");
+        }
+
+        float targetDelta = Mathf.DeltaAngle(0f, arrowAngle + wheelArrowOffsetAngle);
+        float targetRotation = startAngle + extraSpin + targetDelta;
+
+        Debug.Log($"[MinigameTieBreakerUI] startAngle={startAngle:F2} winnerSlot={winnerSlot} resolvedWinner={resolvedWinnerIndex} arrowAngle={arrowAngle:F2} targetDelta={targetDelta:F2} targetRotation={targetRotation:F2}");
 
         float elapsed = 0f;
         while (elapsed < spinDuration)
@@ -167,11 +213,45 @@ public class MinigameTieBreakerUI : MonoBehaviour
 
         if (wheelRoot != null)
         {
-            wheelRoot.localRotation = Quaternion.Euler(0f, 0f, targetRotation + targetAngle);
+            wheelRoot.localRotation = Quaternion.Euler(0f, 0f, targetRotation);
         }
 
-        HighlightSlot(winnerSlot, true);
-        ShowWinner(winnerIndex);
+        // Actual winner must be determined by the icon physically under the arrow, not by the preselected winner index.
+        int actualSlotUnderArrow = winnerSlot;
+        float bestDelta = float.MaxValue;
+        if (candidateIcons != null && wheelRoot != null)
+        {
+            Vector3 wheelWorldPos = wheelRoot.position;
+            for (int i = 0; i < candidateIcons.Length; i++)
+            {
+                if (candidateIcons[i] == null)
+                    continue;
+
+                Vector3 iconWorldPos = candidateIcons[i].rectTransform.position;
+                Vector2 vec = new Vector2(iconWorldPos.x - wheelWorldPos.x, iconWorldPos.y - wheelWorldPos.y);
+                float iconAngle = Mathf.Atan2(vec.y, vec.x) * Mathf.Rad2Deg;
+                float delta = Mathf.Abs(Mathf.DeltaAngle(iconAngle, arrowAngle + wheelArrowOffsetAngle));
+                Debug.Log($"[MinigameTieBreakerUI] slotCheck[{i}] iconAngle={iconAngle:F2} delta={delta:F2} wheelOrderVal={wheelOrder[i]}");
+
+                if (delta < bestDelta)
+                {
+                    bestDelta = delta;
+                    actualSlotUnderArrow = i;
+                }
+            }
+        }
+
+        int finalResolvedWinner = wheelOrder[actualSlotUnderArrow];
+        Debug.Log($"[MinigameTieBreakerUI] final winner slot={actualSlotUnderArrow} final winner actualIndex={finalResolvedWinner}");
+
+        HighlightSlot(actualSlotUnderArrow, true);
+        ShowWinner(finalResolvedWinner);
+
+        if (VotingManager.Instance != null && VotingManager.Instance.IsReady)
+        {
+            VotingManager.Instance.ConfirmTieBreakResult(finalResolvedWinner);
+        }
+
         spinCoroutine = null;
     }
 
@@ -184,28 +264,9 @@ public class MinigameTieBreakerUI : MonoBehaviour
             return wheelOrder;
         }
 
-        int candidateCount = candidateIndices.Length;
-
-        if (candidateCount == 2)
+        for (int i = 0; i < wheelOrder.Length; i++)
         {
-            for (int i = 0; i < wheelOrder.Length; i++)
-            {
-                wheelOrder[i] = candidateIndices[i % 2];
-            }
-        }
-        else if (candidateCount == 3)
-        {
-            for (int i = 0; i < wheelOrder.Length; i++)
-            {
-                wheelOrder[i] = candidateIndices[i % 3];
-            }
-        }
-        else
-        {
-            for (int i = 0; i < wheelOrder.Length; i++)
-            {
-                wheelOrder[i] = candidateIndices[i % candidateCount];
-            }
+            wheelOrder[i] = candidateIndices[i % candidateIndices.Length];
         }
 
         return wheelOrder;
@@ -241,7 +302,7 @@ public class MinigameTieBreakerUI : MonoBehaviour
     private void ShowWinner(int winnerIndex)
     {
         MinigameData winnerData = MinigameVotingManager.Instance != null
-            ? MinigameVotingManager.Instance.GetMinigameByAvailableIndex(winnerIndex)
+            ? MinigameVotingManager.Instance.GetMinigameByActualIndex(winnerIndex)
             : null;
 
         if (statusText != null)

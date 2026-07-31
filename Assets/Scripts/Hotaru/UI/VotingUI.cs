@@ -262,17 +262,33 @@ public class VotingUI : MonoBehaviour
 
         if (statusText != null)
         {
-            int winner = VotingManager.Instance?.WinnerIndex ?? 0;
+            int winnerActualIndex = VotingManager.Instance != null ? VotingManager.Instance.WinnerIndex : -1;
 
-            string winnerName = $"Minigame #{winner + 1}";
-            if (MinigameVotingManager.Instance != null)
+            string winnerName = $"Minigame #{winnerActualIndex + 1}";
+            if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
             {
-                var minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(winner);
-                if (minigameData != null)
+                if (winnerActualIndex >= 0)
                 {
-                    winnerName = minigameData.minigameName;
+                    var minigameData = MinigameVotingManager.Instance.GetMinigameByActualIndex(winnerActualIndex);
+                    if (minigameData != null)
+                    {
+                        winnerName = minigameData.minigameName;
+                    }
+                    else
+                    {
+                        int availableIndex = MinigameVotingManager.Instance.GetAvailableIndexByActualIndex(winnerActualIndex);
+                        if (availableIndex >= 0)
+                        {
+                            var fallbackData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(availableIndex);
+                            if (fallbackData != null)
+                            {
+                                winnerName = fallbackData.minigameName;
+                            }
+                        }
+                    }
                 }
             }
+
             statusText.text = $"Starting: {winnerName}!";
         }
 

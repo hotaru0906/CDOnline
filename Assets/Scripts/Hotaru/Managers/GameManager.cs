@@ -1169,60 +1169,70 @@ public class GameManager : NetworkBehaviour
             return;
         }
 
-        MinigameData minigameData = null;
-        int actualMinigameIndex = -1;
-
-        // Ưu tiên lấy minigame từ MinigameVotingManager (đồng bộ với VotingManager)
+        int resolvedActualIndex = minigameIndex;
         if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
         {
-            int availableCount = MinigameVotingManager.Instance.GetAvailableMinigameCount();
-            if (minigameIndex < 0 || minigameIndex >= availableCount)
+            int actualFromAvailable = MinigameVotingManager.Instance.GetActualIndexByAvailableIndex(minigameIndex);
+            if (actualFromAvailable >= 0)
             {
-                Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}, AvailableCount: {availableCount}");
+                resolvedActualIndex = actualFromAvailable;
+            }
+        }
+
+        StartMinigameActual(resolvedActualIndex);
+    }
+
+    public void StartMinigameActual(int actualMinigameIndex)
+    {
+        if (!HasStateAuthority)
+        {
+            Debug.LogWarning("[GameManager] Only Host can call StartMinigameActual()");
+            return;
+        }
+
+        MinigameData minigameData = null;
+
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+        {
+            if (actualMinigameIndex < 0 || actualMinigameIndex >= MinigameVotingManager.Instance.TotalMinigameCount)
+            {
+                Debug.LogError($"[GameManager] Invalid actual minigame index: {actualMinigameIndex}");
                 return;
             }
 
-            minigameData = MinigameVotingManager.Instance.GetMinigameByAvailableIndex(minigameIndex);
-            actualMinigameIndex = MinigameVotingManager.Instance.GetActualIndexByAvailableIndex(minigameIndex);
+            minigameData = MinigameVotingManager.Instance.GetMinigameByActualIndex(actualMinigameIndex);
+            CurrentMinigameActualIndex = actualMinigameIndex;
+            CurrentMinigameIndex = MinigameVotingManager.Instance.GetAvailableIndexByActualIndex(actualMinigameIndex);
+
             if (minigameData == null)
             {
-                Debug.LogError($"[GameManager] Failed to get minigame data for index: {minigameIndex}");
+                Debug.LogError($"[GameManager] Failed to get minigame data for actual index: {actualMinigameIndex}");
                 return;
             }
 
-            if (actualMinigameIndex < 0)
-            {
-                Debug.LogError($"[GameManager] Failed to resolve actual minigame index for available index: {minigameIndex}");
-                return;
-            }
-
-            Debug.Log($"[GameManager] Starting minigame #{minigameIndex}: {minigameData.minigameName} (from MinigameVotingManager)");
-
-            // Đánh dấu minigame đã được chơi
-            MinigameVotingManager.Instance.MarkMinigamePlayed(minigameIndex);
+            Debug.Log($"[GameManager] Starting actual minigame #{actualMinigameIndex}: {minigameData.minigameName} (from MinigameVotingManager actual index)");
+            MinigameVotingManager.Instance.MarkMinigamePlayedByActualIndex(actualMinigameIndex);
         }
         else
         {
-            // Fallback: sử dụng availableMinigames array
             if (availableMinigames == null)
             {
                 Debug.LogError("[GameManager] availableMinigames is NULL and MinigameVotingManager not ready!");
                 return;
             }
 
-            if (minigameIndex < 0 || minigameIndex >= availableMinigames.Length)
+            if (actualMinigameIndex < 0 || actualMinigameIndex >= availableMinigames.Length)
             {
-                Debug.LogError($"[GameManager] Invalid minigame index: {minigameIndex}, availableMinigames.Length: {availableMinigames.Length}");
+                Debug.LogError($"[GameManager] Invalid minigame index: {actualMinigameIndex}, availableMinigames.Length: {availableMinigames.Length}");
                 return;
             }
 
-            minigameData = availableMinigames[minigameIndex];
-            actualMinigameIndex = minigameIndex;
-            Debug.Log($"[GameManager] Starting minigame #{minigameIndex}: {minigameData.minigameName} (from availableMinigames)");
+            minigameData = availableMinigames[actualMinigameIndex];
+            CurrentMinigameIndex = actualMinigameIndex;
+            CurrentMinigameActualIndex = actualMinigameIndex;
+            Debug.Log($"[GameManager] Starting fallback minigame #{actualMinigameIndex}: {minigameData.minigameName} (from availableMinigames)");
         }
 
-        CurrentMinigameIndex = minigameIndex;
-        CurrentMinigameActualIndex = actualMinigameIndex;
         CurrentRound++;
 
         Debug.Log($"[GameManager] Selected minigame - availableIndex: {CurrentMinigameIndex}, actualIndex: {CurrentMinigameActualIndex}");

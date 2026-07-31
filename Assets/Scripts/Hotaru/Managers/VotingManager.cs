@@ -53,6 +53,7 @@ public class VotingManager : NetworkBehaviour
     [SerializeField] private bool instantEndWhenAllVoted = false; // End ngay khi tất cả vote
     [SerializeField] private float tieBreakUiDelay = 2f; // Chờ 2s sau khi hiện tổng vote rồi mới mở wheel
     [SerializeField] private float tieBreakSpinDuration = 2.2f; // Thời gian wheel quay
+    [SerializeField] private float tieBreakResultHoldDuration = 1.5f; // Giữ màn hình sau khi wheel dừng
     #endregion
 
     #region Events
@@ -70,6 +71,7 @@ public class VotingManager : NetworkBehaviour
     private bool hasVoted = false;
     private int localVoteIndex = -1;
     private int pendingTieWinnerIndex = -1;
+    private int confirmedTieWinnerIndex = -1;
     private bool hasReachedAllVotedQuickEnd = false;
     #endregion
 
@@ -239,10 +241,22 @@ public class VotingManager : NetworkBehaviour
         List<int> topIndices = GetTopVotedIndices();
         if (topIndices.Count <= 1)
         {
-            WinnerIndex = topIndices.Count == 1 ? topIndices[0] : 0;
-            Debug.Log($"[VotingManager] Winner: Minigame #{WinnerIndex}");
+            int selectedAvailableWinner = topIndices.Count == 1 ? topIndices[0] : 0;
+            int actualWinner = selectedAvailableWinner;
+
+            if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+            {
+                actualWinner = MinigameVotingManager.Instance.GetActualIndexByAvailableIndex(selectedAvailableWinner);
+                if (actualWinner < 0)
+                {
+                    actualWinner = selectedAvailableWinner;
+                }
+            }
+
+            WinnerIndex = actualWinner;
+            Debug.Log($"[VotingManager] Winner availableIndex={selectedAvailableWinner} actualIndex={WinnerIndex}");
             RPC_OnVotingEnded(WinnerIndex);
-            StartWinningMinigame(WinnerIndex);
+            StartWinningMinigame(WinnerIndex, true);
         }
         else
         {
@@ -439,14 +453,48 @@ public class VotingManager : NetworkBehaviour
         if (!HasStateAuthority || tiedIndices == null || tiedIndices.Count == 0)
             return;
 
-        // TODO: replace this random tie-break fallback with a configurable rule later.
-        pendingTieWinnerIndex = tiedIndices[UnityEngine.Random.Range(0, tiedIndices.Count)];
+        if (MinigameVotingManager.Instance == null || !MinigameVotingManager.Instance.IsReady)
+        {
+            Debug.LogWarning("[VotingManager] Cannot start tie-break because MinigameVotingManager is not ready");
+            return;
+        }
 
-        int candidateCount = Mathf.Min(tiedIndices.Count, 10);
+        List<int> actualCandidates = new List<int>();
+        for (int i = 0; i < tiedIndices.Count; i++)
+        {
+            int actualIndex = MinigameVotingManager.Instance.GetActualIndexByAvailableIndex(tiedIndices[i]);
+            if (actualIndex >= 0 && !actualCandidates.Contains(actualIndex))
+            {
+                actualCandidates.Add(actualIndex);
+            }
+        }
+
+        const int wheelSlotCount = 6;
+        HashSet<int> excludeActual = new HashSet<int>(actualCandidates);
+        while (actualCandidates.Count < wheelSlotCount)
+        {
+            int extraActual = MinigameVotingManager.Instance.GetRandomEligibleActualMinigameIndexExcluding(excludeActual);
+            if (extraActual < 0)
+                break;
+
+            actualCandidates.Add(extraActual);
+            excludeActual.Add(extraActual);
+        }
+
+        if (actualCandidates.Count == 0)
+        {
+            Debug.LogWarning("[VotingManager] No actual candidates available for tie-break");
+            return;
+        }
+
+        confirmedTieWinnerIndex = -1;
+        pendingTieWinnerIndex = actualCandidates[UnityEngine.Random.Range(0, actualCandidates.Count)];
+
+        int candidateCount = Mathf.Min(actualCandidates.Count, 10);
         int[] candidates = new int[candidateCount];
         for (int i = 0; i < candidateCount; i++)
         {
-            candidates[i] = tiedIndices[i];
+            candidates[i] = actualCandidates[i];
         }
 
         Debug.Log($"[VotingManager] Tie detected between {candidateCount} options. Opening tie-break UI after {tieBreakUiDelay}s. Winner preselected: #{pendingTieWinnerIndex}");
@@ -456,17 +504,24 @@ public class VotingManager : NetworkBehaviour
 
     private IEnumerator CompleteTieBreakAfterDelay()
     {
-        yield return new WaitForSeconds(tieBreakUiDelay + tieBreakSpinDuration);
+        yield return new WaitForSeconds(tieBreakUiDelay + tieBreakSpinDuration + tieBreakResultHoldDuration);
 
         if (!HasStateAuthority)
             yield break;
 
-        WinnerIndex = pendingTieWinnerIndex >= 0 ? pendingTieWinnerIndex : CalculateWinner();
-        Debug.Log($"[VotingManager] Tie-break completed. Winner: Minigame #{WinnerIndex}");
+        int finalWinner = confirmedTieWinnerIndex >= 0 ? confirmedTieWinnerIndex : pendingTieWinnerIndex;
+        WinnerIndex = finalWinner >= 0 ? finalWinner : CalculateWinner();
+        string winnerName = "(unknown)";
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+        {
+            var md = MinigameVotingManager.Instance.GetMinigameByActualIndex(WinnerIndex);
+            if (md != null) winnerName = md.minigameName;
+        }
+        Debug.Log($"[VotingManager] Tie-break completed. Winner actualIndex: {WinnerIndex} name: {winnerName}");
 
         RPC_OnTieBreakEnded(WinnerIndex);
         RPC_OnVotingEnded(WinnerIndex);
-        StartWinningMinigame(WinnerIndex);
+        StartWinningMinigame(WinnerIndex, true);
     }
 
     private void RevealVoteCounts()
@@ -481,12 +536,66 @@ public class VotingManager : NetworkBehaviour
         }
     }
 
-    private void StartWinningMinigame(int winnerIndex)
+    public void ConfirmTieBreakResult(int winnerIndex)
+    {
+        if (MinigameVotingManager.Instance == null || !MinigameVotingManager.Instance.IsReady)
+            return;
+
+        if (winnerIndex < 0 || winnerIndex >= MinigameVotingManager.Instance.TotalMinigameCount)
+        {
+            Debug.LogWarning($"[VotingManager] ConfirmTieBreakResult received invalid index: {winnerIndex}");
+            return;
+        }
+
+        if (HasStateAuthority)
+        {
+            SetConfirmedTieWinner(winnerIndex);
+        }
+        else
+        {
+            RPC_ConfirmTieBreakResult(winnerIndex);
+        }
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_ConfirmTieBreakResult(int winnerIndex)
+    {
+        SetConfirmedTieWinner(winnerIndex);
+    }
+
+    private void SetConfirmedTieWinner(int winnerIndex)
+    {
+        confirmedTieWinnerIndex = winnerIndex;
+        string name = "(unknown)";
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+        {
+            var md = MinigameVotingManager.Instance.GetMinigameByActualIndex(winnerIndex);
+            if (md != null) name = md.minigameName;
+        }
+        Debug.Log($"[VotingManager] Tie-break result confirmed by wheel: #{winnerIndex} name: {name}");
+    }
+
+    private void StartWinningMinigame(int winnerIndex, bool isActualIndex = false)
     {
         if (GameManager.Instance != null)
         {
-            Debug.Log($"[VotingManager] Calling GameManager.StartMinigame({winnerIndex})");
-            GameManager.Instance.StartMinigame(winnerIndex);
+            string name = "(unknown)";
+            if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+            {
+                var md = MinigameVotingManager.Instance.GetMinigameByActualIndex(winnerIndex);
+                if (md != null) name = md.minigameName;
+            }
+
+            if (isActualIndex)
+            {
+                Debug.Log($"[VotingManager] Calling GameManager.StartMinigameActual({winnerIndex}) name:{name}");
+                GameManager.Instance.StartMinigameActual(winnerIndex);
+            }
+            else
+            {
+                Debug.Log($"[VotingManager] Calling GameManager.StartMinigame({winnerIndex}) name:{name}");
+                GameManager.Instance.StartMinigame(winnerIndex);
+            }
         }
         else
         {
