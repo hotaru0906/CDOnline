@@ -21,21 +21,16 @@ public class MG3ItemPickup : NetworkBehaviour
         if (brawlData == null || brawlData.HasItem) return;
 
         IsPickedUp = true;
-        brawlData.PickupItem();
 
-        RPC_OnPickup(player.Object.InputAuthority);
+        MG3HammerManager.Instance.AssignHammer(player);
+
+        RPC_OnPickup();
         Runner.Despawn(Object);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnPickup(PlayerRef playerRef)
+    private void RPC_OnPickup()
     {
-        var playerObj = Runner.GetPlayerObject(playerRef);
-        if (playerObj != null && playerObj.TryGetComponent(out MG3PlayerBrawlData brawlData))
-        {
-            brawlData.PickupItem();
-        }
-
         if (pickupSound != null)
             AudioSource.PlayClipAtPoint(pickupSound, transform.position);
     }

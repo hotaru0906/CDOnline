@@ -602,4 +602,29 @@ public abstract class BaseMinigameController : NetworkBehaviour
         if (spawnPoints == null || spawnPoints.Length == 0) return Quaternion.identity;
         return spawnPoints[playerIndex % spawnPoints.Length].rotation;
     }
+
+    protected void RespawnPlayer(PlayerController player)
+    {
+        if (!HasStateAuthority || player == null)
+            return;
+
+        int playerIndex = player.Object.InputAuthority.PlayerId - 1;
+
+        Vector3 spawnPos = GetSpawnPoint(playerIndex);
+        Quaternion spawnRot = GetSpawnRotation(playerIndex);
+
+        player.Teleport(spawnPos);
+        player.transform.rotation = spawnRot;
+
+        player.ResetVelocity();
+        player.ForceIdle();
+
+        var mgData = player.GetComponent<PlayerMinigameData>();
+        if (mgData != null)
+        {
+            mgData.RespawnForMG3();
+        }
+
+        Debug.Log($"[{GetType().Name}] Respawn Player {player.Object.InputAuthority.PlayerId}");
+    }
 }
