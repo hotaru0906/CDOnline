@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using TMPro;
 
 public class BoardHUDController : MonoBehaviour
 {
@@ -10,6 +11,7 @@ public class BoardHUDController : MonoBehaviour
     [SerializeField] private BoardPlayerRankUI playerRankPanel;
     [SerializeField] private BoardInventoryUI inventoryPanel;
     [SerializeField] private BoardCardDisplayUI cardDisplay;
+    [SerializeField] private TextMeshProUGUI stealSelectionText;
 
     private readonly Dictionary<int, string> _nameCache = new();
 
@@ -56,6 +58,62 @@ public class BoardHUDController : MonoBehaviour
     {
         cardDisplay?.Show(effect);
         inventoryPanel?.OnItemUsed(playerId); // thêm dòng này
+    }
+
+    public void ShowStealSelectionPrompt(int stealerId, IReadOnlyList<int> eligibleTargets, int selectedIndex)
+    {
+        EnsureStealSelectionText();
+        if (stealSelectionText == null || eligibleTargets == null || eligibleTargets.Count == 0)
+        {
+            HideStealSelectionPrompt();
+            return;
+        }
+
+        if (selectedIndex < 0 || selectedIndex >= eligibleTargets.Count)
+            selectedIndex = 0;
+
+        string targetName = GetPlayerName(eligibleTargets[selectedIndex]);
+        stealSelectionText.text = $"STEAL TARGET: {targetName}\nA / D to change • Space to confirm";
+        stealSelectionText.gameObject.SetActive(true);
+    }
+
+    public void UpdateStealSelectionPrompt(IReadOnlyList<int> eligibleTargets, int selectedIndex)
+    {
+        ShowStealSelectionPrompt(-1, eligibleTargets, selectedIndex);
+    }
+
+    public void HideStealSelectionPrompt()
+    {
+        if (stealSelectionText != null)
+        {
+            stealSelectionText.text = string.Empty;
+            stealSelectionText.gameObject.SetActive(false);
+        }
+    }
+
+    private void EnsureStealSelectionText()
+    {
+        if (stealSelectionText != null) return;
+
+        Canvas canvas = GetComponentInChildren<Canvas>(true);
+        if (canvas == null) return;
+
+        GameObject go = new GameObject("StealSelectionText");
+        go.transform.SetParent(canvas.transform, false);
+
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 1f);
+        rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -70f);
+        rt.sizeDelta = new Vector2(460f, 80f);
+
+        stealSelectionText = go.AddComponent<TextMeshProUGUI>();
+        stealSelectionText.alignment = TextAlignmentOptions.Center;
+        stealSelectionText.fontSize = 26;
+        stealSelectionText.color = Color.white;
+        stealSelectionText.raycastTarget = false;
+        stealSelectionText.enableAutoSizing = false;
+        go.SetActive(false);
     }
 
     public string GetPlayerName(int playerId)

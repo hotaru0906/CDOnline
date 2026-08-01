@@ -12,6 +12,8 @@ GameObject:
   - component: {fileID: 6030537243144513163}
   - component: {fileID: 8638446979878994145}
   - component: {fileID: 3131073768867669211}
+  - component: {fileID: 7670923648926014042}
+  - component: {fileID: 2496885923838433525}
   m_Layer: 0
   m_Name: Jackpot Tile
   m_TagString: Untagged
@@ -112,6 +114,39 @@ MonoBehaviour:
   nextNodes:
   - {fileID: 0}
   isDeadEnd: 0
+--- !u!114 &7670923648926014042
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 467695070236190734}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 24b15a903e0a6f246af502d226b1c071, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  vfxPrefab: {fileID: 4793951186405698006}
+  vfxOffset: {x: 0, y: 0.2, z: 0}
+--- !u!114 &2496885923838433525
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 467695070236190734}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  SortKey: 3423542824
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 7670923648926014042}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1001 &8475418576909664141
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -134,19 +169,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2788996575757871298, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.5536225
+      value: 0.52816015
       objectReference: {fileID: 0}
     - target: {fileID: 2788996575757871298, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0.40315148
+      value: -0.24987322
       objectReference: {fileID: 0}
     - target: {fileID: 2788996575757871298, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0.5890462
+      value: -0.7335921
       objectReference: {fileID: 0}
     - target: {fileID: 2788996575757871298, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0.4289472
+      value: -0.3470633
       objectReference: {fileID: 0}
     - target: {fileID: 2864639187980444940, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalScale.x
@@ -334,19 +369,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7697983154718084285, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.5536225
+      value: 0.52816015
       objectReference: {fileID: 0}
     - target: {fileID: 7697983154718084285, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0.40315148
+      value: -0.24987322
       objectReference: {fileID: 0}
     - target: {fileID: 7697983154718084285, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0.5890462
+      value: -0.7335921
       objectReference: {fileID: 0}
     - target: {fileID: 7697983154718084285, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0.4289472
+      value: -0.3470633
       objectReference: {fileID: 0}
     - target: {fileID: 8078671463543389925, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
       propertyPath: m_LocalScale.x
@@ -369,6 +404,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
+--- !u!198 &4793951186405698006 stripped
+ParticleSystem:
+  m_CorrespondingSourceObject: {fileID: 3970263362309477979, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}
+  m_PrefabInstance: {fileID: 8475418576909664141}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &5007645531698245419 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3521823009625100454, guid: 762df867a2b2efc4c815bdb9e9e33718, type: 3}

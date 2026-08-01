@@ -3,11 +3,11 @@ using System.Collections;
 
 public class BoardIntroController : MonoBehaviour
 {
-    public static BoardIntroController Instance;
-
-    [Header("Camera")]
+    [Header("Camera References")]
     [SerializeField] private Camera introCamera;
     [SerializeField] private Camera mainCamera;
+    [SerializeField] private BoardSpectatorCameraController spectatorCameraController;
+    public static BoardIntroController Instance;
 
     [Header("Orbit")]
     [SerializeField] private float orbitRadius = 35f;
@@ -46,6 +46,7 @@ public class BoardIntroController : MonoBehaviour
     }
     public IEnumerator PlayIntro()
     {
+        spectatorCameraController?.SetIntroActive(true);
         introCamera.gameObject.SetActive(true);
         mainCamera.gameObject.SetActive(false);
 
@@ -62,6 +63,7 @@ public class BoardIntroController : MonoBehaviour
 
         introCamera.gameObject.SetActive(false);
         mainCamera.gameObject.SetActive(true);
+        spectatorCameraController?.SetIntroActive(false);
     }
 
     private IEnumerator OrbitAroundBoard()

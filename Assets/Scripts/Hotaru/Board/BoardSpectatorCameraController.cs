@@ -1,0 +1,261 @@
+using UnityEngine;
+
+public class BoardSpectatorCameraController : MonoBehaviour
+{
+    [Header("Dedicated Follow Camera")]
+    [SerializeField] private Camera followCamera;
+    [SerializeField] private Camera mainCamera;
+    [SerializeField] private KeyCode toggleKey = KeyCode.R;
+
+    [Header("View Settings")]
+    [SerializeField] private float cameraHeight = 12f;
+    [SerializeField] private float overheadAngle = 50f;
+    [SerializeField] private float cameraDistance = 8f;
+    [SerializeField] private float cameraZOffset = 10f;
+    [SerializeField] private float panSpeed = 3f;
+
+    [Header("Free Move")]
+    [SerializeField] private float freeMoveSpeed = 8f;
+    [SerializeField] private float maxX = 40f;
+    [SerializeField] private float minX = -40f;
+    [SerializeField] private float maxZ = 40f;
+    [SerializeField] private float minZ = -40f;
+    [SerializeField] private bool showGizmo = true;
+
+    private bool _isActive;
+    private BoardManager _boardManager;
+    private bool _introActive;
+    private Transform _currentTarget;
+    private Vector3 _desiredPosition;
+    private Vector3 _currentVelocity;
+    private Vector3 _initialPosition;
+    private Quaternion _initialRotation;
+
+    private void Awake()
+    {
+        _boardManager = FindFirstObjectByType<BoardManager>();
+        mainCamera = Camera.main;
+
+        if (followCamera == null)
+        {
+            followCamera = GetComponent<Camera>();
+        }
+
+        if (followCamera == null)
+        {
+            GameObject cameraGo = new GameObject("BoardSpectatorCamera");
+            cameraGo.transform.SetParent(transform, false);
+            followCamera = cameraGo.AddComponent<Camera>();
+            followCamera.clearFlags = CameraClearFlags.SolidColor;
+            followCamera.backgroundColor = Color.black;
+            followCamera.enabled = false;
+            followCamera.depth = 10;
+        }
+
+        if (followCamera != null)
+        {
+            followCamera.transform.localPosition = Vector3.zero;
+            followCamera.transform.localRotation = Quaternion.identity;
+            followCamera.enabled = false;
+        }
+
+        if (followCamera != null)
+        {
+            _initialPosition = followCamera.transform.position;
+            _initialRotation = followCamera.transform.rotation;
+        }
+
+        if (mainCamera == null)
+            mainCamera = followCamera;
+
+        if (_boardManager != null)
+            _boardManager.OnTurnStarted += OnTurnStarted;
+    }
+
+    private void OnDestroy()
+    {
+        if (_boardManager != null)
+            _boardManager.OnTurnStarted -= OnTurnStarted;
+    }
+
+    private void Start()
+    {
+        UpdateTargetFromBoard();
+    }
+
+    private void Update()
+    {
+        if (_introActive)
+            return;
+
+        if (Input.GetKeyDown(toggleKey))
+        {
+            Toggle();
+            return;
+        }
+
+        if (!_isActive || followCamera == null)
+            return;
+
+        HandleFreeMove();
+
+        if (_currentTarget == null)
+            UpdateTargetFromBoard();
+
+        if (_currentTarget != null)
+        {
+            _desiredPosition = CalculatePosition(_currentTarget.position);
+            followCamera.transform.position = Vector3.SmoothDamp(
+                followCamera.transform.position,
+                _desiredPosition,
+                ref _currentVelocity,
+                1f / panSpeed);
+
+            followCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
+        }
+    }
+
+    private void OnTurnStarted(int playerId)
+    {
+        if (!_isActive)
+            return;
+
+        UpdateTargetFromBoard(playerId);
+    }
+
+    public void Toggle()
+    {
+        SetActive(!_isActive);
+    }
+
+    public void SetActive(bool active)
+    {
+        _isActive = active;
+
+        if (followCamera != null)
+        {
+            followCamera.enabled = active;
+            followCamera.depth = 5;
+        }
+
+        if (mainCamera != null && mainCamera != followCamera)
+        {
+            mainCamera.enabled = !active;
+            mainCamera.depth = 0;
+        }
+
+        if (active)
+        {
+            UpdateTargetFromBoard();
+            if (_currentTarget != null)
+            {
+                followCamera.transform.position = CalculatePosition(_currentTarget.position);
+                followCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
+            }
+        }
+        else
+        {
+            if (followCamera != null)
+            {
+                followCamera.transform.position = _initialPosition;
+                followCamera.transform.rotation = _initialRotation;
+            }
+        }
+    }
+
+    public void SetIntroActive(bool active)
+    {
+        _introActive = active;
+
+        if (!active)
+        {
+            if (followCamera != null)
+                followCamera.enabled = _isActive;
+
+            if (mainCamera != null && mainCamera != followCamera)
+                mainCamera.enabled = !_isActive;
+        }
+        else
+        {
+            if (followCamera != null)
+                followCamera.enabled = false;
+
+            if (mainCamera != null && mainCamera != followCamera)
+                mainCamera.enabled = true;
+        }
+    }
+
+    private void HandleFreeMove()
+    {
+        if (followCamera == null)
+            return;
+
+        Vector3 move = Vector3.zero;
+        if (Input.GetKey(KeyCode.W)) move += Vector3.forward;
+        if (Input.GetKey(KeyCode.S)) move += Vector3.back;
+        if (Input.GetKey(KeyCode.A)) move += Vector3.left;
+        if (Input.GetKey(KeyCode.D)) move += Vector3.right;
+
+        if (move.sqrMagnitude > 0f)
+        {
+            move.Normalize();
+            Vector3 worldMove = followCamera.transform.TransformDirection(move);
+            worldMove.y = 0f;
+            worldMove.Normalize();
+            Vector3 newPos = followCamera.transform.position + worldMove * freeMoveSpeed * Time.deltaTime;
+            newPos.x = Mathf.Clamp(newPos.x, minX, maxX);
+            newPos.z = Mathf.Clamp(newPos.z, minZ, maxZ);
+            followCamera.transform.position = newPos;
+        }
+    }
+
+    private void UpdateTargetFromBoard(int? playerId = null)
+    {
+        if (_boardManager != null)
+        {
+            int targetPlayerId = playerId ?? _boardManager.CurrentPlayerID;
+            _currentTarget = FindTokenByPlayerId(targetPlayerId)?.transform;
+            return;
+        }
+
+        _currentTarget = null;
+    }
+
+    private BoardPlayerToken FindTokenByPlayerId(int playerId)
+    {
+        if (playerId < 0)
+            return null;
+
+        var allTokens = FindObjectsByType<BoardPlayerToken>(FindObjectsSortMode.None);
+        foreach (var token in allTokens)
+        {
+            if (token.ownerPlayerId == playerId)
+                return token;
+        }
+
+        return null;
+    }
+
+    private Vector3 CalculatePosition(Vector3 targetWorldPos)
+    {
+        return targetWorldPos + new Vector3(
+            0f,
+            cameraHeight,
+            -cameraDistance * Mathf.Cos(overheadAngle * Mathf.Deg2Rad) + cameraZOffset
+        );
+    }
+
+    private void OnDrawGizmos()
+    {
+        if (!showGizmo)
+            return;
+
+        Gizmos.color = new Color(0f, 1f, 0.6f, 0.25f);
+        Vector3 center = transform.position;
+        Vector3 size = new Vector3(maxX - minX, 0f, maxZ - minZ);
+        Gizmos.DrawCube(center, new Vector3(size.x, 0.01f, size.z));
+
+        Gizmos.color = Color.green;
+        Gizmos.DrawWireCube(center, new Vector3(size.x, 0.02f, size.z));
+    }
+}
