@@ -27,30 +27,39 @@ public class MG3PlayerBrawlData : NetworkBehaviour
     public void PickupItem()
     {
         if (!HasStateAuthority) return;
+
         HasItem = true;
+        RefreshItemVisual();
     }
 
     public void DropItem()
     {
         if (!HasStateAuthority) return;
+
         HasItem = false;
+        RefreshItemVisual();
     }
 
     private void OnHasItemChanged()
     {
+        RefreshItemVisual();
+    }
+
+    private void RefreshItemVisual()
+    {
+        foreach (var obj in itemInHandObjects)
+            if (obj != null)
+                obj.SetActive(false);
+
         var netData = GetComponent<PlayerNetworkData>();
         int characterIndex = netData != null ? netData.CharacterIndex : -1;
 
-        foreach (var obj in itemInHandObjects)
-            if (obj != null) obj.SetActive(false);
-
-        if (HasItem && characterIndex >= 0 && characterIndex < itemInHandObjects.Length)
+        if (HasItem &&
+            characterIndex >= 0 &&
+            characterIndex < itemInHandObjects.Length &&
+            itemInHandObjects[characterIndex] != null)
         {
-            if (itemInHandObjects[characterIndex] != null)
-                itemInHandObjects[characterIndex].SetActive(true);
+            itemInHandObjects[characterIndex].SetActive(true);
         }
-
-        Debug.Log($"[MG3PlayerBrawlData] OnHasItemChanged → HasItem={HasItem}, CharacterIndex={characterIndex}");
     }
-
 }

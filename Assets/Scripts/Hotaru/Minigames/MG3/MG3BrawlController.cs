@@ -14,10 +14,11 @@ public class MG3BrawlController : BaseMinigameController
 
         var allData = FindObjectsByType<PlayerMinigameData>(FindObjectsSortMode.None);
         foreach (var p in allData)
-            p.SetHP(100);  // ← đổi từ SetLives(startingLives)
+            p.ResetForNewRound(); // ← đổi từ SetLives(startingLives)
 
         foreach (var p in allData)
             p.OnPlayerEliminated += HandlePlayerEliminated;
+        MG3HammerManager.Instance?.StartHammerRound();
         MinigameHUDController.Instance?.RefreshPlayers();
         Debug.Log($"[MG3BrawlController] Game started — {allData.Length} players, 100 HP each");
     }
@@ -53,7 +54,10 @@ public class MG3BrawlController : BaseMinigameController
 
         if (attackerBrawl != null && attackerBrawl.HasItem)
         {
-            targetMgData.TakeDamage(20);
+            targetMgData.EliminateImmediately();
+
+            // Kết thúc lượt cầm búa
+            MG3HammerManager.Instance?.FinishHammerRound();
 
             RPC_OnHitWithItem(
                 attacker.Object.InputAuthority,

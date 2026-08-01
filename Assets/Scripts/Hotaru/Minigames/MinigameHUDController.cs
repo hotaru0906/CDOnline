@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using TMPro;
 
 public class MinigameHUDController : MonoBehaviour
 {
@@ -8,6 +9,7 @@ public class MinigameHUDController : MonoBehaviour
     [Header("Sub-panels")]
     [SerializeField] private MinigameTimeUI timePanel;
     [SerializeField] private MinigamePlayerRankUI playerRankPanel;
+    [SerializeField] private TMP_Text hammerTimerText;
 
     [Header("HUD Root")]
     [Tooltip("GameObject chứa toàn bộ HUD — ẩn trước khi game bắt đầu")]
@@ -30,6 +32,10 @@ public class MinigameHUDController : MonoBehaviour
         {
             Debug.Log("[HUD] Hide HUD");
             hudRoot.SetActive(false);
+        }
+        if (hammerTimerText != null)
+        {
+            hammerTimerText.enabled = false;
         }
         else
         {
@@ -118,5 +124,25 @@ public class MinigameHUDController : MonoBehaviour
     public void UpdatePlayerScore(int playerId, int score)
     {
         playerRankPanel?.UpdateScoreForPlayer(playerId, score);
+    }
+
+    public void ShowHammerTimer()
+    {
+        if (hammerTimerText != null)
+            hammerTimerText.enabled = true;
+    }
+
+    public void HideHammerTimer()
+    {
+        if (hammerTimerText != null)
+            hammerTimerText.enabled = false;
+    }
+
+    public void UpdateHammerTimer(float seconds)
+    {
+        if (hammerTimerText == null)
+            return;
+
+        hammerTimerText.text = Mathf.CeilToInt(seconds).ToString();
     }
 }

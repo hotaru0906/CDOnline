@@ -300,6 +300,23 @@ public class PlayerMinigameData : NetworkBehaviour
 
     public bool CanTakeDamage() => !IsInvincible && !IsDead && !IsEliminated;
 
+    public void RespawnForMG3()
+    {
+        if (!HasStateAuthority)
+            return;
+
+        IsDead = false;
+        IsEliminated = false;
+        IsInvincible = true;
+
+        InvincibilityTimer = TickTimer.CreateFromSeconds(Runner, invincibilityTime);
+
+        playerController?.SetFrozen(false);
+        playerController?.DeactivateRagdoll();
+
+        Debug.Log($"[PlayerMinigameData] MG3 Respawn P{Object.InputAuthority}");
+    }
+
     public void EliminateImmediately()
     {
         if (!HasStateAuthority || IsEliminated) return;
