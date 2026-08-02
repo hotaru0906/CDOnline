@@ -97,12 +97,12 @@ public class BoardSpectatorCameraController : MonoBehaviour
         if (!_isActive || followCamera == null)
             return;
 
-        HandleFreeMove();
+        bool isFreeMoving = HandleFreeMove();
 
         if (_currentTarget == null)
             UpdateTargetFromBoard();
 
-        if (_currentTarget != null)
+        if (!isFreeMoving && _currentTarget != null)
         {
             _desiredPosition = CalculatePosition(_currentTarget.position);
             followCamera.transform.position = Vector3.SmoothDamp(
@@ -110,9 +110,9 @@ public class BoardSpectatorCameraController : MonoBehaviour
                 _desiredPosition,
                 ref _currentVelocity,
                 1f / panSpeed);
-
-            followCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
         }
+
+        followCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
     }
 
     private void OnTurnStarted(int playerId)
@@ -185,28 +185,34 @@ public class BoardSpectatorCameraController : MonoBehaviour
         }
     }
 
-    private void HandleFreeMove()
+    private bool HandleFreeMove()
     {
         if (followCamera == null)
-            return;
+            return false;
 
         Vector3 move = Vector3.zero;
-        if (Input.GetKey(KeyCode.W)) move += Vector3.forward;
-        if (Input.GetKey(KeyCode.S)) move += Vector3.back;
-        if (Input.GetKey(KeyCode.A)) move += Vector3.left;
-        if (Input.GetKey(KeyCode.D)) move += Vector3.right;
+        bool hasInput = false;
 
-        if (move.sqrMagnitude > 0f)
-        {
-            move.Normalize();
-            Vector3 worldMove = followCamera.transform.TransformDirection(move);
-            worldMove.y = 0f;
-            worldMove.Normalize();
-            Vector3 newPos = followCamera.transform.position + worldMove * freeMoveSpeed * Time.deltaTime;
-            newPos.x = Mathf.Clamp(newPos.x, minX, maxX);
-            newPos.z = Mathf.Clamp(newPos.z, minZ, maxZ);
-            followCamera.transform.position = newPos;
-        }
+        if (Input.GetKey(KeyCode.W)) { move += Vector3.forward; hasInput = true; }
+        if (Input.GetKey(KeyCode.S)) { move += Vector3.back; hasInput = true; }
+        if (Input.GetKey(KeyCode.A)) { move += Vector3.left; hasInput = true; }
+        if (Input.GetKey(KeyCode.D)) { move += Vector3.right; hasInput = true; }
+
+        if (!hasInput)
+            return false;
+
+        move.Normalize();
+        Vector3 worldMove = followCamera.transform.TransformDirection(move);
+        worldMove.y = 0f;
+        if (worldMove.sqrMagnitude < 0.001f)
+            return false;
+
+        worldMove.Normalize();
+        Vector3 newPos = followCamera.transform.position + worldMove * freeMoveSpeed * Time.deltaTime;
+        newPos.x = Mathf.Clamp(newPos.x, minX, maxX);
+        newPos.z = Mathf.Clamp(newPos.z, minZ, maxZ);
+        followCamera.transform.position = newPos;
+        return true;
     }
 
     private void UpdateTargetFromBoard(int? playerId = null)

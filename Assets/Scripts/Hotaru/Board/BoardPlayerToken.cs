@@ -149,24 +149,21 @@ public class BoardPlayerToken : MonoBehaviour
 
     public void SetShieldActive(bool active)
     {
-        if (shieldVfxPrefab != null || _shieldVfxInstance != null)
+        if (_shieldVfxInstance == null)
+            CreateShieldVfxInstance();
+
+        if (_shieldVfxInstance == null) return;
+
+        if (active)
         {
-            if (_shieldVfxInstance == null)
-                CreateShieldVfxInstance();
-
-            if (_shieldVfxInstance == null) return;
-
-            if (active)
-            {
-                _shieldVfxInstance.gameObject.SetActive(true);
-                if (!_shieldVfxInstance.isPlaying)
-                    _shieldVfxInstance.Play(true);
-            }
-            else
-            {
-                _shieldVfxInstance.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                _shieldVfxInstance.gameObject.SetActive(false);
-            }
+            _shieldVfxInstance.gameObject.SetActive(true);
+            if (!_shieldVfxInstance.isPlaying)
+                _shieldVfxInstance.Play(true);
+        }
+        else
+        {
+            _shieldVfxInstance.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            _shieldVfxInstance.gameObject.SetActive(false);
         }
     }
 
