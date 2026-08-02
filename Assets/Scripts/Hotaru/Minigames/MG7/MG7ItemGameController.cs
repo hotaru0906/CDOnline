@@ -40,10 +40,12 @@ public class MG7ItemGameController : BaseMinigameController
     [SerializeField] private float initialSpawnInterval = 3f;
     [SerializeField] private float minSpawnInterval = 0.8f;
     [SerializeField] private float rampDuration = 30f; // giây để đạt tốc độ spawn tối đa
+    [Header("Wave Settings")]
+    [SerializeField] private int itemsPerWave = 3;
 
     private float _spawnCountdown;
     private float _elapsedGameTime;
-    private bool _spawnFreezeNext = true;
+    private NetworkObject _currentFreeze;
     private void OnDrawGizmos()
     {
         Vector3 center = spawnAreaCenter != null ? spawnAreaCenter.position : transform.position;
@@ -91,16 +93,7 @@ public class MG7ItemGameController : BaseMinigameController
 
         if (_spawnCountdown <= 0f)
         {
-            if (_spawnFreezeNext)
-            {
-                SpawnFreezeItem();
-            }
-            else
-            {
-                SpawnRandomItem();
-            }
-
-            _spawnFreezeNext = !_spawnFreezeNext;
+            SpawnWave();
 
             float t = (rampDuration > 0f)
                 ? Mathf.Clamp01(_elapsedGameTime / rampDuration)
@@ -189,9 +182,42 @@ public class MG7ItemGameController : BaseMinigameController
 
         Vector3 spawnPos = center + new Vector3(x, spawnHeight, z);
 
-        Runner.Spawn(freezeEntry.prefab, spawnPos, Quaternion.identity);
+        // Nếu còn Freeze cũ thì xóa
+        if (_currentFreeze != null)
+        {
+            Runner.Despawn(_currentFreeze);
+            _currentFreeze = null;
+        }
 
-        Debug.Log("[MG7ItemGame] Spawned Freeze");
+        // Spawn Freeze mới
+        _currentFreeze = Runner.Spawn(
+            freezeEntry.prefab,
+            spawnPos,
+            Quaternion.identity);
+
+        Debug.Log("[MG7ItemGame] Spawned New Freeze");
+    }
+
+    private void SpawnWave()
+    {
+        // Chỉ spawn Freeze nếu hiện tại không còn Freeze
+        if (_currentFreeze == null)
+        {
+            SpawnFreezeItem();
+        }
+
+        // Spawn thêm Item
+        for (int i = 0; i < itemsPerWave; i++)
+        {
+            SpawnRandomItem();
+        }
+
+        Debug.Log($"[MG7ItemGame] Spawn Wave (+{itemsPerWave} Items)");
+    }
+
+    public void NotifyFreezeCollected()
+    {
+        _currentFreeze = null;
     }
 
     // ----------------------------------------------------------------

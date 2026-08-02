@@ -229,6 +229,8 @@ public class MG7Item : NetworkBehaviour
                 Debug.Log(
                     $"[MG7Item] P{pc.Object.InputAuthority} nhặt Freeze -> Freeze tất cả người chơi khác trong {freezeDuration}s");
 
+                MG7ItemGameController.Instance?.NotifyFreezeCollected();
+
                 break;
             }
         }
