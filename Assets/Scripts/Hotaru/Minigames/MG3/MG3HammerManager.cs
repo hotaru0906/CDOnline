@@ -18,8 +18,11 @@ public class MG3HammerManager : NetworkBehaviour
     [Networked]
     public NetworkId HammerHolderObjectId { get; private set; }
 
-    [Networked]
+    [Networked, OnChangedRender(nameof(OnHammerTimerChanged))]
     public TickTimer HammerTimer { get; private set; }
+
+    [Networked]
+    public float HammerTimeLeft { get; set; }
 
     [Networked]
     public NetworkBool HammerExists { get; private set; }
@@ -31,10 +34,19 @@ public class MG3HammerManager : NetworkBehaviour
         Instance = this;
     }
 
-    private void SpawnHammer()
+    public void SpawnHammer()
     {
         if (!HasStateAuthority)
             return;
+
+        if (HammerTimer.IsRunning)
+        {
+            HammerTimeLeft = HammerTimer.RemainingTime(Runner) ?? 0f;
+        }
+        else
+        {
+            HammerTimeLeft = 0f;
+        }
 
         if (hammerPrefab == null)
         {
@@ -93,11 +105,16 @@ public class MG3HammerManager : NetworkBehaviour
 
         HammerHolderObjectId = player.Object.Id;
 
+        // Bắt đầu đếm thời gian
         HammerTimer = TickTimer.CreateFromSeconds(Runner, hammerLifeTime);
 
+        HammerTimeLeft = hammerLifeTime;
+
+        // Player cầm búa
         brawlData.PickupItem();
-        MinigameHUDController.Instance?.ShowHammerTimer();
-        RPC_ShowTimerUI();
+
+        // Hiện timer cho tất cả máy
+        RPC_ShowHammerTimer();
 
         Debug.Log($"[HammerManager] Hammer assigned to P{HammerHolder.PlayerId}");
     }
@@ -126,41 +143,35 @@ public class MG3HammerManager : NetworkBehaviour
 
         HammerHolderObjectId = default;
 
+        // Dừng timer
         HammerTimer = TickTimer.None;
+
+        HammerTimeLeft = 0f;
+
+        // Ẩn timer trên tất cả máy
+        RPC_HideHammerTimer();
 
         Debug.Log("[HammerManager] Holder Cleared");
     }
 
-    public float RemainingTime
-    {
-        get
-        {
-            if (!HammerTimer.IsRunning)
-                return 0f;
-
-            float? remaining = HammerTimer.RemainingTime(Runner);
-
-            return remaining ?? 0f;
-        }
-    }
-
     public override void FixedUpdateNetwork()
     {
-        if (HammerTimer.IsRunning)
+        if (HasStateAuthority)
         {
-            MinigameHUDController.Instance?.UpdateHammerTimer(RemainingTime);
-        }
+            if (HammerTimer.IsRunning)
+            {
+                HammerTimeLeft = HammerTimer.RemainingTime(Runner) ?? 0f;
 
-        if (!HasStateAuthority)
-            return;
-
-        if (!HammerTimer.IsRunning)
-            return;
-
-        if (HammerTimer.Expired(Runner))
-        {
-            EliminateHammerHolder();
-            return;
+                if (HammerTimer.Expired(Runner))
+                {
+                    EliminateHammerHolder();
+                    return;
+                }
+            }
+            else
+            {
+                HammerTimeLeft = 0f;
+            }
         }
     }
 
@@ -195,6 +206,7 @@ public class MG3HammerManager : NetworkBehaviour
 
         HammerHolder = PlayerRef.None;
         HammerTimer = TickTimer.None;
+        HammerTimeLeft = 0f;
 
         Debug.Log("[HammerManager] Hammer Round Started");
     }
@@ -221,24 +233,38 @@ public class MG3HammerManager : NetworkBehaviour
 
         RemoveHammerFromHolder();
 
-        MinigameHUDController.Instance?.HideHammerTimer();
-
-        RPC_HideTimerUI();
-
         RemoveCurrentHammer();
+    }
 
-        SpawnHammer();
+    private void OnHammerTimerChanged()
+    {
+        if (HammerTimer.IsRunning)
+        {
+            MinigameHUDController.Instance?.ShowHammerTimer();
+        }
+        else
+        {
+            MinigameHUDController.Instance?.HideHammerTimer();
+        }
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_ShowTimerUI()
+    private void RPC_ShowHammerTimer()
     {
-        MG3HammerTimerUI.Instance?.Show();
+        MinigameHUDController.Instance?.ShowHammerTimer();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_HideTimerUI()
+    private void RPC_HideHammerTimer()
     {
-        MG3HammerTimerUI.Instance?.Hide();
+        MinigameHUDController.Instance?.HideHammerTimer();
+    }
+
+    public override void Render()
+    {
+        if (MinigameHUDController.Instance == null)
+            return;
+
+        MinigameHUDController.Instance.UpdateHammerTimer(HammerTimeLeft);
     }
 }
