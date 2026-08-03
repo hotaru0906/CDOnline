@@ -66,7 +66,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 0a2a84da929469044b534f6e25dd6757, type: 2}
   - {fileID: 11400000, guid: 0cf5b9ebe61a87a4dae394932268a7ea, type: 2}
   - {fileID: 11400000, guid: 520b80c3fa898554ead73a2123d9922f, type: 2}
-  - {fileID: 11400000, guid: c40ac4c53b7b2c546bccb729ee22544d, type: 2}
   - {fileID: 11400000, guid: f5be6db10b378164fbee6a38e3d00643, type: 2}
   rouletteSceneName: Roulette Test
   boardSceneName: BoardScene
@@ -149,6 +148,14 @@ MonoBehaviour:
   _ChestCount_P1: 0
   _ChestCount_P2: 0
   _ChestCount_P3: 0
+  _ShieldActive_P0:
+    _value: 0
+  _ShieldActive_P1:
+    _value: 0
+  _ShieldActive_P2:
+    _value: 0
+  _ShieldActive_P3:
+    _value: 0
   _ResourcePlayerId_P0: -1
   _ResourcePlayerId_P1: -1
   _ResourcePlayerId_P2: -1
@@ -267,6 +274,7 @@ MonoBehaviour:
   instantEndWhenAllVoted: 0
   tieBreakUiDelay: 2
   tieBreakSpinDuration: 2.2
+  tieBreakResultHoldDuration: 1.5
 --- !u!1 &5410280941758782221
 GameObject:
   m_ObjectHideFlags: 0
@@ -416,7 +424,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 0a2a84da929469044b534f6e25dd6757, type: 2}
   - {fileID: 11400000, guid: 0cf5b9ebe61a87a4dae394932268a7ea, type: 2}
   - {fileID: 11400000, guid: 520b80c3fa898554ead73a2123d9922f, type: 2}
-  - {fileID: 11400000, guid: c40ac4c53b7b2c546bccb729ee22544d, type: 2}
+  - {fileID: 11400000, guid: f5be6db10b378164fbee6a38e3d00643, type: 2}
   displayCount: 5
   shuffleMinigames: 1
   cooldownRoundsAfterPlay: 3

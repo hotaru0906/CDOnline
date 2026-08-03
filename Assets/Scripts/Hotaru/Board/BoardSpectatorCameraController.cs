@@ -54,8 +54,8 @@ public class BoardSpectatorCameraController : MonoBehaviour
 
         if (followCamera != null)
         {
-            followCamera.transform.localPosition = Vector3.zero;
-            followCamera.transform.localRotation = Quaternion.identity;
+            followCamera.transform.position = GetInitialCameraPosition();
+            followCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
             followCamera.enabled = false;
         }
 
@@ -81,6 +81,20 @@ public class BoardSpectatorCameraController : MonoBehaviour
     private void Start()
     {
         UpdateTargetFromBoard();
+
+        if (followCamera != null)
+        {
+            if (_currentTarget != null)
+            {
+                followCamera.transform.position = CalculatePosition(_currentTarget.position);
+            }
+            else
+            {
+                followCamera.transform.position = GetInitialCameraPosition();
+            }
+
+            followCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
+        }
     }
 
     private void Update()
@@ -249,6 +263,17 @@ public class BoardSpectatorCameraController : MonoBehaviour
             cameraHeight,
             -cameraDistance * Mathf.Cos(overheadAngle * Mathf.Deg2Rad) + cameraZOffset
         );
+    }
+
+    private Vector3 GetInitialCameraPosition()
+    {
+        Vector3 fallback = transform.position + new Vector3(0f, cameraHeight, cameraZOffset);
+        if (fallback == Vector3.zero)
+        {
+            fallback = new Vector3(0f, cameraHeight, cameraZOffset);
+        }
+
+        return fallback;
     }
 
     private void OnDrawGizmos()
