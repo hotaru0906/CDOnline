@@ -145,4 +145,11 @@ public class MinigameHUDController : MonoBehaviour
 
         hammerTimerText.text = Mathf.CeilToInt(seconds).ToString();
     }
+
+    [ContextMenu("TEST Hammer Timer")]
+    public void TestHammerTimer()
+    {
+        hammerTimerText.enabled = true;
+        hammerTimerText.text = "99";
+    }
 }

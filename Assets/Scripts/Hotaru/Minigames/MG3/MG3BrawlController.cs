@@ -1,6 +1,7 @@
 using Fusion;
 using UnityEngine;
 using System.Collections.Generic;
+using System.Collections;
 public class MG3BrawlController : BaseMinigameController
 {
     public new static MG3BrawlController Instance =>
@@ -56,8 +57,6 @@ public class MG3BrawlController : BaseMinigameController
         {
             targetMgData.EliminateImmediately();
 
-            // Kết thúc lượt cầm búa
-            MG3HammerManager.Instance?.FinishHammerRound();
 
             RPC_OnHitWithItem(
                 attacker.Object.InputAuthority,
@@ -86,7 +85,48 @@ public class MG3BrawlController : BaseMinigameController
         }
 
         UpdateAlivePlayerCount();
+
         CheckWinCondition();
+
+        if (!IsGameEnded)
+        {
+            StartNextRound();
+        }
+    }
+
+    private IEnumerator NextRoundRoutine()
+    {
+        // Freeze
+        BaseMinigameController.Instance.RPC_SetPlayersFrozen(true);
+
+        // Hiện Countdown
+        GameManager.Instance.RPC_StartRoundCountdown();
+
+        // Chờ Countdown chạy xong
+        yield return new WaitForSeconds(3.6f);
+
+        // Xóa búa cũ
+        MG3HammerManager.Instance.FinishHammerRound();
+
+        // Spawn búa mới
+        MG3HammerManager.Instance.SpawnHammer();
+
+        yield return new WaitForSeconds(0.2f);
+
+        // Cho chạy tiếp
+        BaseMinigameController.Instance.RPC_SetPlayersFrozen(false);
+    }
+
+    private void StartNextRound()
+    {
+        if (!HasStateAuthority)
+            return;
+
+        // Đưa những người còn sống về vị trí spawn
+        BaseMinigameController.Instance.ResetAlivePlayersToSpawn();
+
+        // Bắt đầu quy trình round mới
+        StartCoroutine(NextRoundRoutine());
     }
 
     protected override void CheckWinCondition()

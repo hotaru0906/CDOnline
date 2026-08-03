@@ -579,7 +579,7 @@ public abstract class BaseMinigameController : NetworkBehaviour
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    protected void RPC_SetPlayersFrozen(bool frozen)
+    public void RPC_SetPlayersFrozen(bool frozen)
     {
         var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
         foreach (var player in players)
@@ -626,5 +626,36 @@ public abstract class BaseMinigameController : NetworkBehaviour
         }
 
         Debug.Log($"[{GetType().Name}] Respawn Player {player.Object.InputAuthority.PlayerId}");
+    }
+
+    public void ResetAlivePlayersToSpawn()
+    {
+        if (!HasStateAuthority)
+            return;
+
+        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+
+        foreach (var player in players)
+        {
+            var mgData = player.GetComponent<PlayerMinigameData>();
+
+            if (mgData == null)
+                continue;
+
+            // Người đã bị loại thì không reset
+            if (mgData.IsEliminated)
+                continue;
+
+            int playerIndex = player.Object.InputAuthority.PlayerId - 1;
+
+            Vector3 spawnPos = GetSpawnPoint(playerIndex);
+            Quaternion spawnRot = GetSpawnRotation(playerIndex);
+
+            player.Teleport(spawnPos);
+            player.transform.rotation = spawnRot;
+
+            player.ResetVelocity();
+            player.ForceIdle();
+        }
     }
 }

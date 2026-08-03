@@ -918,7 +918,7 @@ public class GameManager : NetworkBehaviour
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_StartCountdown()
+    public void RPC_StartCountdown()
     {
         // Ẩn tutorial, hiện countdown
         SetActiveUI(minigameTutorialUI, false);
@@ -938,6 +938,21 @@ public class GameManager : NetworkBehaviour
                 StopCoroutine(_countdownCoroutine);
             }
             _countdownCoroutine = StartCoroutine(RunCountdown());
+        }
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    public void RPC_StartRoundCountdown()
+    {
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, true);
+
+        if (HasStateAuthority)
+        {
+            if (_countdownCoroutine != null)
+                StopCoroutine(_countdownCoroutine);
+
+            _countdownCoroutine = StartCoroutine(RunRoundCountdown());
         }
     }
 
@@ -961,6 +976,28 @@ public class GameManager : NetworkBehaviour
 
         // Countdown xong -> chuyển sang Playing
         RPC_CountdownComplete();
+
+        _countdownCoroutine = null;
+    }
+
+    private IEnumerator RunRoundCountdown()
+    {
+        float remaining = countdownTime;
+
+        while (remaining > 0)
+        {
+            RPC_UpdateCountdownUI(Mathf.CeilToInt(remaining));
+
+            yield return new WaitForSeconds(1f);
+
+            remaining -= 1f;
+        }
+
+        RPC_UpdateCountdownUI(0);
+
+        yield return new WaitForSeconds(0.5f);
+
+        RPC_FinishRoundCountdown();
 
         _countdownCoroutine = null;
     }
@@ -1082,6 +1119,12 @@ public class GameManager : NetworkBehaviour
 
         bool allReady = clientCount > 0 && readyCount == clientCount;
         return allReady;
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_FinishRoundCountdown()
+    {
+        SetActiveUI(minigameCountdownUI, false);
     }
     #endregion
 
