@@ -1,36 +1,27 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 [DefaultExecutionOrder(-1000)]
 public class DirectionSelectionUI : MonoBehaviour
 {
     public static DirectionSelectionUI Instance { get; private set; }
-    [Header("UI")]
-    [SerializeField] private GameObject panel;
-    [SerializeField] private Transform buttonRoot;
-    [SerializeField] private Button directionButtonPrefab;
-    
-    [SerializeField] private Sprite leftArrow;
-    [SerializeField] private Sprite rightArrow;
-    [SerializeField] private Sprite upArrow;
-    [SerializeField] private Sprite downArrow;
 
-    private readonly List<Button> spawnedButtons = new();
+    [Header("Fallback UI")]
+    [SerializeField] private GameObject panel;
+    [SerializeField] private TMP_Text fallbackText;
+
+    private readonly List<BoardDirectionChoice> spawnedChoices = new();
 
     private void Awake()
     {
         Instance = this;
-        Debug.LogError("===== DIRECTION UI AWAKE =====");
-
-        panel.SetActive(false);
+        if (panel != null)
+            panel.SetActive(false);
     }
 
     private void Start()
     {
-        Debug.LogError("===== DIRECTION UI START =====");
-
         StartCoroutine(RegisterBoardManager());
     }
 
@@ -39,18 +30,18 @@ public class DirectionSelectionUI : MonoBehaviour
         while (BoardManager.Instance == null)
             yield return null;
 
-        Debug.Log("[DirectionUI] BoardManager found");
-
         BoardManager.Instance.OnDirectionSelectionRequested += ShowDirectionUI;
 
-        Debug.Log("[DirectionUI] Event Registered");
-
-        RectTransform rt = panel.GetComponent<RectTransform>();
-
-        rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = new Vector2(500, 300);
-
-        panel.SetActive(false);
+        if (panel != null)
+        {
+            RectTransform rt = panel.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                rt.anchoredPosition = Vector2.zero;
+                rt.sizeDelta = new Vector2(500, 300);
+            }
+            panel.SetActive(false);
+        }
     }
 
     private void OnDestroy()
@@ -61,96 +52,50 @@ public class DirectionSelectionUI : MonoBehaviour
         }
     }
 
-    private Sprite GetArrowSprite(BoardNode from, BoardNode to)
-    {
-        Camera cam = Camera.main;
-
-        if (cam == null)
-            return rightArrow;
-
-        Vector3 fromScreen = cam.WorldToScreenPoint(from.transform.position);
-        Vector3 toScreen   = cam.WorldToScreenPoint(to.transform.position);
-
-        Vector2 dir = (toScreen - fromScreen);
-
-        Debug.Log(
-            $"Node {from.nodeID} -> {to.nodeID} " +
-            $" ScreenDir = {dir}"
-        );
-
-        // Hướng ngang chiếm ưu thế
-        if (Mathf.Abs(dir.x) > Mathf.Abs(dir.y))
-        {
-            return dir.x > 0 ? rightArrow : leftArrow;
-        }
-        // Hướng dọc chiếm ưu thế
-        else
-        {
-            return dir.y > 0 ? upArrow : downArrow;
-        }
-    }
-
     public void ShowDirectionUI(BoardNode node)
     {
         Hide();
 
-        panel.SetActive(true);
+        if (fallbackText != null)
+        {
+            fallbackText.text = "Choose a path";
+            if (panel != null)
+                panel.SetActive(true);
+        }
+
+        if (node == null || node.nextNodes == null || node.nextNodes.Count == 0)
+            return;
 
         for (int i = 0; i < node.nextNodes.Count; i++)
         {
-            int index = i;
+            if (node.nextNodes[i] == null)
+                continue;
 
-            Button btn = Instantiate(directionButtonPrefab, buttonRoot);
+            GameObject choiceObj = new GameObject($"Choice_{i}");
+            choiceObj.transform.position = node.transform.position + Vector3.up * 1.5f + Vector3.forward * (0.8f + i * 0.5f);
+            choiceObj.transform.SetParent(node.transform, true);
 
-            Debug.Log(btn.transform.Find("ArrowImage"));
+            var collider = choiceObj.AddComponent<BoxCollider>();
+            collider.size = new Vector3(0.8f, 0.8f, 0.8f);
 
-            spawnedButtons.Add(btn);
-
-            btn.onClick.AddListener(() =>
-            {
-                int branch = (index == 0) ? 1 : 0;
-
-                Debug.Log("Click Direction " + branch);
-
-                BoardManager.Instance.SelectBranch(branch);
-
-                Hide();
-            });
-
-            TMP_Text text = btn.GetComponentInChildren<TMP_Text>();
-
-            if (text != null)
-            {
-                text.gameObject.SetActive(false);
-            }
-
-            Image arrow = btn.transform.Find("ArrowImage").GetComponent<Image>();
-
-            if (arrow != null)
-            {
-                arrow.gameObject.SetActive(true);
-
-                if (index == 0)
-                    arrow.sprite = leftArrow;
-                else
-                    arrow.sprite = rightArrow;
-
-                RectTransform rt = arrow.rectTransform;
-                rt.sizeDelta = new Vector2(60, 60);
-            }
+            var choice = choiceObj.AddComponent<BoardDirectionChoice>();
+            choice.SetBranchIndex(i);
+            choice.SetTargetNode(node.nextNodes[i]);
+            spawnedChoices.Add(choice);
         }
     }
 
     public void Hide()
     {
-        panel.SetActive(false);
+        if (panel != null)
+            panel.SetActive(false);
 
-        foreach (var b in spawnedButtons)
+        foreach (var choice in spawnedChoices)
         {
-            if (b != null)
-                Destroy(b.gameObject);
+            if (choice != null)
+                Destroy(choice.gameObject);
         }
 
-        spawnedButtons.Clear();
+        spawnedChoices.Clear();
     }
 }

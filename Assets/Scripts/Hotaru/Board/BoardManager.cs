@@ -27,6 +27,8 @@ public class BoardManager : NetworkBehaviour
     [SerializeField] private BoardItemPool boardItemPool;
     [SerializeField] private ItemPool rouletteItemPool;
     [SerializeField] private TrapTile trapTile;
+    [SerializeField] private AudioClip itemRewardAudioClip;
+    [SerializeField] private AudioClip jackpotRewardAudioClip;
 
     [Header("Tokens")]
     [SerializeField] private BoardPlayerToken[] tokens = new BoardPlayerToken[4];
@@ -36,6 +38,10 @@ public class BoardManager : NetworkBehaviour
 
     [Header("VFX")]
     [SerializeField] private bool useShieldVfx = true;
+
+    [Header("Gamble Wheel")]
+    [SerializeField] private BoardGambleWheelUI gambleWheelUI;
+    [SerializeField] private GameObject gambleWheelRoot;
 
     [Header("Debug")]
     [SerializeField] private bool showDebugPanel = true;
@@ -220,6 +226,29 @@ public class BoardManager : NetworkBehaviour
     {
         if (_lastTileMessageTimer > 0f) _lastTileMessageTimer -= Time.deltaTime;
         if (_reactionTimer > 0f) _reactionTimer -= Time.deltaTime;
+
+        if (_waitingForMyStealTarget && _eligibleStealTargets.Count > 0)
+        {
+            if (Input.GetKeyDown(KeyCode.A))
+            {
+                _targetSelectIndex = (_targetSelectIndex - 1 + _eligibleStealTargets.Count) % _eligibleStealTargets.Count;
+                BoardHUDController.Instance?.UpdateStealSelectionPrompt(_eligibleStealTargets, _targetSelectIndex);
+                RPC_HighlightTarget(_eligibleStealTargets[_targetSelectIndex]);
+            }
+            else if (Input.GetKeyDown(KeyCode.D))
+            {
+                _targetSelectIndex = (_targetSelectIndex + 1) % _eligibleStealTargets.Count;
+                BoardHUDController.Instance?.UpdateStealSelectionPrompt(_eligibleStealTargets, _targetSelectIndex);
+                RPC_HighlightTarget(_eligibleStealTargets[_targetSelectIndex]);
+            }
+            else if (Input.GetKeyDown(KeyCode.Space))
+            {
+                _waitingForMyStealTarget = false;
+                BoardHUDController.Instance?.HideStealSelectionPrompt();
+                RPC_SubmitTargetSelect(StealerPlayerId, _eligibleStealTargets[_targetSelectIndex]);
+            }
+            return;
+        }
 
         // A-D để chọn target item
         if (_isSelectingTarget && _eligibleItemTargets.Count > 0)
@@ -553,12 +582,17 @@ public class BoardManager : NetworkBehaviour
     #region Item Use
     public void RequestUseItem(int itemSlot, BoardItemEffect effect)
     {
-        if (!_waitingForMyRoll) return;
         if (_itemUsedThisTurn) return;
         if (BoardState != BoardPhaseState.WaitingForRoll) return;
 
         int myId = Runner?.LocalPlayer.PlayerId ?? -1;
         if (myId < 0) return;
+
+        if (myId != CurrentPlayerID)
+        {
+            Debug.LogWarning($"[BoardManager] RequestUseItem ignored: not current player (local={myId}, current={CurrentPlayerID})");
+            return;
+        }
 
         RPC_SubmitItemUseRequest(myId, itemSlot, (int)effect);
     }
@@ -587,8 +621,8 @@ public class BoardManager : NetworkBehaviour
         switch (effect)
         {
             case BoardItemEffect.RushForward:
-                _bonusSteps[slot] = 3;
                 RPC_ItemUsed(userId, effectId);
+                StartCoroutine(ExecuteRushForward(slot, userId, 3));
                 break;
 
             case BoardItemEffect.Shield:
@@ -665,6 +699,54 @@ public class BoardManager : NetworkBehaviour
         ItemUserPlayerId = -1;
         _pendingItemEffect = BoardItemEffect.None;
         RPC_ItemUsed(userId, (int)doneEffect);
+    }
+
+    private IEnumerator ExecuteRushForward(int slot, int playerId, int steps)
+    {
+        if (slot < 0 || playerId < 0)
+        {
+            BoardState = BoardPhaseState.WaitingForRoll;
+            RPC_TurnStarted(playerId);
+            yield break;
+        }
+
+        BoardState = BoardPhaseState.Moving;
+
+        var path = BoardNodePath.Instance;
+        if (path == null)
+        {
+            BoardState = BoardPhaseState.WaitingForRoll;
+            RPC_TurnStarted(playerId);
+            yield break;
+        }
+
+        var currentNode = path.GetNodeByID(GetNodeIDAtSlot(slot));
+        if (currentNode == null)
+        {
+            BoardState = BoardPhaseState.WaitingForRoll;
+            RPC_TurnStarted(playerId);
+            yield break;
+        }
+
+        for (int i = 0; i < steps; i++)
+        {
+            var nextNode = path.GetNextNode(currentNode, 0);
+            if (nextNode == null)
+                break;
+
+            SetNodeIDAtSlot(slot, nextNode.nodeID);
+            RPC_AnimateMovement(slot, new[] { nextNode.nodeID });
+            currentNode = nextNode;
+
+            var token = tokens != null && slot < tokens.Length ? tokens[slot] : null;
+            while (token != null && token.IsMoving)
+                yield return null;
+
+            yield return new WaitForSeconds(0.15f);
+        }
+
+        BoardState = BoardPhaseState.WaitingForRoll;
+        RPC_TurnStarted(playerId);
     }
 
     private IEnumerator ExecutePushBack(int targetSlot, int userId)
@@ -1085,6 +1167,8 @@ public class BoardManager : NetworkBehaviour
 
         if (ok)
         {
+            PlayRewardSfx(itemRewardAudioClip);
+
             var ui = FindFirstObjectByType<BoardInventoryUI>();
             if (ui != null)
             {
@@ -1112,7 +1196,26 @@ public class BoardManager : NetworkBehaviour
             if (!inv.AddBoardItem(item.effectType)) { RPC_TileMessage(playerId, $"JACKPOT! +{granted} [FULL]"); return; }
             granted++;
         }
+
+        if (granted > 0)
+            PlayRewardSfx(jackpotRewardAudioClip);
+
         RPC_TileMessage(playerId, $"JACKPOT! +{granted}");
+    }
+
+    private void PlayRewardSfx(AudioClip clip)
+    {
+        if (clip != null)
+        {
+            if (SFXManager.Instance != null)
+                SFXManager.Instance.PlaySFX(clip, 1f);
+            else
+                AudioSource.PlayClipAtPoint(clip, Vector3.zero, 1f);
+            return;
+        }
+
+        if (SFXManager.Instance != null)
+            SFXManager.Instance.PlayButtonClick();
     }
 
     private void ResolveGamble(int playerId)
@@ -1120,7 +1223,35 @@ public class BoardManager : NetworkBehaviour
         var inv = PlayerItemInventory.GetForPlayer(playerId);
         if (inv == null) return;
 
-        bool win = Random.value >= 0.5f;
+        int resultIndex = Random.value >= 0.5f ? 0 : 3;
+        RPC_ShowGambleWheel(playerId, resultIndex);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ShowGambleWheel(int playerId, int resultIndex)
+    {
+        if (gambleWheelUI == null)
+        {
+            if (gambleWheelRoot != null)
+                gambleWheelRoot.SetActive(false);
+            return;
+        }
+
+        if (gambleWheelRoot != null)
+            gambleWheelRoot.SetActive(true);
+
+        gambleWheelUI.ShowWheel(resultIndex, rewardIndex =>
+        {
+            ApplyGambleResult(playerId, rewardIndex);
+        });
+    }
+
+    private void ApplyGambleResult(int playerId, int resultIndex)
+    {
+        var inv = PlayerItemInventory.GetForPlayer(playerId);
+        if (inv == null) return;
+
+        bool win = resultIndex < 3;
         if (win)
         {
             if (boardItemPool == null) return;
@@ -1257,6 +1388,23 @@ public class BoardManager : NetworkBehaviour
         {
             _waitingForMyStealTarget = true;
             _eligibleStealTargets = new System.Collections.Generic.List<int>(eligibles);
+            _targetSelectIndex = 0;
+            _waitingForMyItemTarget = false;
+            _isSelectingTarget = false;
+
+            if (_eligibleStealTargets.Count > 0)
+            {
+                BoardHUDController.Instance?.ShowStealSelectionPrompt(stealerId, _eligibleStealTargets, _targetSelectIndex);
+                BoardCameraController.Instance?.FocusOnPlayer(_eligibleStealTargets[0]);
+            }
+            else
+            {
+                BoardHUDController.Instance?.HideStealSelectionPrompt();
+            }
+        }
+        else
+        {
+            BoardHUDController.Instance?.HideStealSelectionPrompt();
         }
         Debug.Log($"[BoardManager] P{stealerId} chọn target để steal...");
     }
@@ -1268,6 +1416,8 @@ public class BoardManager : NetworkBehaviour
         if (BoardState != BoardPhaseState.WaitingForTargetSelect) return;
         if (stealerId != StealerPlayerId) return;
         _stealPendingTargetId = targetId;
+
+        BoardHUDController.Instance?.HideStealSelectionPrompt();
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -1688,18 +1838,18 @@ public class BoardManager : NetworkBehaviour
         GUILayout.Label($"Reversed: {(bool)IsReversed}");
         GUILayout.Space(4);
 
-        GUILayout.Label("TurnOrder:");
-        for (int i = 0; i < ActivePlayerCount; i++)
-        {
-            int pid = GetPlayerIDAtSlot(i);
-            int nid = GetNodeIDAtSlot(i);
-            bool skip = GetSkipAtSlot(i);
-            bool shld = _hasShield[i];
-            string mark = (i == CurrentSlot) ? " ◄" : "";
-            GUILayout.Label($"  [{i}] P{pid} @ N{nid}{(skip ? " [SKIP]" : "")}{(shld ? " [🛡]" : "")}{mark}");
-        }
+        // GUILayout.Label("TurnOrder:");
+        // for (int i = 0; i < ActivePlayerCount; i++)
+        // {
+        //     int pid = GetPlayerIDAtSlot(i);
+        //     int nid = GetNodeIDAtSlot(i);
+        //     bool skip = GetSkipAtSlot(i);
+        //     bool shld = _hasShield[i];
+        //     string mark = (i == CurrentSlot) ? " ◄" : "";
+        //     GUILayout.Label($"  [{i}] P{pid} @ N{nid}{(skip ? " [SKIP]" : "")}{(shld ? " [🛡]" : "")}{mark}");
+        // }
 
-        GUILayout.Space(4);
+        // GUILayout.Space(4);
         // GUILayout.Label("Inventory:");
         // for (int i = 0; i < ActivePlayerCount; i++)
         // {
@@ -1764,43 +1914,43 @@ public class BoardManager : NetworkBehaviour
         //     }
         // }
 
-        // // Debug give items
-        // if (HasStateAuthority && boardItemPool != null)
-        // {
-        //     GUILayout.Space(4);
-        //     GUILayout.Label("[DEBUG] Give Board Items:");
-        //     BoardItemEffect[] testEffects = { BoardItemEffect.PushBack, BoardItemEffect.RushForward, BoardItemEffect.Shield, BoardItemEffect.PositionSwap };
-        //     foreach (var eff in testEffects)
-        //     {
-        //         GUI.color = new Color(0.4f, 1f, 0.6f);
-        //         if (GUILayout.Button($"▶ Give all: {eff}"))
-        //         {
-        //             for (int i = 0; i < ActivePlayerCount; i++)
-        //             {
-        //                 int pid = GetPlayerIDAtSlot(i);
-        //                 if (pid < 0) continue;
-        //                 PlayerItemInventory.GetForPlayer(pid)?.AddBoardItem(eff);
-        //             }
-        //         }
-        //         GUI.color = Color.white;
-        //     }
+        // Debug give items
+        if (HasStateAuthority && boardItemPool != null)
+        {
+            GUILayout.Space(4);
+            GUILayout.Label("[DEBUG] Give Board Items:");
+            BoardItemEffect[] testEffects = { BoardItemEffect.PushBack, BoardItemEffect.RushForward, BoardItemEffect.Shield, BoardItemEffect.PositionSwap };
+            foreach (var eff in testEffects)
+            {
+                GUI.color = new Color(0.4f, 1f, 0.6f);
+                if (GUILayout.Button($"▶ Give all: {eff}"))
+                {
+                    for (int i = 0; i < ActivePlayerCount; i++)
+                    {
+                        int pid = GetPlayerIDAtSlot(i);
+                        if (pid < 0) continue;
+                        PlayerItemInventory.GetForPlayer(pid)?.AddBoardItem(eff);
+                    }
+                }
+                GUI.color = Color.white;
+            }
 
-        //     GUILayout.Space(5);
+            GUILayout.Space(5);
 
-        //     GUI.color = Color.yellow;
+            GUI.color = Color.yellow;
 
-        //     if (GUILayout.Button("Give 1 Key To Current Player"))
-        //     {
-        //         var inv = PlayerItemInventory.GetForPlayer(CurrentPlayerID);
+            if (GUILayout.Button("Give 1 Key To Current Player"))
+            {
+                var inv = PlayerItemInventory.GetForPlayer(CurrentPlayerID);
 
-        //         if (inv != null)
-        //         {
-        //             inv.AddKey();
-        //         }
-        //     }
+                if (inv != null)
+                {
+                    inv.AddKey();
+                }
+            }
 
-        //     GUI.color = Color.white;
-        // }
+            GUI.color = Color.white;
+        }
         if (HasStateAuthority)
         {
             GUILayout.Space(4);
