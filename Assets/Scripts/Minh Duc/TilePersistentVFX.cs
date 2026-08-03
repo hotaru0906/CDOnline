@@ -43,10 +43,18 @@ public class TilePersistentVFX : NetworkBehaviour
             return;
         }
 
+        vfxObject.SetActive(true);
+        _vfxInstance.gameObject.SetActive(true);
+
         var main = _vfxInstance.main;
         main.loop = true;
-        main.playOnAwake = false;
+        main.playOnAwake = true;
+        main.prewarm = false;
 
+        var emission = _vfxInstance.emission;
+        emission.enabled = true;
+
+        _vfxInstance.Clear();
         _vfxInstance.Play(true);
     }
 }
