@@ -67,6 +67,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 0cf5b9ebe61a87a4dae394932268a7ea, type: 2}
   - {fileID: 11400000, guid: 520b80c3fa898554ead73a2123d9922f, type: 2}
   - {fileID: 11400000, guid: c40ac4c53b7b2c546bccb729ee22544d, type: 2}
+  - {fileID: 11400000, guid: f5be6db10b378164fbee6a38e3d00643, type: 2}
   rouletteSceneName: Roulette Test
   boardSceneName: BoardScene
   _CurrentState: 0
@@ -76,6 +77,8 @@ MonoBehaviour:
   _TotalRounds: 3
   _CurrentMinigameIndex: -1
   _CurrentMinigameActualIndex: -1
+  _HasPlayedBoardIntro:
+    _value: 0
   _CurrentVotingType: 0
   _FinalWinnerId: -1
   _MgRank1: -1
@@ -416,3 +419,4 @@ MonoBehaviour:
   - {fileID: 11400000, guid: c40ac4c53b7b2c546bccb729ee22544d, type: 2}
   displayCount: 5
   shuffleMinigames: 1
+  cooldownRoundsAfterPlay: 3
