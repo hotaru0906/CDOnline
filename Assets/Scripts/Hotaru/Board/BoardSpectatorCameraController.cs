@@ -30,6 +30,7 @@ public class BoardSpectatorCameraController : MonoBehaviour
     private Vector3 _currentVelocity;
     private Vector3 _initialPosition;
     private Quaternion _initialRotation;
+    private bool _freeLookEngaged;
 
     private void Awake()
     {
@@ -96,11 +97,16 @@ public class BoardSpectatorCameraController : MonoBehaviour
             followCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
         }
     }
+    private Vector3 ClampToAllowedArea(Vector3 pos)
+    {
+        pos.x = Mathf.Clamp(pos.x, transform.position.x + minX, transform.position.x + maxX);
+        pos.z = Mathf.Clamp(pos.z, transform.position.z + minZ, transform.position.z + maxZ);
+        return pos;
+    }
 
     private void Update()
     {
-        if (_introActive)
-            return;
+        if (_introActive) return;
 
         if (Input.GetKeyDown(toggleKey))
         {
@@ -108,17 +114,18 @@ public class BoardSpectatorCameraController : MonoBehaviour
             return;
         }
 
-        if (!_isActive || followCamera == null)
-            return;
+        if (!_isActive || followCamera == null) return;
 
-        bool isFreeMoving = HandleFreeMove();
+        bool movedThisFrame = HandleFreeMove();
+        if (movedThisFrame)
+            _freeLookEngaged = true;   // một khi đã tự lái, không auto-follow nữa
 
         if (_currentTarget == null)
             UpdateTargetFromBoard();
 
-        if (!isFreeMoving && _currentTarget != null)
+        if (!_freeLookEngaged && _currentTarget != null)
         {
-            _desiredPosition = CalculatePosition(_currentTarget.position);
+            _desiredPosition = ClampToAllowedArea(CalculatePosition(_currentTarget.position));
             followCamera.transform.position = Vector3.SmoothDamp(
                 followCamera.transform.position,
                 _desiredPosition,
@@ -131,9 +138,8 @@ public class BoardSpectatorCameraController : MonoBehaviour
 
     private void OnTurnStarted(int playerId)
     {
-        if (!_isActive)
-            return;
-
+        if (!_isActive) return;
+        _freeLookEngaged = false;
         UpdateTargetFromBoard(playerId);
     }
 
@@ -145,6 +151,7 @@ public class BoardSpectatorCameraController : MonoBehaviour
     public void SetActive(bool active)
     {
         _isActive = active;
+        _freeLookEngaged = false;
 
         if (followCamera != null)
         {
@@ -163,7 +170,7 @@ public class BoardSpectatorCameraController : MonoBehaviour
             UpdateTargetFromBoard();
             if (_currentTarget != null)
             {
-                followCamera.transform.position = CalculatePosition(_currentTarget.position);
+                followCamera.transform.position = ClampToAllowedArea(CalculatePosition(_currentTarget.position));
                 followCamera.transform.rotation = Quaternion.Euler(overheadAngle, 180f, 0f);
             }
         }
@@ -223,8 +230,7 @@ public class BoardSpectatorCameraController : MonoBehaviour
 
         worldMove.Normalize();
         Vector3 newPos = followCamera.transform.position + worldMove * freeMoveSpeed * Time.deltaTime;
-        newPos.x = Mathf.Clamp(newPos.x, minX, maxX);
-        newPos.z = Mathf.Clamp(newPos.z, minZ, maxZ);
+        newPos = ClampToAllowedArea(newPos); // dùng chung hàm clamp
         followCamera.transform.position = newPos;
         return true;
     }

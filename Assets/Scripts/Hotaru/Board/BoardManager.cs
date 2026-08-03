@@ -89,6 +89,7 @@ public class BoardManager : NetworkBehaviour
     private int _remainingSteps = 0;
     private BoardNode _currentMoveNode;
     private int _selectedBranchIndex = 0;
+    private int _selectedTargetNodeId = -1;
 
     private bool _directionSelected = false;
 
@@ -998,7 +999,8 @@ public class BoardManager : NetworkBehaviour
             BoardNode nextNode =
                 BoardNodePath.Instance.GetNextNode(
                     _currentMoveNode,
-                    _selectedBranchIndex);
+                    _selectedBranchIndex,
+                    _selectedTargetNodeId);
 
             if (nextNode == null)
                 break;
@@ -1038,6 +1040,8 @@ public class BoardManager : NetworkBehaviour
 
                 BoardState = BoardPhaseState.WaitingForDirection;
 
+                _selectedBranchIndex = 0;
+                _selectedTargetNodeId = -1;
                 _directionSelected = false;
 
                 RPC_ShowDirectionSelection(
@@ -1635,7 +1639,7 @@ public class BoardManager : NetworkBehaviour
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_SubmitBranchSelection(int playerId, int branchIndex)
+    private void RPC_SubmitBranchSelection(int playerId, int branchIndex, int targetNodeId)
     {
         if (!HasStateAuthority)
             return;
@@ -1645,21 +1649,26 @@ public class BoardManager : NetworkBehaviour
             return;
 
         _selectedBranchIndex = branchIndex;
+        _selectedTargetNodeId = targetNodeId;
         _directionSelected = true;
+
+        Debug.Log($"[BoardManager] Branch selected by P{playerId}: index={branchIndex}, targetNodeId={targetNodeId}");
     }
 
-    public void SelectBranch(int branchIndex)
+    public void SelectBranch(int branchIndex, int targetNodeId = -1)
     {
         if (HasStateAuthority)
         {
             _selectedBranchIndex = branchIndex;
+            _selectedTargetNodeId = targetNodeId;
             _directionSelected = true;
         }
         else
         {
             RPC_SubmitBranchSelection(
                 Runner.LocalPlayer.PlayerId,
-                branchIndex);
+                branchIndex,
+                targetNodeId);
         }
     }
 

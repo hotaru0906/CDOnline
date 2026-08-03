@@ -218,7 +218,7 @@ public class BoardNodePath : MonoBehaviour
         return traveled[tIdx];
     }
 
-    public BoardNode GetNextNode(BoardNode current, int branchIndex = 0)
+    public BoardNode GetNextNode(BoardNode current, int branchIndex = 0, int targetNodeId = -1)
     {
         if (current == null)
             return null;
@@ -226,6 +226,15 @@ public class BoardNodePath : MonoBehaviour
         if (current.nextNodes != null &&
             current.nextNodes.Count > 0)
         {
+            if (targetNodeId >= 0)
+            {
+                foreach (var next in current.nextNodes)
+                {
+                    if (next != null && next.nodeID == targetNodeId)
+                        return next;
+                }
+            }
+
             branchIndex = Mathf.Clamp(
                 branchIndex,
                 0,

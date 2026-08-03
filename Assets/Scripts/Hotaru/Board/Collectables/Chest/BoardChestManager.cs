@@ -121,7 +121,7 @@ public class BoardChestManager : NetworkBehaviour
 
     private void SpawnInitialChests()
     {
-        
+
         spawnedChests.Clear();
 
         if (chestSpawnNodes.Count == 0)
@@ -158,7 +158,7 @@ public class BoardChestManager : NetworkBehaviour
         }
 
         Debug.Log($"[BoardChestManager] Spawned {spawnedChests.Count} chests.");
-        
+
     }
 
     private void SaveChest()
@@ -207,9 +207,9 @@ public class BoardChestManager : NetworkBehaviour
 
     public bool TryOpenChest(int playerId, int nodeId)
     {
-        if (isOpeningChestInProgress)
+        if (IsInteractionActive || isOpeningChestInProgress)
         {
-            Debug.Log("[Chest] Chest opening already in progress.");
+            Debug.Log("[Chest] Interaction already active, ignoring re-trigger.");
             return false;
         }
 
@@ -290,7 +290,7 @@ public class BoardChestManager : NetworkBehaviour
         interactionChest = null;
         currentInventory = null;
     }
-    
+
     public void OnOpenButtonPressed()
     {
         if (isOpeningChestInProgress)

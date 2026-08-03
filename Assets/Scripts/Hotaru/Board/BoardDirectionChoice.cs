@@ -10,7 +10,7 @@ public class BoardDirectionChoice : MonoBehaviour
 
     [Header("Colors")]
     [SerializeField] private Color normalColor = Color.white;
-    [SerializeField] private Color hoverColor = Color.yellow;
+    [SerializeField] private Color hintColor = new Color(0.2f, 0.8f, 1f, 1f);
     [SerializeField] private Color selectedColor = Color.green;
 
     [Header("Optional")]
@@ -19,6 +19,7 @@ public class BoardDirectionChoice : MonoBehaviour
 
     private Material[] _originalMaterials;
     private bool _isSelected;
+    private bool _isInteractable;
 
     private void Awake()
     {
@@ -29,40 +30,47 @@ public class BoardDirectionChoice : MonoBehaviour
         {
             _originalMaterials = meshRenderer.materials;
         }
-    }
 
-    private void OnMouseEnter()
-    {
-        if (!useHighlight || _isSelected)
-            return;
-
-        SetColor(hoverColor);
-    }
-
-    private void OnMouseExit()
-    {
-        if (!useHighlight || _isSelected)
-            return;
-
+        _isInteractable = false;
         SetColor(normalColor);
     }
 
-    private void OnMouseDown()
+    private void OnMouseUpAsButton()
     {
-        if (_isSelected)
+        if (!_isInteractable || _isSelected)
             return;
 
         if (BoardManager.Instance == null)
             return;
 
-        BoardManager.Instance.SelectBranch(branchIndex);
+        int targetNodeId = targetNode != null ? targetNode.nodeID : -1;
+        BoardManager.Instance.SelectBranch(branchIndex, targetNodeId);
         SetSelected(true);
+        DirectionSelectionUI.Instance?.Hide();
     }
 
     public void SetSelected(bool selected)
     {
         _isSelected = selected;
         SetColor(selected ? selectedColor : normalColor);
+    }
+
+    public void SetInteractable(bool interactable)
+    {
+        _isInteractable = interactable;
+
+        if (TryGetComponent<Collider>(out var collider))
+            collider.enabled = interactable;
+
+        if (!_isInteractable)
+        {
+            _isSelected = false;
+            SetColor(normalColor);
+        }
+        else if (!_isSelected)
+        {
+            SetColor(hintColor);
+        }
     }
 
     public void SetBranchIndex(int index)

@@ -81,6 +81,8 @@ public class DirectionSelectionUI : MonoBehaviour
             var choice = choiceObj.AddComponent<BoardDirectionChoice>();
             choice.SetBranchIndex(i);
             choice.SetTargetNode(node.nextNodes[i]);
+            choice.SetInteractable(true);
+            choice.SetSelected(false);
             spawnedChoices.Add(choice);
         }
     }
@@ -93,7 +95,11 @@ public class DirectionSelectionUI : MonoBehaviour
         foreach (var choice in spawnedChoices)
         {
             if (choice != null)
+            {
+                choice.SetInteractable(false);
+                choice.SetSelected(false);
                 Destroy(choice.gameObject);
+            }
         }
 
         spawnedChoices.Clear();
