@@ -4,6 +4,8 @@ using Fusion;
 public class LobbyRunner : MonoBehaviour
 {
     public BasicSpawner _BasicSpawner;
+    private int _displayMaxPlayers = 4;
+
     private void Awake()
     {
         if (_BasicSpawner == null)
@@ -25,9 +27,20 @@ public class LobbyRunner : MonoBehaviour
         await _BasicSpawner.StartLobbyAndRunner();
     }
 
-    public async void CreateSession(string sessionName)
+    public void SetDisplayMaxPlayers(int maxPlayers)
     {
-        Debug.Log($"[LobbyRunner] Creating session: {sessionName}");
+        _displayMaxPlayers = Mathf.Clamp(maxPlayers, 2, 4);
+    }
+
+    public int GetDisplayMaxPlayers(int fallbackMaxPlayers)
+    {
+        return _displayMaxPlayers > 0 ? _displayMaxPlayers : fallbackMaxPlayers;
+    }
+
+    public async void CreateSession(string sessionName, int maxPlayers)
+    {
+        SetDisplayMaxPlayers(maxPlayers);
+        Debug.Log($"[LobbyRunner] Creating session: {sessionName} with max players {maxPlayers}");
         
         // Show loading when creating room
         LoadingScreen.Show("Creating room...");
@@ -44,7 +57,7 @@ public class LobbyRunner : MonoBehaviour
             return;
         }
         var sceneToLoad = SceneRef.FromIndex(1);
-        await _BasicSpawner.StartHost(sessionName, sceneToLoad);
+        await _BasicSpawner.StartHost(sessionName, sceneToLoad, maxPlayers);
     }
 
     public async void JoinSession(string sessionName)

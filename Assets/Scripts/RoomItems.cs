@@ -26,6 +26,11 @@ public class RoomItems : MonoBehaviour
         _currentPlayers = sessionInfo.PlayerCount;
         _maxPlayers = sessionInfo.MaxPlayers;
 
+        if (lobbyRunner != null)
+        {
+            _maxPlayers = lobbyRunner.GetDisplayMaxPlayers(_maxPlayers);
+        }
+
         roomNameText.text = _roomName;
         playerCountText.text = $"{_currentPlayers}/{_maxPlayers}";
         joinButton.onClick.AddListener(() => lobbyRunner.JoinSession(_roomName));

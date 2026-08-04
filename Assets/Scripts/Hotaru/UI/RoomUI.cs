@@ -98,6 +98,12 @@ public class RoomUI : MonoBehaviour
             }
         }
 
+        var lobbyRunner = FindAnyObjectByType<LobbyRunner>();
+        if (lobbyRunner != null)
+        {
+            _maxPlayers = lobbyRunner.GetDisplayMaxPlayers(_maxPlayers);
+        }
+
         if (roomNameText != null)
             roomNameText.text = _roomName;
 

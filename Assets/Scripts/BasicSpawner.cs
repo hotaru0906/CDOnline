@@ -87,8 +87,10 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
-    public async Task StartHost(string sessionName, SceneRef sceneName)
+    public async Task StartHost(string sessionName, SceneRef sceneName, int maxPlayers)
     {
+        Debug.Log($"[BasicSpawner] Starting host with max players: {maxPlayers}");
+
         if (_runner == null)
         {
             _runner = gameObject.AddComponent<NetworkRunner>();

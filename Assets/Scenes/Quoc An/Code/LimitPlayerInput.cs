@@ -14,12 +14,46 @@ public class LimitPlayerInput : MonoBehaviour
     private void Awake()
     {
         _inputField = GetComponent<TMP_InputField>();
+        if (_inputField == null)
+        {
+            Debug.LogError("[LimitPlayerInput] TMP_InputField not found.");
+            return;
+        }
+
         _inputField.onValidateInput = ValidateInput;
         _inputField.text = MIN_PLAYERS.ToString();
     }
 
-    private void OnEnable() => _inputField.onEndEdit.AddListener(OnEndEdit);
-    private void OnDisable() => _inputField.onEndEdit.RemoveListener(OnEndEdit);
+    private void OnEnable()
+    {
+        if (_inputField != null)
+            _inputField.onEndEdit.AddListener(OnEndEdit);
+    }
+
+    private void OnDisable()
+    {
+        if (_inputField != null)
+            _inputField.onEndEdit.RemoveListener(OnEndEdit);
+    }
+
+    public int GetValue()
+    {
+        if (_inputField == null)
+            return MIN_PLAYERS;
+
+        if (!int.TryParse(_inputField.text, out int value))
+            return MIN_PLAYERS;
+
+        return Mathf.Clamp(value, MIN_PLAYERS, MAX_PLAYERS);
+    }
+
+    public void SetValue(int value)
+    {
+        if (_inputField == null)
+            return;
+
+        _inputField.text = Mathf.Clamp(value, MIN_PLAYERS, MAX_PLAYERS).ToString();
+    }
 
     private char ValidateInput(string text, int charIndex, char addedChar)
     {

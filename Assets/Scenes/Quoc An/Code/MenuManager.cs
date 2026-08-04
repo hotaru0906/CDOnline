@@ -20,6 +20,7 @@ public class MenuManager : MonoBehaviour
     [Header("Lobby References")]
     [SerializeField] private LobbyRunner lobbyRunner;
     [SerializeField] private TMP_InputField roomNameInput;
+    [SerializeField] private LimitPlayerInput playerCountInput;
     [SerializeField] private Transform roomListParent;
     [SerializeField] private RoomItems roomListItemPrefab;
     [SerializeField] private Button createRoomButton;
@@ -178,7 +179,8 @@ public class MenuManager : MonoBehaviour
             return;
         }
 
-        lobbyRunner.CreateSession(roomName);
+        var maxPlayers = playerCountInput != null ? playerCountInput.GetValue() : 4;
+        lobbyRunner.CreateSession(roomName, maxPlayers);
     }
     #endregion
 
