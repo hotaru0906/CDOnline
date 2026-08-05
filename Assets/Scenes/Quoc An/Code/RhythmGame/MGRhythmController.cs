@@ -25,7 +25,7 @@ public class MGRhythmController : BaseMinigameController
 
     [Header("Rhythm Refs")]
     [SerializeField] private Conductor conductor;
-    [SerializeField] private MGRhythmPlayfield playfield;
+    [SerializeField] private MGRhythmDiamondPlayfield playfield;
 
     [Header("Battle Settings")]
     [SerializeField] private int startHP = 100;
@@ -163,7 +163,7 @@ public class MGRhythmController : BaseMinigameController
         }
 
         conductor.StartSongAtDsp(UnityEngine.AudioSettings.dspTime + secondsUntilStart);
-        playfield.BeginPlay(GetLocalLane());
+        playfield.BeginPlay();
 
         Debug.Log($"[MGRhythm] Nhạc bắt đầu sau {secondsUntilStart:F3}s — lane của tôi: {GetLocalLane()}");
     }
@@ -202,7 +202,7 @@ public class MGRhythmController : BaseMinigameController
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_PlayFeverVfx(PlayerRef attacker)
     {
-        playfield?.PlayFeverBurstVfx(GetLaneOfPlayerId(attacker.PlayerId));
+        playfield?.PlayFeverBurstOnPanel(GetLaneOfPlayerId(attacker.PlayerId));
     }
 
     // ----------------------------------------------------------------
