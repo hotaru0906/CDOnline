@@ -173,6 +173,10 @@ public class PlayerMinigameData : NetworkBehaviour
             IsEliminated = true;
             IsDead = true;
             playerController?.SetFrozen(true);
+            if (Object.HasInputAuthority)
+            {
+                CameraManager.Instance?.StartSpectate();
+            }
             Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} ELIMINATED (HP=0)");
         }
     }
@@ -256,6 +260,11 @@ public class PlayerMinigameData : NetworkBehaviour
             // Hết mạng — die vĩnh viễn, không respawn
             IsEliminated = true;
             IsDead = true;
+
+            if (Object.HasInputAuthority)
+            {
+                CameraManager.Instance?.StartSpectate();
+            }
             if (playerController != null)
                 playerController.SetFrozen(true);
             Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} ELIMINATED");
@@ -325,6 +334,11 @@ public class PlayerMinigameData : NetworkBehaviour
         IsEliminated = true;
         RespawnTimer = default;
         playerController?.SetFrozen(true);
+
+        if (Object.HasInputAuthority)
+        {
+            CameraManager.Instance?.StartSpectate();
+        }
         Debug.Log($"[PlayerMinigameData] P{Object.InputAuthority} eliminated permanently");
     }
 

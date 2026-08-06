@@ -96,6 +96,8 @@ public class PlayerController : NetworkBehaviour
     private PlayerModelSwitcher _modelSwitcher;
 
     private CameraOrbit _cameraOrbit;
+
+    private PlayerMinigameData _minigameData;
     private Transform _cameraTransform;
 
     private Vector3 _targetMoveDirection;
@@ -124,6 +126,7 @@ public class PlayerController : NetworkBehaviour
         _networkCC = GetComponent<NetworkCharacterController>();
         _playerAnimator = GetComponent<PlayerAnimator>();
         _modelSwitcher = GetComponent<PlayerModelSwitcher>();
+        _minigameData = GetComponent<PlayerMinigameData>();
 
         _normalScale = transform.localScale;
 
@@ -180,6 +183,17 @@ public class PlayerController : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
+        if (_minigameData != null && _minigameData.IsEliminated)
+        {
+            // Dừng mọi chuyển động còn sót lại
+            ResetVelocity();
+
+            // Hủy trạng thái đánh nếu đang đánh
+            ForceIdle();
+
+            return;
+        }
+
         if (AttackTimer > 0)
         {
             AttackTimer -= Runner.DeltaTime;
@@ -470,6 +484,11 @@ public class PlayerController : NetworkBehaviour
     {
         if (!HasInputAuthority)
             return;
+
+        if (_minigameData != null && _minigameData.IsEliminated)
+        {
+            return;
+        }
 
         UpdateCrosshairVisibility();
 
