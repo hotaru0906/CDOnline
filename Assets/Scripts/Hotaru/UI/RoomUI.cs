@@ -9,7 +9,6 @@ public class RoomUI : MonoBehaviour
     [SerializeField] private TMP_Text roomNameText;
     [SerializeField] private TMP_Text playerCountText;
 
-    [SerializeField] private Button leaveRoomButton;
     [SerializeField] private Button readyGameButton;
     [SerializeField] private Button startGameButton;
     [SerializeField] private Button forceStartButton;
@@ -35,7 +34,6 @@ public class RoomUI : MonoBehaviour
 
     void Start()
     {
-        leaveRoomButton.onClick.AddListener(OnLeaveRoomClicked);
         readyGameButton.onClick.AddListener(OnReadyGameClicked);
         startGameButton.onClick.AddListener(OnStartGameClicked);
         forceStartButton.onClick.AddListener(OnForceStartClicked);
@@ -140,22 +138,6 @@ public class RoomUI : MonoBehaviour
         startGameButton.gameObject.SetActive(isHost);
         readyGameButton.gameObject.SetActive(!isHost);
         forceStartButton.gameObject.SetActive(isHost);
-    }
-
-    private async void OnLeaveRoomClicked()
-    {
-        if (_runner == null) return;
-
-        Debug.Log("[RoomUI] Leaving room...");
-
-        // Ensure input is re-enabled
-        if (PlayerInputHandler.Instance != null)
-        {
-            PlayerInputHandler.Instance.InputEnabled = true;
-        }
-
-        await _runner.Shutdown();
-        UnityEngine.SceneManagement.SceneManager.LoadScene("TestMenu");
     }
 
     private void OnReadyGameClicked()
