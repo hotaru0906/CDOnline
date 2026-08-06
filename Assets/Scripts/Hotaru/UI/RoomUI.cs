@@ -188,10 +188,18 @@ public class RoomUI : MonoBehaviour
     private void OnForceStartClicked()
     {
         if (GameManager.Instance == null)
+        {
+            Debug.LogWarning("[RoomUI] ForceStart: GameManager.Instance is null");
             return;
+        }
+
+        Debug.Log($"[RoomUI] ForceStart clicked. IsHost:{GameManager.Instance.IsHost}, RunnerExists:{_runner != null}, RunnerIsRunning:{(_runner != null ? _runner.IsRunning.ToString() : "N/A")}");
 
         if (!GameManager.Instance.IsHost)
+        {
+            Debug.LogWarning("[RoomUI] Only host can force start");
             return;
+        }
 
         Debug.Log("[RoomUI] Host force starting");
 
