@@ -9,7 +9,6 @@ public class RoomUI : MonoBehaviour
     [SerializeField] private TMP_Text roomNameText;
     [SerializeField] private TMP_Text playerCountText;
 
-    [SerializeField] private Button leaveRoomButton;
     [SerializeField] private Button readyGameButton;
     [SerializeField] private Button startGameButton;
     [SerializeField] private Button forceStartButton;
@@ -35,7 +34,6 @@ public class RoomUI : MonoBehaviour
 
     void Start()
     {
-        leaveRoomButton.onClick.AddListener(OnLeaveRoomClicked);
         readyGameButton.onClick.AddListener(OnReadyGameClicked);
         startGameButton.onClick.AddListener(OnStartGameClicked);
         forceStartButton.onClick.AddListener(OnForceStartClicked);
@@ -142,22 +140,6 @@ public class RoomUI : MonoBehaviour
         forceStartButton.gameObject.SetActive(isHost);
     }
 
-    private async void OnLeaveRoomClicked()
-    {
-        if (_runner == null) return;
-
-        Debug.Log("[RoomUI] Leaving room...");
-
-        // Ensure input is re-enabled
-        if (PlayerInputHandler.Instance != null)
-        {
-            PlayerInputHandler.Instance.InputEnabled = true;
-        }
-
-        await _runner.Shutdown();
-        UnityEngine.SceneManagement.SceneManager.LoadScene("TestMenu");
-    }
-
     private void OnReadyGameClicked()
     {
         Debug.Log("[RoomUI] Player ready clicked");
@@ -188,10 +170,18 @@ public class RoomUI : MonoBehaviour
     private void OnForceStartClicked()
     {
         if (GameManager.Instance == null)
+        {
+            Debug.LogWarning("[RoomUI] ForceStart: GameManager.Instance is null");
             return;
+        }
+
+        Debug.Log($"[RoomUI] ForceStart clicked. IsHost:{GameManager.Instance.IsHost}, RunnerExists:{_runner != null}, RunnerIsRunning:{(_runner != null ? _runner.IsRunning.ToString() : "N/A")}");
 
         if (!GameManager.Instance.IsHost)
+        {
+            Debug.LogWarning("[RoomUI] Only host can force start");
             return;
+        }
 
         Debug.Log("[RoomUI] Host force starting");
 
