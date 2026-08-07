@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace RhythmGame
 {
@@ -22,7 +23,10 @@ namespace RhythmGame
         [Header("Refs")]
         [SerializeField] private Conductor conductor;
         [SerializeField] private TextAsset chartJson;
-        [SerializeField] private DiamondNoteView notePrefab;
+        [SerializeField, Tooltip("Prefab mũi tên TRÁI (note bay về đỉnh trái, ấn A/←).")]
+        private DiamondNoteView notePrefabLeft;
+        [SerializeField, Tooltip("Prefab mũi tên PHẢI (note bay về đỉnh phải, ấn D/→). Để trống thì dùng chung prefab trái.")]
+        private DiamondNoteView notePrefabRight;
 
         [Header("Hình học hình thoi (RectTransform đánh dấu 3 đỉnh)")]
         [SerializeField] private RectTransform noteContainer;
@@ -38,9 +42,9 @@ namespace RhythmGame
 
         [Header("HUD người chơi cục bộ")]
         [SerializeField] private Image feverFill;      // Filled, Horizontal, Left
-        [SerializeField] private Text comboText;
-        [SerializeField] private Text judgeText;
-        [SerializeField] private Text scoreText;
+        [SerializeField] private TMP_Text comboText;
+        [SerializeField] private TMP_Text judgeText;
+        [SerializeField] private TMP_Text scoreText;
         [SerializeField] private GameObject localFeverBurstVfx;
 
         [Header("Hàng 4 người ở đáy")]
@@ -74,7 +78,10 @@ namespace RhythmGame
         // _active[0] = note đang bay về trái, _active[1] = về phải
         private readonly List<DiamondNoteView>[] _active =
             { new List<DiamondNoteView>(32), new List<DiamondNoteView>(32) };
-        private readonly Stack<DiamondNoteView> _pool = new Stack<DiamondNoteView>();
+        // Pool riêng mỗi bên: note trái tái sử dụng ra note trái, phải ra phải,
+        // nếu chung pool thì hình mũi tên sẽ bị lẫn.
+        private readonly Stack<DiamondNoteView>[] _pool =
+            { new Stack<DiamondNoteView>(), new Stack<DiamondNoteView>() };
 
         private int _score, _combo, _maxCombo, _perfect, _good, _miss;
         private float _fever, _reportTimer;
@@ -165,7 +172,9 @@ namespace RhythmGame
 
                 int side = e.lane == 1 ? 1 : 0; // 1 = phải, còn lại = trái
 
-                DiamondNoteView nv = _pool.Count > 0 ? _pool.Pop() : Instantiate(notePrefab);
+                DiamondNoteView nv = _pool[side].Count > 0
+                    ? _pool[side].Pop()
+                    : Instantiate(PrefabForSide(side));
                 nv.Setup(side, e.time, noteContainer);
                 _active[side].Add(nv);
             }
@@ -332,7 +341,14 @@ namespace RhythmGame
             DiamondNoteView nv = _active[side][index];
             _active[side].RemoveAt(index);
             nv.Recycle();
-            _pool.Push(nv);
+            _pool[side].Push(nv);
+        }
+
+        /// <summary>Prefab theo hướng. Nếu chưa gán prefab phải thì dùng chung prefab trái.</summary>
+        private DiamondNoteView PrefabForSide(int side)
+        {
+            if (side == 1 && notePrefabRight != null) return notePrefabRight;
+            return notePrefabLeft;
         }
 
         // ----------------------------------------------------------------

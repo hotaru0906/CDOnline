@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 namespace RhythmGame
 {
@@ -14,7 +15,7 @@ namespace RhythmGame
 
         [Header("UI")]
         [SerializeField] private Image characterIcon;
-        [SerializeField] private Text nameText;   // đổi thành TMP_Text nếu dùng TextMeshPro
+        [SerializeField] private TMP_Text nameText;   // đổi thành TMP_Text nếu dùng TextMeshPro
         [SerializeField] private Image hpFill;     // Image Type = Filled, Horizontal, Left
         [SerializeField] private Image frame;      // viền, đổi màu theo themeColor (tuỳ chọn)
         [SerializeField] private GameObject localMarker;   // đánh dấu "đây là bạn"
