@@ -1888,14 +1888,22 @@ public class GameManager : NetworkBehaviour
     {
         yield return new WaitUntil(() =>
             VotingManager.Instance != null &&
-            VotingManager.Instance.IsReady
+            VotingManager.Instance.IsReady &&
+            MinigameVotingManager.Instance != null &&
+            MinigameVotingManager.Instance.IsReady
         );
 
-        // Đảm bảo PrepareNextVotingRound chạy trước StartVoting
-        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
-            MinigameVotingManager.Instance.PrepareNextVotingRound();
+        Debug.Log("[Voting] PrepareNextVotingRound");
+
+        MinigameVotingManager.Instance.PrepareNextVotingRound();
+
+        // Chờ 1 frame để NetworkArray và AvailableListVersion được sync
+        yield return null;
+
+        Debug.Log("[Voting] StartVoting");
 
         VotingManager.Instance.StartVoting();
+
         _startVotingCoroutine = null;
     }
     protected virtual void HandleTutorialState()
