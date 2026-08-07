@@ -1504,7 +1504,6 @@ public class BoardManager : NetworkBehaviour
             }
         }
 
-        // Lưu Board items của từng slot
         for (int i = 0; i < ActivePlayerCount; i++)
         {
             int pid = GetPlayerIDAtSlot(i);
@@ -1513,30 +1512,14 @@ public class BoardManager : NetworkBehaviour
             var inv = PlayerItemInventory.GetForPlayer(pid);
             if (inv == null) continue;
 
-            Debug.Log($"SAVE SLOT {i}: [{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
-
-            Debug.Log(
-            $"Before Save P{i}: " +
-            $"[{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
-
-            GameManager.Instance?.SaveBoardItems(i,
+            GameManager.Instance?.SaveBoardItemsByPlayer(
+                pid,
                 inv.BoardItems.Get(0),
                 inv.BoardItems.Get(1),
                 inv.BoardItems.Get(2),
                 inv.BoardItems.Get(3));
 
-            GameManager.Instance?.SaveBoardItemsByPlayer(
-            pid,
-            inv.BoardItems.Get(0),
-            inv.BoardItems.Get(1),
-            inv.BoardItems.Get(2),
-            inv.BoardItems.Get(3));
-
-            Debug.Log(
-                $"[BoardItem Save] Player={pid} " +
-                $"Items=[{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
         }
-
         DistributeRouletteRewards();
         BoardState = BoardPhaseState.BoardComplete;
         RPC_BoardComplete();
