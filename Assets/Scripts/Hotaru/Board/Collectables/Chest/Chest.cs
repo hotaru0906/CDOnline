@@ -1,90 +1,90 @@
-using UnityEngine;
-using Fusion;
+// using UnityEngine;
+// using Fusion;
 
-public class Chest : BoardCollectable
-{
-    [SerializeField]
-    private BoardNode boardNode;
+// public class Chest : BoardCollectable
+// {
+//     [SerializeField]
+//     private BoardNode boardNode;
 
-    private Animator animator;
+//     private Animator animator;
 
-    public BoardNode BoardNode => boardNode;
+//     public BoardNode BoardNode => boardNode;
 
-    public bool IsOpened { get; private set; }
+//     public bool IsOpened { get; private set; }
 
-    public int ChestIndex { get; private set; } = -1;
+//     public int ChestIndex { get; private set; } = -1;
 
-    [Networked]
-    public int BoardNodeID { get; set; } = -1;
+//     [Networked]
+//     public int BoardNodeID { get; set; } = -1;
 
-    public void SetChestIndex(int index)
-    {
-        ChestIndex = index;
-    }
+//     public void SetChestIndex(int index)
+//     {
+//         ChestIndex = index;
+//     }
 
-    public void SetBoardNode(BoardNode node)
-    {
-        boardNode = node;
+//     public void SetBoardNode(BoardNode node)
+//     {
+//         boardNode = node;
 
-        BoardNodeID = node.nodeID;
+//         BoardNodeID = node.nodeID;
 
-        transform.position = node.transform.position + Vector3.up * 0.6f;
-    }
+//         transform.position = node.transform.position + Vector3.up * 0.6f;
+//     }
 
-    public void Open()
-    {
-        animator.Play("Take 001", 0, 0f);
-    }
+//     public void Open()
+//     {
+//         animator.Play("Take 001", 0, 0f);
+//     }
 
-    public void MarkOpened()
-    {
-        IsOpened = true;
-    }
+//     public void MarkOpened()
+//     {
+//         IsOpened = true;
+//     }
 
-    public bool IsOnNode(BoardNode node)
-    {
-        return boardNode == node;
-    }
+//     public bool IsOnNode(BoardNode node)
+//     {
+//         return boardNode == node;
+//     }
 
-    public bool IsOnNode(int nodeId)
-    {
-        return boardNode != null && boardNode.nodeID == nodeId;
-    }
+//     public bool IsOnNode(int nodeId)
+//     {
+//         return boardNode != null && boardNode.nodeID == nodeId;
+//     }
 
-    private void Awake()
-    {
-        animator = GetComponent<Animator>();
-    }
+//     private void Awake()
+//     {
+//         animator = GetComponent<Animator>();
+//     }
 
-    public override void Spawned()
-    {
-        base.Spawned();
+//     public override void Spawned()
+//     {
+//         base.Spawned();
 
-        Debug.Log($"CHEST Spawned on {Runner.LocalPlayer.PlayerId}  Object={Object.Id}");
+//         Debug.Log($"CHEST Spawned on {Runner.LocalPlayer.PlayerId}  Object={Object.Id}");
 
-        BoardChestManager.Instance?.RegisterChest(this);
-    }
+//         BoardChestManager.Instance?.RegisterChest(this);
+//     }
 
-    public override void Render()
-    {
-        base.Render();
+//     public override void Render()
+//     {
+//         base.Render();
 
-        if (BoardNodeID < 0)
-            return;
+//         if (BoardNodeID < 0)
+//             return;
 
-        BoardNode node = BoardNodePath.Instance.GetNodeByID(BoardNodeID);
+//         BoardNode node = BoardNodePath.Instance.GetNodeByID(BoardNodeID);
 
-        if (node == null)
-            return;
+//         if (node == null)
+//             return;
 
-        if (boardNode != node)
-        {
-            boardNode = node;
+//         if (boardNode != node)
+//         {
+//             boardNode = node;
 
-            transform.position =
-                node.transform.position + Vector3.up * 0.6f;
+//             transform.position =
+//                 node.transform.position + Vector3.up * 0.6f;
 
-            Debug.Log($"[Chest] Sync Node {BoardNodeID}");
-        }
-    }
-}
+//             Debug.Log($"[Chest] Sync Node {BoardNodeID}");
+//         }
+//     }
+// }

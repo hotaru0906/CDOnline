@@ -40,10 +40,6 @@ public class BoardIntroController : MonoBehaviour
         return center / nodes.Length;
     }
 
-    private Chest[] GetAllChests()
-    {
-        return FindObjectsByType<Chest>(FindObjectsSortMode.None);
-    }
     public IEnumerator PlayIntro()
     {
         spectatorCameraController?.SetIntroActive(true);
@@ -51,15 +47,6 @@ public class BoardIntroController : MonoBehaviour
         mainCamera.gameObject.SetActive(false);
 
         yield return OrbitAroundBoard();
-
-        Chest[] chests = GetAllChests();
-
-        Debug.Log($"[BoardIntro] Found {chests.Length} chests.");
-
-        if (chests.Length > 0)
-        {
-            yield return FocusChest(chests[0]);
-        }
 
         introCamera.gameObject.SetActive(false);
         mainCamera.gameObject.SetActive(true);
@@ -133,27 +120,5 @@ public class BoardIntroController : MonoBehaviour
 
             yield return null;
         }
-    }
-
-    private IEnumerator FocusChest(Chest chest)
-    {
-        Vector3 chestPos = chest.transform.position;
-        Vector3 center = GetBoardCenter();
-
-        // Camera đứng hơi chếch phía trước rương
-        Vector3 direction =
-            (chestPos - center).normalized;
-
-        Vector3 cameraPos =
-            chestPos +
-            direction * 8f +
-            Vector3.up * 6f;
-
-        yield return MoveCameraTo(
-            cameraPos,
-            chestPos,
-            1.5f);
-
-        yield return new WaitForSeconds(1.5f);
     }
 }

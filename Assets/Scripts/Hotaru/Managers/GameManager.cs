@@ -148,16 +148,6 @@ public class GameManager : NetworkBehaviour
     [Networked] public NetworkBool KeyCollected1 { get; private set; } = false;
     [Networked] public NetworkBool KeyCollected2 { get; private set; } = false;
     [Networked] public NetworkBool KeyCollected3 { get; private set; } = false;
-    // ===== CHEST STATE =====
-
-    [Networked] public int ChestNode0 { get; private set; } = -1;
-    [Networked] public int ChestNode1 { get; private set; } = -1;
-    [Networked] public int ChestNode2 { get; private set; } = -1;
-    [Networked] public int ChestNode3 { get; private set; } = -1;
-    [Networked] public int ChestNode4 { get; private set; } = -1;
-    [Networked] public int ChestNode5 { get; private set; } = -1;
-    [Networked] public int ChestNode6 { get; private set; } = -1;
-    [Networked] public int ChestNode7 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S0 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S2 { get; private set; } = -1;
@@ -177,17 +167,6 @@ public class GameManager : NetworkBehaviour
     [Networked] public int BoardItem_P3_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S2 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S3 { get; private set; } = -1;
-
-    // ===== PLAYER RESOURCE STATE (KEY/CHEST) =====
-    [Networked] public int KeyCount_P0 { get; private set; } = 0;
-    [Networked] public int KeyCount_P1 { get; private set; } = 0;
-    [Networked] public int KeyCount_P2 { get; private set; } = 0;
-    [Networked] public int KeyCount_P3 { get; private set; } = 0;
-
-    [Networked] public int ChestCount_P0 { get; private set; } = 0;
-    [Networked] public int ChestCount_P1 { get; private set; } = 0;
-    [Networked] public int ChestCount_P2 { get; private set; } = 0;
-    [Networked] public int ChestCount_P3 { get; private set; } = 0;
 
     [Networked] public NetworkBool ShieldActive_P0 { get; private set; } = false;
     [Networked] public NetworkBool ShieldActive_P1 { get; private set; } = false;
@@ -382,45 +361,6 @@ public class GameManager : NetworkBehaviour
         return KeyNode0 != -1;
     }
 
-    public void SaveChestState(int index, int nodeId)
-    {
-        if (!HasStateAuthority)
-            return;
-
-        switch (index)
-        {
-            case 0: ChestNode0 = nodeId; break;
-            case 1: ChestNode1 = nodeId; break;
-            case 2: ChestNode2 = nodeId; break;
-            case 3: ChestNode3 = nodeId; break;
-            case 4: ChestNode4 = nodeId; break;
-            case 5: ChestNode5 = nodeId; break;
-            case 6: ChestNode6 = nodeId; break;
-            case 7: ChestNode7 = nodeId; break;
-        }
-    }
-
-    public int GetChestNode(int index)
-    {
-        return index switch
-        {
-            0 => ChestNode0,
-            1 => ChestNode1,
-            2 => ChestNode2,
-            3 => ChestNode3,
-            4 => ChestNode4,
-            5 => ChestNode5,
-            6 => ChestNode6,
-            7 => ChestNode7,
-            _ => -1
-        };
-    }
-
-    public bool HasSavedChestState()
-    {
-        return ChestNode0 != -1;
-    }
-
     public void SaveBoardItems(int slot, int s0, int s1, int s2, int s3)
     {
         if (!HasStateAuthority) return;
@@ -556,7 +496,7 @@ public class GameManager : NetworkBehaviour
         return new[] { -1, -1, -1, -1 };
     }
 
-    public void SavePlayerResourceState(int playerId, int keyCount, int chestCount)
+    public void SavePlayerResourceState(int playerId)
     {
         if (!HasStateAuthority)
             return;
@@ -569,52 +509,32 @@ public class GameManager : NetworkBehaviour
         {
             case 0:
                 ResourcePlayerId_P0 = playerId;
-                KeyCount_P0 = Mathf.Max(0, keyCount);
-                ChestCount_P0 = Mathf.Max(0, chestCount);
                 break;
             case 1:
                 ResourcePlayerId_P1 = playerId;
-                KeyCount_P1 = Mathf.Max(0, keyCount);
-                ChestCount_P1 = Mathf.Max(0, chestCount);
                 break;
             case 2:
                 ResourcePlayerId_P2 = playerId;
-                KeyCount_P2 = Mathf.Max(0, keyCount);
-                ChestCount_P2 = Mathf.Max(0, chestCount);
                 break;
             case 3:
                 ResourcePlayerId_P3 = playerId;
-                KeyCount_P3 = Mathf.Max(0, keyCount);
-                ChestCount_P3 = Mathf.Max(0, chestCount);
                 break;
         }
-
-        Debug.Log($"[GameManager] Saved Resource P{playerId}: Key={keyCount}, Chest={chestCount}");
     }
 
-    public bool TryGetPlayerResourceState(int playerId, out int keyCount, out int chestCount)
+    public bool TryGetPlayerResourceState(int playerId)
     {
         switch (GetResourceSlotByPlayerId(playerId))
         {
             case 0:
-                keyCount = KeyCount_P0;
-                chestCount = ChestCount_P0;
                 return true;
             case 1:
-                keyCount = KeyCount_P1;
-                chestCount = ChestCount_P1;
                 return true;
             case 2:
-                keyCount = KeyCount_P2;
-                chestCount = ChestCount_P2;
                 return true;
             case 3:
-                keyCount = KeyCount_P3;
-                chestCount = ChestCount_P3;
                 return true;
             default:
-                keyCount = 0;
-                chestCount = 0;
                 return false;
         }
     }
@@ -654,11 +574,8 @@ public class GameManager : NetworkBehaviour
         if (!HasStateAuthority || inventory == null)
             return false;
 
-        if (!TryGetPlayerResourceState(playerId, out int keyCount, out int chestCount))
+        if (!TryGetPlayerResourceState(playerId))
             return false;
-
-        inventory.SetResourceCounts(keyCount, chestCount);
-        Debug.Log($"[GameManager] Restored Resource P{playerId}: Key={keyCount}, Chest={chestCount}");
         return true;
     }
 
@@ -777,9 +694,6 @@ public class GameManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        // Không dùng DontDestroyOnLoad cho NetworkBehaviour
-        // NetworkRunner quản lý lifecycle của NetworkObject
-        // VotingManager, MinigameVotingManager nên là CHILD của GameManager prefab
     }
 
     private void OnDestroy()
@@ -1571,7 +1485,7 @@ public class GameManager : NetworkBehaviour
             if (inv == null)
                 continue;
 
-            SavePlayerResourceState(playerId, inv.GetKeyCount(), inv.GetChestCount());
+            SavePlayerResourceState(playerId);
         }
     }
 
@@ -1678,12 +1592,6 @@ public class GameManager : NetworkBehaviour
             }
         }
     }
-
-    /// <summary>
-    /// Board kết thúc.
-    /// Luôn chuyển sang Voting.
-    /// Điều kiện thắng sẽ do ChestManager quyết định sau này.
-    /// </summary>
     public void ProceedFromBoard()
     {
         if (!HasStateAuthority)
