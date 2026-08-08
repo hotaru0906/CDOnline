@@ -126,6 +126,7 @@ public class BoardManager : NetworkBehaviour
     private int _targetSelectIndex = 0;
     private bool _isSelectingTarget = false;
     private bool _gameEnded = false;
+    private BoardItemEffect _localSelectingEffect = BoardItemEffect.None; // fix: đọc đúng effect trên mọi client, không chỉ host
     #endregion
 
     #region Events
@@ -254,6 +255,8 @@ public class BoardManager : NetworkBehaviour
 
         if (_isSelectingTarget && _eligibleItemTargets.Count > 0)
         {
+            bool isSwap = _localSelectingEffect == BoardItemEffect.PositionSwap;
+
             if (Input.GetKeyDown(KeyCode.A))
             {
                 int prevTarget = _eligibleItemTargets[_targetSelectIndex];
@@ -261,7 +264,11 @@ public class BoardManager : NetworkBehaviour
                 int newTarget = _eligibleItemTargets[_targetSelectIndex];
 
                 RPC_HighlightTarget(newTarget);
-                RPC_SwitchGlovePreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
+
+                if (isSwap)
+                    RPC_SwitchTPPreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
+                else
+                    RPC_SwitchGlovePreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
             }
             else if (Input.GetKeyDown(KeyCode.D))
             {
@@ -270,7 +277,11 @@ public class BoardManager : NetworkBehaviour
                 int newTarget = _eligibleItemTargets[_targetSelectIndex];
 
                 RPC_HighlightTarget(newTarget);
-                RPC_SwitchGlovePreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
+
+                if (isSwap)
+                    RPC_SwitchTPPreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
+                else
+                    RPC_SwitchGlovePreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
             }
             else if (Input.GetKeyDown(KeyCode.Space))
             {
@@ -278,12 +289,17 @@ public class BoardManager : NetworkBehaviour
                 _waitingForMyItemTarget = false;
 
                 int chosenTarget = _eligibleItemTargets[_targetSelectIndex];
-                // Tắt preview — nếu là PushBack, animation thật sẽ tự bật lại glove qua RPC_PlayGloveVFX trong ExecutePushBack
-                RPC_SetGlovePreview(GetSlotByPlayerId(chosenTarget), false);
+                int chosenSlot = GetSlotByPlayerId(chosenTarget);
 
+                if (isSwap)
+                    RPC_SetTPSelectionPreview(chosenSlot, false);
+                else
+                    RPC_SetGlovePreview(chosenSlot, false);
+
+                _localSelectingEffect = BoardItemEffect.None;
                 RPC_SubmitItemTargetSelect(ItemUserPlayerId, chosenTarget);
             }
-            return; // không xử lý roll khi đang chọn target
+            return;
         }
 
         // Space to roll
@@ -658,10 +674,18 @@ public class BoardManager : NetworkBehaviour
                     if (pid >= 0 && pid != userId) eligibles.Add(pid);
                 }
 
-                // Tắt hết glove trước, rồi hiện glove ở target đầu tiên
-                RPC_ResetAllGlovePreviews();
-                if (eligibles.Count > 0)
-                    RPC_SetGlovePreview(GetSlotByPlayerId(eligibles[0]), true);
+                if (effect == BoardItemEffect.PositionSwap)
+                {
+                    RPC_ResetAllTPPreviews();
+                    if (eligibles.Count > 0)
+                        RPC_SetTPSelectionPreview(GetSlotByPlayerId(eligibles[0]), true);
+                }
+                else // PushBack
+                {
+                    RPC_ResetAllGlovePreviews();
+                    if (eligibles.Count > 0)
+                        RPC_SetGlovePreview(GetSlotByPlayerId(eligibles[0]), true);
+                }
 
                 RPC_BeginItemTargetSelect(userId, eligibles.ToArray(), effectId);
                 int userSlotVerified = CurrentSlot;
@@ -694,7 +718,11 @@ public class BoardManager : NetworkBehaviour
 
         if (_itemTargetPendingId == -1)
         {
-            RPC_ResetAllGlovePreviews(); // không có target hợp lệ — dọn sạch phòng khi có glove còn sót
+            if (_pendingItemEffect == BoardItemEffect.PositionSwap)
+                RPC_ResetAllTPPreviews();
+            else
+                RPC_ResetAllGlovePreviews();
+
             var usedEff = _pendingItemEffect;
             BoardState = BoardPhaseState.WaitingForRoll;
             ItemUserPlayerId = -1;
@@ -708,8 +736,10 @@ public class BoardManager : NetworkBehaviour
         for (int i = 0; i < ActivePlayerCount; i++)
             if (GetPlayerIDAtSlot(i) == targetId) { targetSlot = i; break; }
 
-        // Timeout tự chọn — tắt preview trước khi thực thi effect
-        RPC_SetGlovePreview(targetSlot, false);
+        if (_pendingItemEffect == BoardItemEffect.PositionSwap)
+            RPC_SetTPSelectionPreview(targetSlot, false);
+        else
+            RPC_SetGlovePreview(targetSlot, false);
 
         if (_pendingItemEffect == BoardItemEffect.PushBack)
             yield return ExecutePushBack(targetSlot, userId);
@@ -722,7 +752,6 @@ public class BoardManager : NetworkBehaviour
         _pendingItemEffect = BoardItemEffect.None;
         RPC_ItemUsed(userId, (int)doneEffect);
     }
-
     private IEnumerator ExecuteRushForward(int slot, int playerId, int steps)
     {
         if (slot < 0 || playerId < 0)
@@ -819,6 +848,11 @@ public class BoardManager : NetworkBehaviour
             yield break;
         }
 
+        // TP Burst hiện ở token target — trong lúc hiện thì thực hiện swap
+        RPC_PlayTPBurst(targetSlot);
+
+        yield return new WaitForSeconds(0.3f); // độ trễ ngắn trước khi thật sự đổi vị trí — chỉnh lại nếu cần khớp timing burst
+
         int userNode = GetNodeIDAtSlot(userSlot);
         int targetNode = GetNodeIDAtSlot(targetSlot);
 
@@ -826,9 +860,11 @@ public class BoardManager : NetworkBehaviour
         SetNodeIDAtSlot(targetSlot, userNode);
 
         RPC_SnapTokensForSwap(userSlot, targetNode, targetSlot, userNode);
-        yield return new WaitForSeconds(0.8f);
+
+        yield return new WaitForSeconds(0.5f);
 
         RPC_PositionSwapResult(userId, targetId);
+        // TP Burst tự tắt sau tổng 2s độc lập, không cần yield thêm ở đây
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -840,8 +876,8 @@ public class BoardManager : NetworkBehaviour
             _eligibleItemTargets = new System.Collections.Generic.List<int>(eligibles);
             _targetSelectIndex = 0;
             _isSelectingTarget = true;
+            _localSelectingEffect = (BoardItemEffect)effectId; // NEW
 
-            // Gọi trực tiếp thay vì RPC
             BoardCameraController.Instance?.FocusOnPlayer(eligibles[0]);
         }
         Debug.Log($"[BoardManager] P{userId} chọn target cho {(BoardItemEffect)effectId}");
@@ -1791,6 +1827,37 @@ public class BoardManager : NetworkBehaviour
             tokens[prevSlot].SetGlovePreview(false);
         if (newSlot >= 0 && newSlot < tokens.Length && tokens[newSlot] != null)
             tokens[newSlot].SetGlovePreview(true);
+    }
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ResetAllTPPreviews()
+    {
+        if (tokens == null) return;
+        foreach (var t in tokens)
+            t?.SetTPSelectionPreview(false);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SetTPSelectionPreview(int slot, bool active)
+    {
+        if (tokens != null && slot >= 0 && slot < tokens.Length && tokens[slot] != null)
+            tokens[slot].SetTPSelectionPreview(active);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    private void RPC_SwitchTPPreview(int prevSlot, int newSlot)
+    {
+        if (tokens == null) return;
+        if (prevSlot >= 0 && prevSlot < tokens.Length && tokens[prevSlot] != null)
+            tokens[prevSlot].SetTPSelectionPreview(false);
+        if (newSlot >= 0 && newSlot < tokens.Length && tokens[newSlot] != null)
+            tokens[newSlot].SetTPSelectionPreview(true);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayTPBurst(int targetSlot)
+    {
+        if (tokens != null && targetSlot >= 0 && targetSlot < tokens.Length && tokens[targetSlot] != null)
+            tokens[targetSlot].PlayTPBurst();
     }
     #endregion
 

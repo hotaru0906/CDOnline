@@ -40,6 +40,11 @@ public class BoardPlayerToken : MonoBehaviour
     [SerializeField] private float gloveTotalDuration = 2.5f;
     private Animator _gloveAnimator;
     private Coroutine _gloveRoutine;
+    [Header("Teleport VFX (Position Swap)")]
+    [SerializeField] private GameObject tpSelectionInstance; // pre-placed trong scene
+    [SerializeField] private GameObject tpBurstInstance;     // pre-placed trong scene, particle tự chạy
+    [SerializeField] private float tpBurstDuration = 2f;
+    private Coroutine _tpBurstRoutine;
     [SerializeField] private AudioClip jumpSound;
 
     [SerializeField] private float rotateSpeed = 14f; // toc độ xoay khi di chuyển (độ/giây)
@@ -232,6 +237,27 @@ public class BoardPlayerToken : MonoBehaviour
 
         gloveVfxInstance.SetActive(false);
         _gloveRoutine = null;
+    }
+    public void SetTPSelectionPreview(bool active)
+    {
+        if (tpSelectionInstance == null) return;
+        tpSelectionInstance.SetActive(active);
+    }
+
+    public void PlayTPBurst()
+    {
+        if (tpBurstInstance == null) return;
+
+        if (_tpBurstRoutine != null) StopCoroutine(_tpBurstRoutine);
+        _tpBurstRoutine = StartCoroutine(TPBurstRoutine());
+    }
+
+    private IEnumerator TPBurstRoutine()
+    {
+        tpBurstInstance.SetActive(true);
+        yield return new WaitForSeconds(tpBurstDuration);
+        tpBurstInstance.SetActive(false);
+        _tpBurstRoutine = null;
     }
     public void AnimateMovement(int[] pathNodeIDs)
     {
