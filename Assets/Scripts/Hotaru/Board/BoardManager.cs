@@ -38,6 +38,7 @@ public class BoardManager : NetworkBehaviour
 
     [Header("VFX")]
     [SerializeField] private bool useShieldVfx = true;
+    [SerializeField] private float rushForwardFlyTotalDuration = 2f;
 
     [Header("Gamble Wheel")]
     [SerializeField] private BoardGambleWheelUI gambleWheelUI;
@@ -761,8 +762,6 @@ public class BoardManager : NetworkBehaviour
             yield break;
         }
 
-        BoardState = BoardPhaseState.Moving;
-
         var path = BoardNodePath.Instance;
         if (path == null)
         {
@@ -779,27 +778,33 @@ public class BoardManager : NetworkBehaviour
             yield break;
         }
 
+        BoardState = BoardPhaseState.Moving;
+
+        // Tính trước node đích, dừng sớm nếu gặp Finish Node giữa đường
+        bool hitFinish = false;
         for (int i = 0; i < steps; i++)
         {
             var nextNode = path.GetNextNode(currentNode, 0);
-            if (nextNode == null)
-                break;
+            if (nextNode == null) break;
 
-            SetNodeIDAtSlot(slot, nextNode.nodeID);
-            RPC_AnimateMovement(slot, new[] { nextNode.nodeID });
             currentNode = nextNode;
-
-            var token = tokens != null && slot < tokens.Length ? tokens[slot] : null;
-            while (token != null && token.IsMoving)
-                yield return null;
-
-            yield return new WaitForSeconds(0.15f);
 
             if (currentNode.isFinishNode)
             {
-                EndGame(playerId);
-                yield break; // dừng hẳn, không quay lại WaitingForRoll
+                hitFinish = true;
+                break;
             }
+        }
+
+        SetNodeIDAtSlot(slot, currentNode.nodeID);
+        RPC_PlayRushForwardFly(slot, currentNode.nodeID);
+
+        yield return new WaitForSeconds(rushForwardFlyTotalDuration);
+
+        if (hitFinish)
+        {
+            EndGame(playerId);
+            yield break;
         }
 
         BoardState = BoardPhaseState.WaitingForRoll;
@@ -1858,6 +1863,12 @@ public class BoardManager : NetworkBehaviour
     {
         if (tokens != null && targetSlot >= 0 && targetSlot < tokens.Length && tokens[targetSlot] != null)
             tokens[targetSlot].PlayTPBurst();
+    }
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayRushForwardFly(int slot, int targetNodeID)
+    {
+        if (tokens != null && slot >= 0 && slot < tokens.Length && tokens[slot] != null)
+            tokens[slot].PlayRushForwardFly(targetNodeID);
     }
     #endregion
 
