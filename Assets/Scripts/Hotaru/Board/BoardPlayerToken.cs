@@ -34,6 +34,12 @@ public class BoardPlayerToken : MonoBehaviour
 
     [Header("Shield VFX")]
     [SerializeField] private GameObject shieldVfxPrefab;
+    [Header("Glove VFX")]
+    [SerializeField] private GameObject gloveVfxInstance; // kéo sẵn object Glove (đã đặt vị trí trong scene) vào đây
+    [SerializeField] private string gloveTrigger = "Active";
+    [SerializeField] private float gloveTotalDuration = 2.5f;
+    private Animator _gloveAnimator;
+    private Coroutine _gloveRoutine;
     [SerializeField] private AudioClip jumpSound;
 
     [SerializeField] private float rotateSpeed = 14f; // toc độ xoay khi di chuyển (độ/giây)
@@ -177,7 +183,56 @@ public class BoardPlayerToken : MonoBehaviour
 
         _shieldVfxInstance.SetActive(false);
     }
+    public void SetGlovePreview(bool active)
+    {
+        if (gloveVfxInstance == null) return;
 
+        // Nếu đang chạy animation thật (confirm PushBack), không can thiệp
+        if (_gloveRoutine != null) return;
+
+        if (_gloveAnimator == null)
+            _gloveAnimator = gloveVfxInstance.GetComponentInChildren<Animator>();
+
+        gloveVfxInstance.SetActive(active);
+    }
+    private void CreateGloveVfxInstance()
+    {
+        if (gloveVfxInstance == null)
+        {
+            Debug.LogWarning("Glove VFX object is missing — kéo reference vào Inspector.");
+            return;
+        }
+
+        if (_gloveAnimator == null)
+            _gloveAnimator = gloveVfxInstance.GetComponentInChildren<Animator>();
+
+        gloveVfxInstance.SetActive(false);
+    }
+    public void PlayGloveHit()
+    {
+        if (gloveVfxInstance == null)
+        {
+            Debug.LogWarning("Glove VFX object is missing — kéo reference vào Inspector.");
+            return;
+        }
+
+        if (_gloveAnimator == null)
+            CreateGloveVfxInstance();
+
+        if (_gloveRoutine != null) StopCoroutine(_gloveRoutine);
+        _gloveRoutine = StartCoroutine(GloveRoutine());
+    }
+
+    private IEnumerator GloveRoutine()
+    {
+        gloveVfxInstance.SetActive(true);
+        _gloveAnimator?.SetTrigger(gloveTrigger);
+
+        yield return new WaitForSeconds(gloveTotalDuration);
+
+        gloveVfxInstance.SetActive(false);
+        _gloveRoutine = null;
+    }
     public void AnimateMovement(int[] pathNodeIDs)
     {
         if (pathNodeIDs == null || pathNodeIDs.Length == 0)

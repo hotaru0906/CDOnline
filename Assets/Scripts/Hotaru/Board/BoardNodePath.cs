@@ -165,19 +165,6 @@ public class BoardNodePath : MonoBehaviour
 
                     path.Add(traveled[tIdx].nodeID);
 
-                    // Vừa đến dead-end nhưng còn bước dư → bắt đầu bounce từ lượt sau
-                    if (traveled[tIdx].isDeadEnd && i < steps - 1)
-                        bouncing = true;
-                }
-                else if (cursor.isDeadEnd)
-                {
-                    // Đang đứng trên dead-end mà vẫn còn steps (edge case) → bounce ngay
-                    bouncing = true;
-                    if (tIdx > 0)
-                    {
-                        tIdx--;
-                        path.Add(traveled[tIdx].nodeID);
-                    }
                 }
                 else
                 {

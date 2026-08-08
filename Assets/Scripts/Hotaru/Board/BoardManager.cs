@@ -50,6 +50,7 @@ public class BoardManager : NetworkBehaviour
     [SerializeField]
     [Range(1, 12)]
     private int debugRollValue = 1;
+    [SerializeField] private int debugTeleportNodeID = 0;
     [Header("End Game")]
     [SerializeField] private SceneRef endGameSceneRef;
     [Header("Jackpot")]
@@ -251,24 +252,36 @@ public class BoardManager : NetworkBehaviour
             return;
         }
 
-        // A-D để chọn target item
         if (_isSelectingTarget && _eligibleItemTargets.Count > 0)
         {
             if (Input.GetKeyDown(KeyCode.A))
             {
+                int prevTarget = _eligibleItemTargets[_targetSelectIndex];
                 _targetSelectIndex = (_targetSelectIndex - 1 + _eligibleItemTargets.Count) % _eligibleItemTargets.Count;
-                RPC_HighlightTarget(_eligibleItemTargets[_targetSelectIndex]);
+                int newTarget = _eligibleItemTargets[_targetSelectIndex];
+
+                RPC_HighlightTarget(newTarget);
+                RPC_SwitchGlovePreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
             }
             else if (Input.GetKeyDown(KeyCode.D))
             {
+                int prevTarget = _eligibleItemTargets[_targetSelectIndex];
                 _targetSelectIndex = (_targetSelectIndex + 1) % _eligibleItemTargets.Count;
-                RPC_HighlightTarget(_eligibleItemTargets[_targetSelectIndex]);
+                int newTarget = _eligibleItemTargets[_targetSelectIndex];
+
+                RPC_HighlightTarget(newTarget);
+                RPC_SwitchGlovePreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
             }
             else if (Input.GetKeyDown(KeyCode.Space))
             {
                 _isSelectingTarget = false;
                 _waitingForMyItemTarget = false;
-                RPC_SubmitItemTargetSelect(ItemUserPlayerId, _eligibleItemTargets[_targetSelectIndex]);
+
+                int chosenTarget = _eligibleItemTargets[_targetSelectIndex];
+                // Tắt preview — nếu là PushBack, animation thật sẽ tự bật lại glove qua RPC_PlayGloveVFX trong ExecutePushBack
+                RPC_SetGlovePreview(GetSlotByPlayerId(chosenTarget), false);
+
+                RPC_SubmitItemTargetSelect(ItemUserPlayerId, chosenTarget);
             }
             return; // không xử lý roll khi đang chọn target
         }
@@ -645,8 +658,13 @@ public class BoardManager : NetworkBehaviour
                     if (pid >= 0 && pid != userId) eligibles.Add(pid);
                 }
 
+                // Tắt hết glove trước, rồi hiện glove ở target đầu tiên
+                RPC_ResetAllGlovePreviews();
+                if (eligibles.Count > 0)
+                    RPC_SetGlovePreview(GetSlotByPlayerId(eligibles[0]), true);
+
                 RPC_BeginItemTargetSelect(userId, eligibles.ToArray(), effectId);
-                int userSlotVerified = CurrentSlot; // lấy đúng slot của user
+                int userSlotVerified = CurrentSlot;
                 StartCoroutine(WaitForItemTargetSelect(userSlotVerified, userId));
                 break;
         }
@@ -654,7 +672,6 @@ public class BoardManager : NetworkBehaviour
 
     private IEnumerator WaitForItemTargetSelect(int userSlot, int userId)
     {
-        // Verify lại userSlot từ userId ngay lập tức — tránh nhầm sau khi chờ
         int verifiedUserSlot = userSlot;
         for (int i = 0; i < ActivePlayerCount; i++)
             if (GetPlayerIDAtSlot(i) == userId) { verifiedUserSlot = i; break; }
@@ -677,6 +694,7 @@ public class BoardManager : NetworkBehaviour
 
         if (_itemTargetPendingId == -1)
         {
+            RPC_ResetAllGlovePreviews(); // không có target hợp lệ — dọn sạch phòng khi có glove còn sót
             var usedEff = _pendingItemEffect;
             BoardState = BoardPhaseState.WaitingForRoll;
             ItemUserPlayerId = -1;
@@ -690,10 +708,13 @@ public class BoardManager : NetworkBehaviour
         for (int i = 0; i < ActivePlayerCount; i++)
             if (GetPlayerIDAtSlot(i) == targetId) { targetSlot = i; break; }
 
+        // Timeout tự chọn — tắt preview trước khi thực thi effect
+        RPC_SetGlovePreview(targetSlot, false);
+
         if (_pendingItemEffect == BoardItemEffect.PushBack)
             yield return ExecutePushBack(targetSlot, userId);
         else if (_pendingItemEffect == BoardItemEffect.PositionSwap)
-            yield return ExecutePositionSwap(verifiedUserSlot, targetSlot, userId, targetId); // dùng verifiedUserSlot
+            yield return ExecutePositionSwap(verifiedUserSlot, targetSlot, userId, targetId);
 
         var doneEffect = _pendingItemEffect;
         BoardState = BoardPhaseState.WaitingForRoll;
@@ -744,6 +765,12 @@ public class BoardManager : NetworkBehaviour
                 yield return null;
 
             yield return new WaitForSeconds(0.15f);
+
+            if (currentNode.isFinishNode)
+            {
+                EndGame(playerId);
+                yield break; // dừng hẳn, không quay lại WaitingForRoll
+            }
         }
 
         BoardState = BoardPhaseState.WaitingForRoll;
@@ -752,26 +779,31 @@ public class BoardManager : NetworkBehaviour
 
     private IEnumerator ExecutePushBack(int targetSlot, int userId)
     {
-        if (targetSlot >= 0 && _hasShield[targetSlot])
+        if (targetSlot < 0) yield break;
+
+        // Glove hiện ra ngay, tất cả client đều thấy
+        RPC_PlayGloveVFX(targetSlot);
+
+        yield return new WaitForSeconds(1f);
+
+        // Tới lúc này mới quyết định: shield chặn hay đẩy lùi thật
+        if (_hasShield[targetSlot])
         {
             SetShieldStateForPlayer(GetPlayerIDAtSlot(targetSlot), false);
             RPC_ShieldBlocked(GetPlayerIDAtSlot(targetSlot), userId);
-            yield break;
+            yield break; // glove vẫn tự ẩn theo GloveRoutine của nó, không cần chờ ở đây
         }
 
-        if (targetSlot >= 0)
+        var pathObj = BoardNodePath.Instance;
+        var currentNode = pathObj?.GetNodeByID(GetNodeIDAtSlot(targetSlot));
+        if (pathObj != null && currentNode != null)
         {
-            var pathObj = BoardNodePath.Instance;
-            var currentNode = pathObj?.GetNodeByID(GetNodeIDAtSlot(targetSlot));
-            if (pathObj != null && currentNode != null)
+            var dest = pathObj.GetNodeBeforeSteps(currentNode, 3, out int[] pathIDs);
+            SetNodeIDAtSlot(targetSlot, dest.nodeID);
+            if (pathIDs.Length > 0)
             {
-                var dest = pathObj.GetNodeBeforeSteps(currentNode, 3, out int[] pathIDs);
-                SetNodeIDAtSlot(targetSlot, dest.nodeID);
-                if (pathIDs.Length > 0)
-                {
-                    RPC_AnimateMovement(targetSlot, pathIDs);
-                    yield return new WaitForSeconds(pathIDs.Length * (1f / 4f) + 0.4f);
-                }
+                RPC_AnimateMovement(targetSlot, pathIDs);
+                yield return new WaitForSeconds(pathIDs.Length * (1f / 4f) + 0.4f);
             }
         }
 
@@ -1004,12 +1036,18 @@ public class BoardManager : NetworkBehaviour
 
             if (nextNode == null)
                 break;
-            yield return StartCoroutine(
-                MoveOneStep(slot, nextNode));
+
+            yield return StartCoroutine(MoveOneStep(slot, nextNode));
 
             _currentMoveNode = nextNode;
-
             SetNodeIDAtSlot(slot, nextNode.nodeID);
+
+            // Chạm đích — dừng ngay, không đi thêm dù dư số
+            if (_currentMoveNode.isFinishNode)
+            {
+                _remainingSteps = 0;
+                break;
+            }
 
             _remainingSteps--;
 
@@ -1048,6 +1086,14 @@ public class BoardManager : NetworkBehaviour
     private IEnumerator FinishTurn(int slot, int playerId, int finalNodeID, TileType tileType)
     {
         BoardState = BoardPhaseState.ResolvingTile;
+
+        var landedNode = BoardNodePath.Instance?.GetNodeByID(finalNodeID);
+        if (landedNode != null && landedNode.isFinishNode)
+        {
+            RPC_PlayerLanded(playerId, finalNodeID, tileType);
+            EndGame(playerId);
+            yield break; // không resolve tile effect, không tăng _completedThisRound/AdvanceTurn — EndGame lo hết
+        }
 
         switch (tileType)
         {
@@ -1660,6 +1706,37 @@ public class BoardManager : NetworkBehaviour
             Runner.LoadScene(endGameSceneRef);
         }
     }
+    public void DebugTeleportPlayerToNode(int playerId, int targetNodeID)
+    {
+        if (!HasStateAuthority) return;
+
+        int slot = GetSlotByPlayerId(playerId);
+        if (slot < 0) return;
+
+        var node = BoardNodePath.Instance?.GetNodeByID(targetNodeID);
+        if (node == null)
+        {
+            Debug.LogWarning($"[BoardManager][DEBUG] Node {targetNodeID} không tồn tại.");
+            return;
+        }
+
+        SetNodeIDAtSlot(slot, targetNodeID);
+        RPC_SnapSingleToken(slot, targetNodeID);
+
+        Debug.Log($"[BoardManager][DEBUG] Teleport P{playerId} → Node {targetNodeID}");
+
+        if (node.isFinishNode)
+        {
+            Debug.Log($"[BoardManager][DEBUG] Node {targetNodeID} là Finish Node — có thể bấm thêm nút Win để test EndGame.");
+        }
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SnapSingleToken(int slot, int nodeID)
+    {
+        if (tokens != null && slot < tokens.Length && tokens[slot] != null)
+            tokens[slot].SnapToNode(nodeID);
+    }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_SnapTokensToSavedPositions(int n0, int n1, int n2, int n3)
@@ -1683,6 +1760,37 @@ public class BoardManager : NetworkBehaviour
 
         var token = GetTokenByPlayerId(playerId);
         token?.SetShieldActive(active);
+    }
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayGloveVFX(int targetSlot)
+    {
+        if (tokens != null && targetSlot >= 0 && targetSlot < tokens.Length && tokens[targetSlot] != null)
+            tokens[targetSlot].PlayGloveHit();
+    }
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ResetAllGlovePreviews()
+    {
+        if (tokens == null) return;
+        foreach (var t in tokens)
+            t?.SetGlovePreview(false);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SetGlovePreview(int slot, bool active)
+    {
+        if (tokens != null && slot >= 0 && slot < tokens.Length && tokens[slot] != null)
+            tokens[slot].SetGlovePreview(active);
+    }
+
+    // Gọi từ client đang chọn target (proxy), giống pattern RPC_HighlightTarget
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    private void RPC_SwitchGlovePreview(int prevSlot, int newSlot)
+    {
+        if (tokens == null) return;
+        if (prevSlot >= 0 && prevSlot < tokens.Length && tokens[prevSlot] != null)
+            tokens[prevSlot].SetGlovePreview(false);
+        if (newSlot >= 0 && newSlot < tokens.Length && tokens[newSlot] != null)
+            tokens[newSlot].SetGlovePreview(true);
     }
     #endregion
 
@@ -1750,6 +1858,31 @@ public class BoardManager : NetworkBehaviour
         if (HasStateAuthority)
         {
             GUILayout.Space(4);
+            GUILayout.Label("[DEBUG] Teleport To Node:");
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Node ID:", GUILayout.Width(55));
+            string input = GUILayout.TextField(debugTeleportNodeID.ToString(), GUILayout.Width(50));
+            if (int.TryParse(input, out int parsed))
+                debugTeleportNodeID = parsed;
+            GUILayout.EndHorizontal();
+
+            for (int i = 0; i < ActivePlayerCount; i++)
+            {
+                int pid = GetPlayerIDAtSlot(i);
+                if (pid < 0) continue;
+
+                GUI.color = Color.cyan;
+                if (GUILayout.Button($"▶ Teleport P{pid} → Node {debugTeleportNodeID}"))
+                {
+                    DebugTeleportPlayerToNode(pid, debugTeleportNodeID);
+                }
+                GUI.color = Color.white;
+            }
+        }
+        if (HasStateAuthority)
+        {
+            GUILayout.Space(4);
             GUILayout.Label("[DEBUG] Force Win:");
             for (int i = 0; i < ActivePlayerCount; i++)
             {
@@ -1757,7 +1890,7 @@ public class BoardManager : NetworkBehaviour
                 if (pid < 0) continue;
 
                 GUI.color = Color.green;
-                if (GUILayout.Button($"▶ P{pid} nhận đủ 2 rương (Win)"))
+                if (GUILayout.Button($"▶ P{pid} về đích (Win)"))
                 {
                     if (!_gameEnded)
                     {
