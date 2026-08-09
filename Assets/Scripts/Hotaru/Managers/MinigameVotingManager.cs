@@ -2,6 +2,18 @@ using UnityEngine;
 using System.Collections.Generic;
 using Fusion;
 
+/// <summary>
+/// Quản lý danh sách minigame để vote theo cơ chế "hàng đợi vòng tròn" (rotation queue):
+/// - KHÔNG random khi bắt đầu voting — thứ tự luôn theo đúng thứ tự khai báo trong allMinigames.
+/// - Khi 1 minigame được CHỌN để chơi, nó bị đưa xuống CUỐI hàng đợi (tạm thời bỏ khỏi danh
+///   sách vote), và minigame đang ở ĐẦU hàng đợi được kéo vào thế chỗ trong danh sách vote.
+///
+/// Ví dụ với 7 minigame, hiển thị 5 (displayCount = 5), thứ tự gốc 1-2-3-4-5-6-7:
+///   Ban đầu:      [1,2,3,4,5]   (hàng đợi chờ: 6,7)
+///   Chơi mg 1 ->  [2,3,4,5,6]   (hàng đợi chờ: 7,1)
+///   Chơi mg 3 ->  [2,4,5,6,7]   (hàng đợi chờ: 1,3)
+///   Chơi mg 5 ->  [1,2,4,6,7]   (hàng đợi chờ: 3,5)
+/// </summary>
 public class MinigameVotingManager : NetworkBehaviour
 {
     #region Singleton
@@ -10,26 +22,21 @@ public class MinigameVotingManager : NetworkBehaviour
 
     [Header("Minigame Configuration")]
     [SerializeField] private List<MinigameData> allMinigames = new List<MinigameData>();
-    private HashSet<MinigameData> playedMinigameSO = new HashSet<MinigameData>();
 
     [Header("Settings")]
     [SerializeField] private int displayCount = 5; // Số minigame hiển thị để vote mỗi lần
-    [SerializeField] private bool shuffleMinigames = true;
-    [SerializeField] private int cooldownRoundsAfterPlay = 3; // Sau khi chơi, minigame sẽ bị ẩn trong N lượt chơi khác rồi xuất hiện lại
 
     private const int InvalidIndex = -1;
-    private int[] minigameCooldowns;
 
     #region Networked Properties
-
+    /// <summary>
+    /// Hàng đợi vòng tròn chứa TẤT CẢ minigame theo actual index:
+    /// - RotationQueue[0 .. AvailableCount-1]      = đang hiển thị để vote (window)
+    /// - RotationQueue[AvailableCount .. Total-1]  = đang chờ (FIFO). Vị trí AvailableCount là
+    ///   phần tử ĐẦU hàng đợi — sẽ được kéo vào window ngay khi có 1 minigame bị chơi.
+    /// </summary>
     [Networked, Capacity(20)]
-    private NetworkArray<int> PlayedMinigameIndices => default;
-
-    [Networked]
-    private int PlayedCount { get; set; }
-
-    [Networked, Capacity(10)]
-    private NetworkArray<int> AvailableMinigameIndices => default;
+    private NetworkArray<int> RotationQueue => default;
 
     [Networked]
     private int AvailableCount { get; set; }
@@ -41,6 +48,7 @@ public class MinigameVotingManager : NetworkBehaviour
     #region Events
     public event System.Action OnMinigameListUpdated;
     #endregion
+
     public bool IsReady { get; private set; } = false;
 
     private void Awake()
@@ -60,6 +68,7 @@ public class MinigameVotingManager : NetworkBehaviour
             Instance = null;
         }
     }
+
     public override void Spawned()
     {
         IsReady = true;
@@ -67,7 +76,6 @@ public class MinigameVotingManager : NetworkBehaviour
         if (HasStateAuthority)
         {
             ResetPlayedMinigames();
-            PrepareNextVotingRound();
         }
     }
 
@@ -76,12 +84,11 @@ public class MinigameVotingManager : NetworkBehaviour
     {
         List<MinigameData> available = new List<MinigameData>();
 
-        // Kiểm tra xem đã spawn chưa
         if (!IsReady) return available;
 
         for (int i = 0; i < AvailableCount; i++)
         {
-            int index = AvailableMinigameIndices.Get(i);
+            int index = RotationQueue.Get(i);
             if (index >= 0 && index < allMinigames.Count)
             {
                 available.Add(allMinigames[index]);
@@ -93,20 +100,16 @@ public class MinigameVotingManager : NetworkBehaviour
 
     public int GetAvailableMinigameCount()
     {
-        // Kiểm tra xem đã spawn chưa trước khi truy cập Networked property
         if (!IsReady) return 0;
         return AvailableCount;
     }
 
     public MinigameData GetMinigameByAvailableIndex(int availableIndex)
     {
-        // Kiểm tra xem đã spawn chưa
         if (!IsReady) return null;
+        if (availableIndex < 0 || availableIndex >= AvailableCount) return null;
 
-        if (availableIndex < 0 || availableIndex >= AvailableCount)
-            return null;
-
-        int actualIndex = AvailableMinigameIndices.Get(availableIndex);
+        int actualIndex = RotationQueue.Get(availableIndex);
         if (actualIndex >= 0 && actualIndex < allMinigames.Count)
         {
             return allMinigames[actualIndex];
@@ -119,7 +122,7 @@ public class MinigameVotingManager : NetworkBehaviour
         if (!IsReady) return InvalidIndex;
         if (availableIndex < 0 || availableIndex >= AvailableCount) return InvalidIndex;
 
-        int actualIndex = AvailableMinigameIndices.Get(availableIndex);
+        int actualIndex = RotationQueue.Get(availableIndex);
         if (actualIndex < 0 || actualIndex >= allMinigames.Count)
             return InvalidIndex;
 
@@ -133,7 +136,7 @@ public class MinigameVotingManager : NetworkBehaviour
 
         for (int i = 0; i < AvailableCount; i++)
         {
-            if (AvailableMinigameIndices.Get(i) == actualIndex)
+            if (RotationQueue.Get(i) == actualIndex)
                 return i;
         }
 
@@ -147,6 +150,12 @@ public class MinigameVotingManager : NetworkBehaviour
         return allMinigames[actualIndex];
     }
 
+    /// <summary>
+    /// Đánh dấu minigame đã được CHỌN để chơi: đưa nó xuống CUỐI hàng đợi (tạm thời bỏ khỏi
+    /// danh sách vote) và kéo minigame ở ĐẦU hàng đợi vào thế chỗ. Gọi ngay khi minigame được
+    /// chọn để bắt đầu (GameManager.StartMinigameActual, trước Tutorial/Countdown) — giữ nguyên
+    /// thời điểm gọi như code cũ.
+    /// </summary>
     public void MarkMinigamePlayedByActualIndex(int actualIndex)
     {
         if (!HasStateAuthority)
@@ -161,159 +170,104 @@ public class MinigameVotingManager : NetworkBehaviour
             return;
         }
 
-        if (actualIndex < 0 || actualIndex >= allMinigames.Count)
+        int total = allMinigames.Count;
+        if (actualIndex < 0 || actualIndex >= total)
         {
             Debug.LogWarning($"[MinigameVotingManager] Invalid actual index: {actualIndex}");
             return;
         }
 
-        if (IsMinigamePlayed(actualIndex))
+        int windowIndex = -1;
+        for (int i = 0; i < AvailableCount; i++)
         {
-            Debug.Log($"[MinigameVotingManager] Minigame {allMinigames[actualIndex].name} is already marked played; keeping cooldown");
-        }
-
-        EnsureCooldownArray();
-
-        for (int i = 0; i < allMinigames.Count; i++)
-        {
-            if (minigameCooldowns[i] > 0)
+            if (RotationQueue.Get(i) == actualIndex)
             {
-                minigameCooldowns[i] = Mathf.Max(0, minigameCooldowns[i] - 1);
-            }
-        }
-
-        int cooldownToApply = Mathf.Max(0, cooldownRoundsAfterPlay);
-        minigameCooldowns[actualIndex] = cooldownToApply;
-
-        bool alreadyTracked = false;
-        for (int i = 0; i < PlayedCount; i++)
-        {
-            if (PlayedMinigameIndices.Get(i) == actualIndex)
-            {
-                alreadyTracked = true;
+                windowIndex = i;
                 break;
             }
         }
 
-        if (!alreadyTracked && PlayedCount < PlayedMinigameIndices.Length)
+        if (windowIndex < 0)
         {
-            PlayedMinigameIndices.Set(PlayedCount, actualIndex);
-            PlayedCount++;
+            Debug.LogWarning($"[MinigameVotingManager] actualIndex {actualIndex} không nằm trong danh sách vote hiện tại, bỏ qua rotation.");
+            return;
         }
 
-        playedMinigameSO.Add(allMinigames[actualIndex]);
-        Debug.Log($"[MinigameVotingManager] Marked minigame {allMinigames[actualIndex].name} as played. Cooldown: {cooldownToApply} rounds");
+        // Không có minigame nào đang chờ (tất cả đều đang hiển thị) -> không có gì để thay thế
+        if (AvailableCount >= total)
+        {
+            Debug.Log($"[MinigameVotingManager] Không có hàng đợi (AvailableCount >= total). Minigame {allMinigames[actualIndex].minigameName} vẫn hiển thị.");
+            return;
+        }
+
+        // Kéo phần tử ĐẦU hàng đợi vào đúng chỗ vừa trống trong window
+        int nextFromQueue = RotationQueue.Get(AvailableCount);
+        RotationQueue.Set(windowIndex, nextFromQueue);
+
+        // Dịch phần hàng đợi còn lại lên 1 vị trí (giữ đúng thứ tự FIFO)
+        for (int i = AvailableCount; i < total - 1; i++)
+        {
+            RotationQueue.Set(i, RotationQueue.Get(i + 1));
+        }
+
+        // Đưa minigame vừa chơi xuống CUỐI hàng đợi
+        RotationQueue.Set(total - 1, actualIndex);
+
+        AvailableListVersion++;
+
+        string nextName = (nextFromQueue >= 0 && nextFromQueue < total) ? allMinigames[nextFromQueue].minigameName : "?";
+        Debug.Log($"[MinigameVotingManager] Minigame {allMinigames[actualIndex].minigameName} bị đưa xuống cuối hàng đợi. Thay thế trong danh sách vote bởi: {nextName}");
     }
 
+    /// <summary>
+    /// Giữ lại để tương thích ngược - map availableIndex sang actualIndex rồi gọi hàm chính.
+    /// </summary>
+    public void MarkMinigamePlayed(int availableIndex)
+    {
+        int actualIndex = GetActualIndexByAvailableIndex(availableIndex);
+        if (actualIndex < 0)
+        {
+            Debug.LogWarning($"[MinigameVotingManager] Invalid available index: {availableIndex}");
+            return;
+        }
+        MarkMinigamePlayedByActualIndex(actualIndex);
+    }
+
+    /// <summary>
+    /// Lấy 1 minigame ngẫu nhiên không nằm trong danh sách loại trừ - chỉ dùng để lấp đầy các ô
+    /// còn lại của vòng quay tie-break cho đủ số lượng hiển thị (không liên quan tới rotation).
+    /// </summary>
     public int GetRandomEligibleActualMinigameIndexExcluding(HashSet<int> excludeActualIndices)
     {
         if (!IsReady) return InvalidIndex;
 
-        EnsureCooldownArray();
-        List<int> eligibleIndices = new List<int>();
-
+        List<int> eligible = new List<int>();
         for (int i = 0; i < allMinigames.Count; i++)
         {
             if (excludeActualIndices != null && excludeActualIndices.Contains(i))
                 continue;
 
-            if (IsMinigamePlayed(i))
-                continue;
-
-            if (i < minigameCooldowns.Length && minigameCooldowns[i] <= 0)
-            {
-                eligibleIndices.Add(i);
-            }
+            eligible.Add(i);
         }
 
-        if (eligibleIndices.Count == 0)
+        if (eligible.Count == 0)
             return InvalidIndex;
 
-        return eligibleIndices[UnityEngine.Random.Range(0, eligibleIndices.Count)];
+        return eligible[UnityEngine.Random.Range(0, eligible.Count)];
     }
 
-    public void MarkMinigamePlayed(int availableIndex)
-    {
-        if (!HasStateAuthority)
-        {
-            Debug.LogWarning("[MinigameVotingManager] Only Host can mark minigame as played");
-            return;
-        }
-
-        if (!IsReady)
-        {
-            Debug.LogWarning("[MinigameVotingManager] Cannot mark played - not spawned yet");
-            return;
-        }
-
-        if (availableIndex < 0 || availableIndex >= AvailableCount)
-        {
-            Debug.LogWarning($"[MinigameVotingManager] Invalid available index: {availableIndex}");
-            return;
-        }
-
-        int actualIndex = AvailableMinigameIndices.Get(availableIndex);
-        if (actualIndex < 0 || actualIndex >= allMinigames.Count)
-            return;
-
-        EnsureCooldownArray();
-
-        for (int i = 0; i < allMinigames.Count; i++)
-        {
-            if (minigameCooldowns[i] > 0)
-            {
-                minigameCooldowns[i] = Mathf.Max(0, minigameCooldowns[i] - 1);
-            }
-        }
-
-        int cooldownToApply = Mathf.Max(0, cooldownRoundsAfterPlay);
-        minigameCooldowns[actualIndex] = cooldownToApply;
-
-        if (PlayedCount < PlayedMinigameIndices.Length)
-        {
-            PlayedMinigameIndices.Set(PlayedCount, actualIndex);
-            PlayedCount++;
-        }
-
-        playedMinigameSO.Add(allMinigames[actualIndex]);
-        Debug.Log($"[MinigameVotingManager] Marked minigame {allMinigames[actualIndex].name} as played. Cooldown: {cooldownToApply} rounds");
-    }
-
+    /// <summary>
+    /// Chuẩn bị vòng vote tiếp theo. Với cơ chế hàng đợi mới, danh sách vote luôn được cập nhật
+    /// ngay khi có minigame bị đánh dấu đã chơi (MarkMinigamePlayedByActualIndex), nên hàm này
+    /// chỉ khởi tạo hàng đợi nếu chưa có dữ liệu — KHÔNG reshuffle/reset lại mỗi vòng vote.
+    /// </summary>
     public void PrepareNextVotingRound()
     {
         if (!HasStateAuthority || !IsReady) return;
 
-        Debug.Log("[MinigameVotingManager] Preparing next voting round...");
+        if (AvailableCount > 0) return; // đã có danh sách rồi, giữ nguyên (không random lại)
 
-        EnsureCooldownArray();
-        var candidateIndices = BuildAvailableCandidateIndices();
-
-        if (candidateIndices.Count == 0)
-        {
-            Debug.LogWarning("[MinigameVotingManager] No unplayed minigames available for voting. Clearing vote list permanently.");
-            ClearAvailableMinigameIndices();
-            AvailableCount = 0;
-            AvailableListVersion++;
-            return;
-        }
-
-        if (shuffleMinigames)
-        {
-            ShuffleList(candidateIndices);
-        }
-
-        int count = Mathf.Min(displayCount, candidateIndices.Count, AvailableMinigameIndices.Length);
-        ClearAvailableMinigameIndices();
-        AvailableCount = count;
-
-        for (int i = 0; i < count; i++)
-        {
-            AvailableMinigameIndices.Set(i, candidateIndices[i]);
-            Debug.Log($"[MinigameVotingManager] Available slot {i}: Minigame {candidateIndices[i]}");
-        }
-
-        AvailableListVersion++;
-        Debug.Log($"[MinigameVotingManager] Available: {AvailableCount} minigames (from {candidateIndices.Count} candidates)");
+        InitializeRotationQueue();
     }
 
     public void PrepareNextVotingRoundForRoulette()
@@ -322,53 +276,57 @@ public class MinigameVotingManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Reset danh sách minigame đã chơi (khi về Roulette hoặc new game)
+    /// Reset hàng đợi minigame về ĐÚNG thứ tự gốc trong allMinigames (không random).
+    /// Gọi khi bắt đầu match mới (GameManager.StartMatch).
     /// </summary>
     public void ResetPlayedMinigames()
     {
         if (!HasStateAuthority || !IsReady) return;
 
-        Debug.Log("[MinigameVotingManager] Resetting played minigames");
-        PlayedCount = 0;
-        playedMinigameSO.Clear();
-
-        EnsureCooldownArray();
-        for (int i = 0; i < minigameCooldowns.Length; i++)
-        {
-            minigameCooldowns[i] = 0;
-        }
-
-        // Clear array
-        for (int i = 0; i < PlayedMinigameIndices.Length; i++)
-        {
-            PlayedMinigameIndices.Set(i, InvalidIndex);
-        }
-
-        ClearAvailableMinigameIndices();
-        AvailableCount = 0;
+        Debug.Log("[MinigameVotingManager] Reset rotation queue về đúng thứ tự gốc trong allMinigames");
+        InitializeRotationQueue();
     }
+
+    private void InitializeRotationQueue()
+    {
+        int total = allMinigames.Count;
+        int capacity = RotationQueue.Length;
+        int count = Mathf.Min(total, capacity);
+
+        for (int i = 0; i < capacity; i++)
+        {
+            RotationQueue.Set(i, i < count ? i : InvalidIndex);
+        }
+
+        AvailableCount = Mathf.Min(displayCount, count);
+        AvailableListVersion++;
+
+        Debug.Log($"[MinigameVotingManager] Rotation queue khởi tạo. Total={count}, Window={AvailableCount} (đúng thứ tự trong allMinigames, không random)");
+    }
+
     /// <summary>
-    /// Lấy danh sách SO minigame đã chơi
+    /// Không còn khái niệm "bị chặn vĩnh viễn" trong cơ chế hàng đợi mới.
+    /// Giữ lại để tương thích ngược, luôn trả về danh sách rỗng.
     /// </summary>
     public List<MinigameData> GetPlayedMinigames()
     {
-        RebuildPlayedCacheFromNetwork();
-        return new List<MinigameData>(playedMinigameSO);
+        return new List<MinigameData>();
     }
 
     /// <summary>
-    /// Kiểm tra minigame đã được chơi chưa (theo actual index)
+    /// Trả về true nếu minigame KHÔNG nằm trong danh sách vote hiện tại (đang ở hàng đợi chờ).
+    /// Giữ tên hàm cũ để tương thích ngược với code gọi nó.
     /// </summary>
     public bool IsMinigamePlayed(int actualIndex)
     {
         if (!IsReady) return false;
 
-        for (int i = 0; i < PlayedCount; i++)
+        for (int i = 0; i < AvailableCount; i++)
         {
-            if (PlayedMinigameIndices.Get(i) == actualIndex)
-                return true;
+            if (RotationQueue.Get(i) == actualIndex)
+                return false;
         }
-        return false;
+        return true;
     }
 
     /// <summary>
@@ -377,122 +335,14 @@ public class MinigameVotingManager : NetworkBehaviour
     public int TotalMinigameCount => allMinigames.Count;
 
     /// <summary>
-    /// Lấy số minigame đã chơi
+    /// Không còn theo dõi "đã chơi vĩnh viễn" trong cơ chế mới. Giữ lại để tương thích ngược.
     /// </summary>
-    public int PlayedMinigameCount => IsReady ? PlayedCount : 0;
+    public int PlayedMinigameCount => 0;
     #endregion
 
     private void OnAvailableListVersionChanged()
     {
-        RebuildPlayedCacheFromNetwork();
         Debug.Log($"[MinigameVotingManager] Minigame list version {AvailableListVersion} received");
         OnMinigameListUpdated?.Invoke();
     }
-
-    #region Helper Methods
-    private List<int> BuildAvailableCandidateIndices()
-    {
-        EnsureCooldownArray();
-
-        List<int> eligibleIndices = new List<int>();
-        List<int> blockedIndices = new List<int>();
-
-        for (int i = 0; i < allMinigames.Count; i++)
-        {
-            if (IsMinigamePlayed(i))
-            {
-                continue;
-            }
-
-            bool isBlocked = minigameCooldowns[i] > 0;
-            if (!isBlocked)
-            {
-                eligibleIndices.Add(i);
-            }
-            else
-            {
-                blockedIndices.Add(i);
-            }
-        }
-
-        if (eligibleIndices.Count >= displayCount)
-        {
-            if (shuffleMinigames)
-            {
-                ShuffleList(eligibleIndices);
-            }
-            return eligibleIndices;
-        }
-
-        List<int> combinedIndices = new List<int>(eligibleIndices);
-        blockedIndices.Sort((a, b) => minigameCooldowns[a].CompareTo(minigameCooldowns[b]));
-
-        for (int i = 0; i < blockedIndices.Count && combinedIndices.Count < displayCount; i++)
-        {
-            combinedIndices.Add(blockedIndices[i]);
-        }
-
-        if (shuffleMinigames)
-        {
-            ShuffleList(combinedIndices);
-        }
-
-        return combinedIndices;
-    }
-
-    private void EnsureCooldownArray()
-    {
-        if (minigameCooldowns == null || minigameCooldowns.Length != allMinigames.Count)
-        {
-            int[] nextCooldowns = new int[allMinigames.Count];
-
-            if (minigameCooldowns != null)
-            {
-                int copyCount = Mathf.Min(minigameCooldowns.Length, nextCooldowns.Length);
-                for (int i = 0; i < copyCount; i++)
-                {
-                    nextCooldowns[i] = minigameCooldowns[i];
-                }
-            }
-
-            minigameCooldowns = nextCooldowns;
-        }
-    }
-
-    private void RebuildPlayedCacheFromNetwork()
-    {
-        playedMinigameSO.Clear();
-
-        if (!IsReady) return;
-
-        for (int i = 0; i < PlayedCount; i++)
-        {
-            int index = PlayedMinigameIndices.Get(i);
-            if (index >= 0 && index < allMinigames.Count)
-            {
-                playedMinigameSO.Add(allMinigames[index]);
-            }
-        }
-    }
-
-    private void ClearAvailableMinigameIndices()
-    {
-        for (int i = 0; i < AvailableMinigameIndices.Length; i++)
-        {
-            AvailableMinigameIndices.Set(i, InvalidIndex);
-        }
-    }
-
-    private void ShuffleList<T>(List<T> list)
-    {
-        int n = list.Count;
-        for (int i = n - 1; i > 0; i--)
-        {
-            int j = Random.Range(0, i + 1);
-            T temp = list[i];
-            list[i] = list[j];
-            list[j] = temp;
-        }
-    }
-    #endregion
 }
