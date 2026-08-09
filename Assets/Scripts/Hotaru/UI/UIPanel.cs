@@ -10,7 +10,8 @@ public enum UIPanelType
     MinigameCountdown,   // Countdown UI chính (dùng chung, không theo scene)
     MinigameSetting,    // MỚI — Setting panel trong minigame
     MinigamePlayerHUD,   // MỚI — Player info HUD dưới màn hình
-    MinigameTieBreaker
+    MinigameTieBreaker,
+    ItemPickCard
 }
 
 /// <summary>

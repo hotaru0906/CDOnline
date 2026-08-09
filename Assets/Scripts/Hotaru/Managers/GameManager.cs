@@ -12,7 +12,8 @@ public enum GameState
     Scoreboard,
     Board,           // Phase bàn cờ sau mỗi minigame
     Roulette,        // Cò Quay Nga (cuối game)
-    Result           // Kết quả cuối cùng
+    Result,
+    PickItem
 }
 
 /// <summary>
@@ -37,6 +38,7 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private GameObject minigameTieBreakerUI;
     [SerializeField] private GameObject scoreboardUI;
     [SerializeField] private GameObject resultUI;
+    [SerializeField] private GameObject itemPickUI;
 
     [Header("Minigame UI (Main UI - dùng chung)")]
     [SerializeField] private GameObject minigameCountdownUI;  // Countdown UI chính (dùng chung)
@@ -65,6 +67,12 @@ public class GameManager : NetworkBehaviour
 
     [Header("Board Scene")]
     [SerializeField] private string boardSceneName = "BoardScene";
+
+    [Header("Item Pick Settings")]
+    [SerializeField] private BoardItemPool boardItemPool;
+    [SerializeField] private int itemPickCount = 4;
+    [SerializeField] private float itemPickTurnDuration = 10f;
+    private Coroutine _itemPickCoroutine;
     #endregion
 
     #region Networked Properties
@@ -88,22 +96,11 @@ public class GameManager : NetworkBehaviour
     [Networked]
     public NetworkBool HasPlayedBoardIntro { get; set; }
 
-    /// <summary>
-    /// Loại voting hiện tại
-    /// </summary>
     [Networked]
     public VotingType CurrentVotingType { get; private set; } = VotingType.MinigameOnly;
 
-    /// <summary>
-    /// PlayerId của người cuối cùng còn sống (winner)
-    /// </summary>
     [Networked]
     public int FinalWinnerId { get; private set; } = -1;
-
-    /// <summary>
-    /// Xếp hạng minigame vừa kết thúc — PlayerId theo rank 1→4 (-1 = không có)
-    /// BoardManager đọc để xác định thứ tự tung xúc xắc.
-    /// </summary>
     [Networked] public int MgRank1 { get; private set; } = -1;
     [Networked] public int MgRank2 { get; private set; } = -1;
     [Networked] public int MgRank3 { get; private set; } = -1;
@@ -177,6 +174,20 @@ public class GameManager : NetworkBehaviour
     [Networked] public int ResourcePlayerId_P1 { get; private set; } = -1;
     [Networked] public int ResourcePlayerId_P2 { get; private set; } = -1;
     [Networked] public int ResourcePlayerId_P3 { get; private set; } = -1;
+
+    // ===== ITEM PICK STATE =====
+    [Networked] public int ItemPickSlot0 { get; private set; } = -1; // BoardItemEffect
+    [Networked] public int ItemPickSlot1 { get; private set; } = -1;
+    [Networked] public int ItemPickSlot2 { get; private set; } = -1;
+    [Networked] public int ItemPickSlot3 { get; private set; } = -1;
+
+    [Networked] public NetworkBool ItemPickTaken0 { get; private set; } = false;
+    [Networked] public NetworkBool ItemPickTaken1 { get; private set; } = false;
+    [Networked] public NetworkBool ItemPickTaken2 { get; private set; } = false;
+    [Networked] public NetworkBool ItemPickTaken3 { get; private set; } = false;
+
+    [Networked] public int ItemPickTurnPlayerId { get; private set; } = -1;
+    [Networked] public int ItemPickTurnOrderIndex { get; private set; } = -1; // 0=top1, 1=top2, 2=top3
 
     public void SavePlayerCharacter(int playerId, int characterIndex)
     {
@@ -683,6 +694,11 @@ public class GameManager : NetworkBehaviour
 
     #region Events
     public event Action<GameState, GameState> OnStateChanged;
+    public event Action OnItemPickPoolChanged;
+    public event Action<int, float> OnItemPickTurnStarted;   // playerId, duration
+    public event Action<int> OnItemPickTimerTick;             // remaining seconds
+    public event Action<int, int, BoardItemEffect> OnItemPicked; // playerId, slotIndex, effect
+    public event Action OnItemPickPhaseEnded;
     #endregion
 
     #region Unity Lifecycle
@@ -752,6 +768,9 @@ public class GameManager : NetworkBehaviour
                 break;
             case UIPanelType.Result:
                 resultUI = panel.gameObject;
+                break;
+            case UIPanelType.ItemPickCard:          
+                itemPickUI = panel.gameObject;
                 break;
             case UIPanelType.MinigameTutorial:
                 minigameTutorialUI = panel.gameObject;
@@ -1082,14 +1101,12 @@ public class GameManager : NetworkBehaviour
             case GameState.Board: HandleBoardState(); break;
             case GameState.Roulette: HandleRouletteState(); break;
             case GameState.Result: HandleResultState(); break;
+            case GameState.PickItem: HandlePickItemState(); break;
         }
     }
     #endregion
 
     #region Host-Only Game Flow Methods
-    /// <summary>
-    /// Bắt đầu match - Vote chọn minigame ngay từ đầu
-    /// </summary>
     public void StartMatch()
     {
         if (!HasStateAuthority)
@@ -1296,11 +1313,6 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[GameManager] Tutorial complete, changing to Playing state");
         ChangeState(GameState.Playing);
     }
-
-    /// <summary>
-    /// Kết thúc minigame - gọi bởi MinigameController khi game kết thúc
-    /// </summary>
-    /// <param name="winnerId">PlayerId của người thắng (-1 nếu không có)</param>
     public void EndMinigame(int winnerId = -1)
     {
         if (!HasStateAuthority)
@@ -1311,14 +1323,12 @@ public class GameManager : NetworkBehaviour
 
         Debug.Log($"[GameManager] Ending minigame... Winner: {winnerId}");
 
-        // Notify RouletteManager về người thắng và minigame completed
         if (RouletteManager.Instance != null)
         {
             RouletteManager.Instance.OnMinigameCompleted();
 
             if (winnerId >= 0)
             {
-                // Convert PlayerId to PlayerRef
                 PlayerRef winnerRef = PlayerRefFromPlayerId(winnerId);
                 if (winnerRef != PlayerRef.None)
                 {
@@ -1326,8 +1336,6 @@ public class GameManager : NetworkBehaviour
                 }
             }
         }
-
-        // Show scoreboard after minigame ends
         ChangeState(GameState.Scoreboard);
     }
     public void ShowScoreboard()
@@ -1720,6 +1728,313 @@ public class GameManager : NetworkBehaviour
     }
     #endregion
 
+    #region Item Pick Phase
+
+    protected virtual void HandlePickItemState()
+    {
+        Debug.Log("[GameManager] Entered PickItem state");
+
+        SetActiveUI(lobbyUI, false);
+        SetActiveUI(votingUI, false);
+        SetActiveUI(minigameTieBreakerUI, false);
+        SetActiveUI(scoreboardUI, false);
+        SetActiveUI(resultUI, false);
+        SetActiveUI(minigameTutorialUI, false);
+        SetActiveUI(minigameCountdownUI, false);
+        SetActiveUI(itemPickUI, true); 
+
+        if (CameraManager.Instance != null)
+            CameraManager.Instance.SetCameraRotationLocked(true);
+
+        if (CursorManager.Instance != null)
+            CursorManager.Instance.ShowCursor();
+
+        if (PlayerInputHandler.Instance != null)
+            PlayerInputHandler.Instance.InputEnabled = false;
+
+        if (!HasStateAuthority) return;
+
+        GenerateItemPickPool();
+        BeginItemPickTurns();
+    }
+
+    private void StartItemPickPhase()
+    {
+        if (!HasStateAuthority) return;
+        ChangeState(GameState.PickItem);
+    }
+
+    private void GenerateItemPickPool()
+    {
+        if (!HasStateAuthority) return;
+
+        if (boardItemPool == null)
+        {
+            Debug.LogError("[GameManager] BoardItemPool chưa được assign trong Inspector! Bỏ qua ItemPick phase.");
+            FinishItemPickPhase();
+            return;
+        }
+
+        var picked = new System.Collections.Generic.List<BoardItemEffect>();
+        int guard = 0;
+        while (picked.Count < itemPickCount && guard < itemPickCount * 20)
+        {
+            guard++;
+            var data = boardItemPool.GetRandom();
+            if (data == null) break;
+            picked.Add(data.effectType); // Cho phép trùng thẻ giữa các slot (roll độc lập)
+        }
+
+        while (picked.Count < itemPickCount)
+            picked.Add(BoardItemEffect.None);
+
+        ItemPickSlot0 = (int)picked[0];
+        ItemPickSlot1 = (int)picked[1];
+        ItemPickSlot2 = (int)picked[2];
+        ItemPickSlot3 = (int)picked[3];
+
+        ItemPickTaken0 = false;
+        ItemPickTaken1 = false;
+        ItemPickTaken2 = false;
+        ItemPickTaken3 = false;
+
+        Debug.Log($"[GameManager] Item pick pool: [{picked[0]}, {picked[1]}, {picked[2]}, {picked[3]}]");
+
+        RPC_NotifyItemPickPoolChanged();
+    }
+
+    private void BeginItemPickTurns()
+    {
+        if (!HasStateAuthority) return;
+
+        ItemPickTurnOrderIndex = 0;
+        StartNextItemPickTurn();
+    }
+
+    private void StartNextItemPickTurn()
+    {
+        if (!HasStateAuthority) return;
+
+        var ranking = GetLastMinigameRanking(); // rank1..rankN theo playerId
+        int maxPickers = Mathf.Min(3, ranking.Length); // Chỉ top1-2-3 được chọn, top4 bỏ qua
+
+        if (ItemPickTurnOrderIndex >= maxPickers || !HasRemainingItemSlots())
+        {
+            FinishItemPickPhase();
+            return;
+        }
+
+        int playerId = ranking[ItemPickTurnOrderIndex];
+        ItemPickTurnPlayerId = playerId;
+
+        Debug.Log($"[GameManager] ItemPick turn #{ItemPickTurnOrderIndex} -> Player {playerId}");
+
+        RPC_NotifyItemPickTurnStarted(playerId, itemPickTurnDuration);
+
+        if (_itemPickCoroutine != null)
+            StopCoroutine(_itemPickCoroutine);
+        _itemPickCoroutine = StartCoroutine(RunItemPickTurnTimer());
+    }
+
+    private IEnumerator RunItemPickTurnTimer()
+    {
+        float remaining = itemPickTurnDuration;
+
+        while (remaining > 0)
+        {
+            RPC_UpdateItemPickTimer(Mathf.CeilToInt(remaining));
+
+            yield return new WaitForSeconds(1f);
+            remaining -= 1f;
+
+            // Nếu turn đã được xử lý sớm hơn (player bấm chọn) thì dừng timer luôn
+            if (ItemPickTurnPlayerId < 0)
+                yield break;
+        }
+
+        Debug.Log($"[GameManager] Player {ItemPickTurnPlayerId} hết giờ chọn item -> auto pick");
+        AutoPickRandomItemForCurrentTurn();
+        _itemPickCoroutine = null;
+    }
+
+    /// <summary>
+    /// Gọi từ UI (client hoặc host đều gọi hàm này) khi player bấm chọn 1 thẻ.
+    /// </summary>
+    public void PickItem(int playerId, int slotIndex)
+    {
+        RPC_RequestPickItem(playerId, slotIndex);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_RequestPickItem(int playerId, int slotIndex)
+    {
+        if (!HasStateAuthority) return;
+        TryPickItem(playerId, slotIndex);
+    }
+
+    private void TryPickItem(int playerId, int slotIndex)
+    {
+        if (!HasStateAuthority) return;
+        if (CurrentState != GameState.PickItem) return;
+        if (playerId != ItemPickTurnPlayerId) return; // không đúng lượt
+        if (slotIndex < 0 || slotIndex >= itemPickCount) return;
+        if (IsItemSlotTaken(slotIndex)) return; // thẻ đã bị lấy
+
+        ApplyItemPick(playerId, slotIndex);
+    }
+
+    private void AutoPickRandomItemForCurrentTurn()
+    {
+        if (!HasStateAuthority) return;
+        if (ItemPickTurnPlayerId < 0) return;
+
+        var freeSlots = new System.Collections.Generic.List<int>();
+        for (int i = 0; i < itemPickCount; i++)
+            if (!IsItemSlotTaken(i)) freeSlots.Add(i);
+
+        if (freeSlots.Count == 0)
+        {
+            ItemPickTurnPlayerId = -1;
+            ItemPickTurnOrderIndex++;
+            StartNextItemPickTurn();
+            return;
+        }
+
+        int slot = freeSlots[UnityEngine.Random.Range(0, freeSlots.Count)];
+        ApplyItemPick(ItemPickTurnPlayerId, slot);
+    }
+
+    private void ApplyItemPick(int playerId, int slotIndex)
+    {
+        BoardItemEffect effect = GetItemPickSlotEffect(slotIndex);
+        SetItemSlotTaken(slotIndex, true);
+
+        var inv = PlayerItemInventory.GetForPlayer(playerId);
+        if (inv != null && effect != BoardItemEffect.None)
+        {
+            bool added = inv.AddBoardItem(effect);
+            if (added)
+            {
+                // Đồng bộ ngay vào networked backup theo playerId để không mất khi qua BoardScene
+                SaveBoardItemsByPlayer(
+                    playerId,
+                    inv.BoardItems.Get(0),
+                    inv.BoardItems.Get(1),
+                    inv.BoardItems.Get(2),
+                    inv.BoardItems.Get(3));
+            }
+            else
+            {
+                Debug.LogWarning($"[GameManager] Player {playerId} đầy túi đồ, không thể nhận thêm item {effect}");
+            }
+        }
+
+        Debug.Log($"[GameManager] Player {playerId} picked slot {slotIndex}: {effect}");
+
+        RPC_NotifyItemPicked(playerId, slotIndex, (int)effect);
+
+        if (_itemPickCoroutine != null)
+        {
+            StopCoroutine(_itemPickCoroutine);
+            _itemPickCoroutine = null;
+        }
+
+        ItemPickTurnPlayerId = -1;
+        ItemPickTurnOrderIndex++;
+        StartNextItemPickTurn();
+    }
+
+    private void FinishItemPickPhase()
+    {
+        if (!HasStateAuthority) return;
+
+        ItemPickTurnPlayerId = -1;
+        ItemPickTurnOrderIndex = -1;
+
+        Debug.Log("[GameManager] ItemPick phase kết thúc -> chuyển sang Scoreboard");
+
+        RPC_NotifyItemPickPhaseEnded();
+
+        ProceedFromScoreboard();
+    }
+
+    private bool HasRemainingItemSlots()
+    {
+        for (int i = 0; i < itemPickCount; i++)
+            if (!IsItemSlotTaken(i)) return true;
+        return false;
+    }
+
+    public bool IsItemSlotTaken(int index) => index switch
+    {
+        0 => ItemPickTaken0,
+        1 => ItemPickTaken1,
+        2 => ItemPickTaken2,
+        3 => ItemPickTaken3,
+        _ => true
+    };
+
+    private void SetItemSlotTaken(int index, bool taken)
+    {
+        switch (index)
+        {
+            case 0: ItemPickTaken0 = taken; break;
+            case 1: ItemPickTaken1 = taken; break;
+            case 2: ItemPickTaken2 = taken; break;
+            case 3: ItemPickTaken3 = taken; break;
+        }
+    }
+
+    public BoardItemEffect GetItemPickSlotEffect(int index) => index switch
+    {
+        0 => (BoardItemEffect)ItemPickSlot0,
+        1 => (BoardItemEffect)ItemPickSlot1,
+        2 => (BoardItemEffect)ItemPickSlot2,
+        3 => (BoardItemEffect)ItemPickSlot3,
+        _ => BoardItemEffect.None
+    };
+
+    /// <summary>Lấy BoardItemData (tên, icon, mô tả...) của 1 slot — dùng cho UI sau này.</summary>
+    public BoardItemData GetItemPickSlotData(int index)
+    {
+        if (boardItemPool == null) return null;
+        return boardItemPool.GetByEffect(GetItemPickSlotEffect(index));
+    }
+
+    public int ItemPickCount => itemPickCount;
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_NotifyItemPickPoolChanged()
+    {
+        OnItemPickPoolChanged?.Invoke();
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_NotifyItemPickTurnStarted(int playerId, float duration)
+    {
+        OnItemPickTurnStarted?.Invoke(playerId, duration);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_UpdateItemPickTimer(int remainingSeconds)
+    {
+        OnItemPickTimerTick?.Invoke(remainingSeconds);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_NotifyItemPicked(int playerId, int slotIndex, int effect)
+    {
+        OnItemPicked?.Invoke(playerId, slotIndex, (BoardItemEffect)effect);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_NotifyItemPickPhaseEnded()
+    {
+        OnItemPickPhaseEnded?.Invoke();
+    }
+
+    #endregion
+
     #region State Handlers (Override in subclass or extend)
     protected virtual void HandleLobbyState()
     {
@@ -1964,6 +2279,7 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
+        SetActiveUI(itemPickUI, false);
 
         // Khóa xoay camera khi xem scoreboard
         if (CameraManager.Instance != null)
@@ -1999,8 +2315,8 @@ public class GameManager : NetworkBehaviour
         Debug.Log($"[GameManager] Scoreboard will auto-proceed in {scoreboardDisplayDuration}s...");
         yield return new WaitForSeconds(scoreboardDisplayDuration);
 
-        Debug.Log("[GameManager] Auto-proceeding from scoreboard...");
-        ProceedFromScoreboard();
+        Debug.Log("[GameManager] Auto-proceeding from scoreboard -> starting ItemPick phase...");
+        StartItemPickPhase(); // ĐỔI: trước đây gọi ProceedFromScoreboard(), giờ gọi StartItemPickPhase()
         _scoreboardCoroutine = null;
     }
 
@@ -2029,7 +2345,7 @@ public class GameManager : NetworkBehaviour
 
         if (AudioManager.Instance != null)
             AudioManager.Instance.EnterMainBGM();
-            
+
         if (!HasStateAuthority) return;
 
         int sceneIndex = GetSceneIndex(boardSceneName);
@@ -2192,6 +2508,16 @@ public class GameManager : NetworkBehaviour
                 return playerRef;
         }
         return PlayerRef.None;
+    }
+    public PlayerNetworkData GetPlayerNetworkData(int playerId)
+    {
+        var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+        foreach (var p in players)
+        {
+            if (p != null && p.Object != null && p.Object.InputAuthority.PlayerId == playerId)
+                return p;
+        }
+        return null;
     }
     #endregion
 
