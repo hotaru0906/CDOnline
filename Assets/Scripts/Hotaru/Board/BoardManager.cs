@@ -54,8 +54,12 @@ public class BoardManager : NetworkBehaviour
     [SerializeField] private int debugTeleportNodeID = 0;
     [Header("End Game")]
     [SerializeField] private SceneRef endGameSceneRef;
+    [Header("Item")]
+    [SerializeField] private float itemResolveDuration = 3.5f;
     [Header("Jackpot")]
-    [SerializeField] private float jackpotResolveDuration = 3f;
+    [SerializeField] private float jackpotResolveDuration = 5f;
+    [Header("Steal")]
+    [SerializeField] private float stealHandTravelWait = 0.8f;
     #endregion
 
     #region Networked State
@@ -127,7 +131,9 @@ public class BoardManager : NetworkBehaviour
     private int _targetSelectIndex = 0;
     private bool _isSelectingTarget = false;
     private bool _gameEnded = false;
-    private BoardItemEffect _localSelectingEffect = BoardItemEffect.None; // fix: đọc đúng effect trên mọi client, không chỉ host
+    private BoardItemEffect _localSelectingEffect = BoardItemEffect.None;
+    private bool[] _introReady = new bool[4];
+    private int _introReadyCount = 0;
     #endregion
 
     #region Events
@@ -235,15 +241,23 @@ public class BoardManager : NetworkBehaviour
         {
             if (Input.GetKeyDown(KeyCode.A))
             {
+                int prevTarget = _eligibleStealTargets[_targetSelectIndex];
                 _targetSelectIndex = (_targetSelectIndex - 1 + _eligibleStealTargets.Count) % _eligibleStealTargets.Count;
+                int newTarget = _eligibleStealTargets[_targetSelectIndex];
+
                 BoardHUDController.Instance?.UpdateStealSelectionPrompt(_eligibleStealTargets, _targetSelectIndex);
-                RPC_HighlightTarget(_eligibleStealTargets[_targetSelectIndex]);
+                RPC_HighlightTarget(newTarget);
+                RPC_SwitchStealHandPreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
             }
             else if (Input.GetKeyDown(KeyCode.D))
             {
+                int prevTarget = _eligibleStealTargets[_targetSelectIndex];
                 _targetSelectIndex = (_targetSelectIndex + 1) % _eligibleStealTargets.Count;
+                int newTarget = _eligibleStealTargets[_targetSelectIndex];
+
                 BoardHUDController.Instance?.UpdateStealSelectionPrompt(_eligibleStealTargets, _targetSelectIndex);
-                RPC_HighlightTarget(_eligibleStealTargets[_targetSelectIndex]);
+                RPC_HighlightTarget(newTarget);
+                RPC_SwitchStealHandPreview(GetSlotByPlayerId(prevTarget), GetSlotByPlayerId(newTarget));
             }
             else if (Input.GetKeyDown(KeyCode.Space))
             {
@@ -333,6 +347,10 @@ public class BoardManager : NetworkBehaviour
         _completedThisRound = 0;
 
         for (int i = 0; i < 4; i++)
+            _introReady[i] = false;
+        _introReadyCount = 0;
+
+        for (int i = 0; i < 4; i++)
         {
             _hasShield[i] = false;
             _bonusSteps[i] = 0;
@@ -415,12 +433,34 @@ public class BoardManager : NetworkBehaviour
         {
             GameManager.Instance.HasPlayedBoardIntro = true;
 
+            // Đợi tất cả client báo đã sẵn sàng, có timeout tránh treo vĩnh viễn nếu 1 client bị đứng loading
+            yield return WaitForAllClientsReadyForIntro();
+
             RPC_PlayBoardIntro();
 
-            yield return new WaitForSeconds(12f);
+            float introDuration = BoardIntroController.Instance != null
+                ? BoardIntroController.Instance.TotalDuration
+                : 12f;
+
+            yield return new WaitForSeconds(introDuration);
         }
 
         StartTurn();
+    }
+
+    private IEnumerator WaitForAllClientsReadyForIntro()
+    {
+        float elapsed = 0f;
+        float timeout = 8f; // fallback — nếu 1 client bị kẹt loading quá lâu, vẫn cho intro chạy để không treo cả phòng
+
+        while (_introReadyCount < ActivePlayerCount && elapsed < timeout)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (_introReadyCount < ActivePlayerCount)
+            Debug.LogWarning($"[BoardManager] Bắt đầu intro dù chỉ {_introReadyCount}/{ActivePlayerCount} client sẵn sàng (timeout {timeout}s).");
     }
 
 
@@ -469,6 +509,7 @@ public class BoardManager : NetworkBehaviour
             _waitingForMyRoll = true;
             _itemUsedThisTurn = false;
             _waitingForMyItemTarget = false;
+            BoardYourTurnUI.Instance?.Show();
         }
 
         BoardCameraController.Instance?.FocusOnPlayer(playerId);
@@ -507,6 +548,7 @@ public class BoardManager : NetworkBehaviour
         if (BoardState != BoardPhaseState.WaitingForRoll) return;
 
         _waitingForMyRoll = false;
+        BoardYourTurnUI.Instance?.Hide();
 
         // Dùng Runner.LocalPlayer thay vì PlayerNetworkData.Local — luôn có giá trị đúng
         int myId = Runner != null ? Runner.LocalPlayer.PlayerId : -1;
@@ -1181,7 +1223,7 @@ public class BoardManager : NetworkBehaviour
             case TileType.Item:
                 ResolveItem(playerId);
                 RPC_PlayerLanded(playerId, finalNodeID, tileType);
-                yield return new WaitForSeconds(tileResolveDuration);
+                yield return new WaitForSeconds(itemResolveDuration);
                 break;
             case TileType.Jackpot:
                 ResolveJackpot(playerId);
@@ -1211,14 +1253,10 @@ public class BoardManager : NetworkBehaviour
         if (boardItemPool == null) return;
         var inv = PlayerItemInventory.GetForPlayer(playerId);
 
-        Debug.Log($"ResolveItem -> playerId = {playerId}");
-        Debug.Log($"Inventory NULL = {inv == null}");
         var item = boardItemPool.GetRandom();
         if (inv == null || item == null) return;
 
         bool ok = inv.AddBoardItem(item.effectType);
-
-        Debug.Log($"AddBoardItem returned = {ok}");
 
         if (ok)
         {
@@ -1229,12 +1267,24 @@ public class BoardManager : NetworkBehaviour
             {
                 ui.RefreshAfterRestore();
             }
+
+            RPC_ItemGranted(playerId, (int)item.effectType); // NEW
         }
 
         if (!ok)
             RPC_TileMessage(playerId, "[BOARD ITEMS FULL]");
         else
             RPC_TileMessage(playerId, $"GOT: {item.itemName} [{item.rarity}]");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ItemGranted(int playerId, int effectId)
+    {
+        // Chỉ người vừa ăn item mới thấy animation
+        if (Runner == null || Runner.LocalPlayer.PlayerId != playerId) return;
+
+        var effect = (BoardItemEffect)effectId;
+        BoardJackpotCardFlyUI.Instance?.PlayJackpotReveal(new[] { effect });
     }
 
     private void ResolveJackpot(int playerId)
@@ -1376,6 +1426,10 @@ public class BoardManager : NetworkBehaviour
         BoardState = BoardPhaseState.WaitingForTargetSelect;
         StealerPlayerId = stealerId;
         _stealPendingTargetId = -1;
+
+        RPC_ResetAllStealHandPreviews();
+        RPC_SetStealHandPreview(GetSlotByPlayerId(eligibles[0]), true);
+
         RPC_BeginTargetSelect(stealerId, eligibles.ToArray());
 
         float elapsed = 0f;
@@ -1390,10 +1444,14 @@ public class BoardManager : NetworkBehaviour
 
         int targetId = _stealPendingTargetId;
 
-        // Check shield
         int targetSlotForShield = -1;
         for (int i = 0; i < ActivePlayerCount; i++)
             if (GetPlayerIDAtSlot(i) == targetId) { targetSlotForShield = i; break; }
+
+        // Ẩn preview, chạy animation tay chộp — luôn chạy dù sau đó bị shield chặn hay không
+        RPC_SetStealHandPreview(targetSlotForShield, false);
+        RPC_PlayStealHandTravel(targetSlotForShield);
+        yield return new WaitForSeconds(stealHandTravelWait);
 
         if (targetSlotForShield >= 0 && _hasShield[targetSlotForShield])
         {
@@ -1405,7 +1463,6 @@ public class BoardManager : NetworkBehaviour
             yield break;
         }
 
-        // Thực hiện steal
         var stealerInv = PlayerItemInventory.GetForPlayer(stealerId);
         var targetInv = PlayerItemInventory.GetForPlayer(targetId);
         int stolenEffect = -1;
@@ -1486,7 +1543,6 @@ public class BoardManager : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_StealResult(int stealerId, int targetId, int itemEffect)
     {
-        // Chỉ focus targetId
         BoardCameraController.Instance?.FocusOnPlayer(targetId);
 
         string itemName = itemEffect >= 0
@@ -1503,6 +1559,17 @@ public class BoardManager : NetworkBehaviour
             else if (myId == targetId) _reactionLine = "(T_T) MY ITEM...";
         }
         _reactionTimer = 2f;
+
+        // Refresh hand UI ngay — tránh phải đợi tới lượt kế tiếp mới thấy item đổi tay
+        FindFirstObjectByType<BoardInventoryUI>()?.RefreshAfterRestore();
+
+        // Card reveal chỉ hiện cho stealer, nạn nhân không thấy gì (item chỉ đơn giản biến mất khỏi hand)
+        if (itemEffect >= 0 && Runner != null && Runner.LocalPlayer.PlayerId == stealerId)
+        {
+            var effect = (BoardItemEffect)itemEffect;
+            BoardJackpotCardFlyUI.Instance?.PlayJackpotReveal(new[] { effect });
+        }
+
         Debug.Log($"[BoardManager] {_lastTileMessage}");
     }
 
@@ -1847,6 +1914,37 @@ public class BoardManager : NetworkBehaviour
         if (tokens != null && slot >= 0 && slot < tokens.Length && tokens[slot] != null)
             tokens[slot].SetTPSelectionPreview(active);
     }
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_ResetAllStealHandPreviews()
+    {
+        if (tokens == null) return;
+        foreach (var t in tokens)
+            t?.SetStealHandPreview(false);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SetStealHandPreview(int slot, bool active)
+    {
+        if (tokens != null && slot >= 0 && slot < tokens.Length && tokens[slot] != null)
+            tokens[slot].SetStealHandPreview(active);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.All)]
+    private void RPC_SwitchStealHandPreview(int prevSlot, int newSlot)
+    {
+        if (tokens == null) return;
+        if (prevSlot >= 0 && prevSlot < tokens.Length && tokens[prevSlot] != null)
+            tokens[prevSlot].SetStealHandPreview(false);
+        if (newSlot >= 0 && newSlot < tokens.Length && tokens[newSlot] != null)
+            tokens[newSlot].SetStealHandPreview(true);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayStealHandTravel(int targetSlot)
+    {
+        if (tokens != null && targetSlot >= 0 && targetSlot < tokens.Length && tokens[targetSlot] != null)
+            tokens[targetSlot].PlayStealHandTravel();
+    }
 
     [Rpc(RpcSources.All, RpcTargets.All)]
     private void RPC_SwitchTPPreview(int prevSlot, int newSlot)
@@ -1869,6 +1967,29 @@ public class BoardManager : NetworkBehaviour
     {
         if (tokens != null && slot >= 0 && slot < tokens.Length && tokens[slot] != null)
             tokens[slot].PlayRushForwardFly(targetNodeID);
+    }
+    public void NotifyClientReadyForIntro()
+    {
+        int myId = Runner != null ? Runner.LocalPlayer.PlayerId : -1;
+        if (myId < 0) return;
+
+        RPC_ClientReadyForIntro(myId);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_ClientReadyForIntro(int playerId)
+    {
+        if (!HasStateAuthority) return;
+
+        int slot = GetSlotByPlayerId(playerId);
+        if (slot < 0 || slot >= 4) return;
+
+        if (!_introReady[slot])
+        {
+            _introReady[slot] = true;
+            _introReadyCount++;
+            Debug.Log($"[BoardManager] Intro ready: {_introReadyCount}/{ActivePlayerCount} (P{playerId})");
+        }
     }
     #endregion
 

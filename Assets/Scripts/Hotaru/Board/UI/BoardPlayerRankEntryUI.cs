@@ -5,8 +5,6 @@ using TMPro;
 public class BoardPlayerRankEntryUI : MonoBehaviour
 {
     [SerializeField] private TMP_Text   nameText;
-    [SerializeField] private TMP_Text   keyText;
-    [SerializeField] private Image[]    crownImages = new Image[2];
     [SerializeField] private GameObject turnTick;
 
     public void SetData(string playerName, bool isActiveTurn)

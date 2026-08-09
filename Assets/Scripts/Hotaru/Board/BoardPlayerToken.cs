@@ -57,6 +57,14 @@ public class BoardPlayerToken : MonoBehaviour
     [SerializeField] private float flyRiseOffset = 2f; // độ cao nhấc lên so với vị trí hiện tại (VD y=1 -> y=3)
     private Coroutine _flyRoutine;
 
+    [Header("Steal Hand VFX")]
+    [SerializeField] private GameObject stealHandInstance; // pre-placed trong scene, giống Glove
+    [SerializeField] private float stealHandStartX = 4.5f;
+    [SerializeField] private float stealHandEndX = -4.5f;
+    [SerializeField] private float stealHandTravelDuration = 0.8f;
+    private Coroutine _stealHandRoutine;
+    private Renderer[] _stealHandRenderers;
+
     [SerializeField] private AudioClip jumpSound;
 
     [SerializeField] private float rotateSpeed = 14f; // toc độ xoay khi di chuyển (độ/giây)
@@ -323,6 +331,72 @@ public class BoardPlayerToken : MonoBehaviour
         IsMoving = false;
         _flyRoutine = null;
         OnMoveFinished?.Invoke(this);
+    }
+    public void SetStealHandPreview(bool active)
+    {
+        if (stealHandInstance == null) return;
+        if (_stealHandRoutine != null) return; // đang chạy animation thật thì không can thiệp
+
+        ResetStealHandTransform();
+        stealHandInstance.SetActive(active);
+    }
+
+    public void PlayStealHandTravel()
+    {
+        if (stealHandInstance == null) return;
+
+        if (_stealHandRoutine != null) StopCoroutine(_stealHandRoutine);
+        _stealHandRoutine = StartCoroutine(StealHandTravelRoutine());
+    }
+
+    private void ResetStealHandTransform()
+    {
+        var localPos = stealHandInstance.transform.localPosition;
+        localPos.x = stealHandStartX;
+        stealHandInstance.transform.localPosition = localPos;
+        SetStealHandAlpha(1f);
+    }
+
+    private IEnumerator StealHandTravelRoutine()
+    {
+        if (_stealHandRenderers == null)
+            _stealHandRenderers = stealHandInstance.GetComponentsInChildren<Renderer>(true);
+
+        ResetStealHandTransform();
+        stealHandInstance.SetActive(true);
+
+        Vector3 startPos = stealHandInstance.transform.localPosition;
+        Vector3 endPos = startPos;
+        endPos.x = stealHandEndX;
+
+        float elapsed = 0f;
+        while (elapsed < stealHandTravelDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / stealHandTravelDuration);
+
+            stealHandInstance.transform.localPosition = Vector3.Lerp(startPos, endPos, t);
+            SetStealHandAlpha(1f - t);
+
+            yield return null;
+        }
+
+        stealHandInstance.transform.localPosition = endPos;
+        stealHandInstance.SetActive(false);
+        _stealHandRoutine = null;
+    }
+
+    private void SetStealHandAlpha(float alpha)
+    {
+        if (_stealHandRenderers == null) return;
+
+        foreach (var r in _stealHandRenderers)
+        {
+            if (r == null || r.material == null) continue;
+            Color c = r.material.color;
+            c.a = alpha;
+            r.material.color = c;
+        }
     }
     public void AnimateMovement(int[] pathNodeIDs)
     {
