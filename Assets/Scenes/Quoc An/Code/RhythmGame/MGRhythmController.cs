@@ -172,9 +172,29 @@ public class MGRhythmController : BaseMinigameController
     //  Fever attack — CHỈ host được gọi
     // ----------------------------------------------------------------
 
+    // ----------------------------------------------------------------
+    //  Đòn tấn công né được
+    // ----------------------------------------------------------------
+    //  Fever đầy -> mọi đối thủ nhận MỘT note tấn công chen vào màn của họ.
+    //  Ấn trúng trong hạn -> né sạch, không mất máu.
+    //  Hết hạn chưa né -> host trừ feverDamage.
+    //  Chỉ host quyết damage; client chỉ báo "tôi né được".
+
+    [SerializeField, Tooltip("Đối thủ có bao nhiêu giây để ấn trúng note tấn công mà né.")]
+    private float dodgeWindowSeconds = 2.0f;
+
+    // Các đòn đang chờ xử lý trên host: id -> (mục tiêu, hạn chót, đã né chưa)
+    private struct PendingAttack
+    {
+        public PlayerRef target;
+        public TickTimer deadline;
+        public bool dodged;
+    }
+    private readonly Dictionary<int, PendingAttack> _pendingAttacks = new();
+    private int _attackSeq;
+
     /// <summary>
     /// Gọi từ MGRhythmPlayerState.RPC_ReportFeverFull (đã chạy trên host).
-    /// Client không bao giờ tự trừ máu người khác.
     /// </summary>
     public void ApplyFeverAttack(PlayerRef attacker)
     {
@@ -191,12 +211,69 @@ public class MGRhythmController : BaseMinigameController
             if (target.Object.InputAuthority == attacker) continue;
             if (target.IsEliminated) continue;
 
-            target.TakeDamage(feverDamage);
+            int attackId = ++_attackSeq;
+            _pendingAttacks[attackId] = new PendingAttack
+            {
+                target = target.Object.InputAuthority,
+                deadline = TickTimer.CreateFromSeconds(Runner, dodgeWindowSeconds),
+                dodged = false,
+            };
+
+            // Báo cho máy mục tiêu spawn note tấn công. Bên nào là mục tiêu thì
+            // playfield của bên đó mới thật sự sinh note (kiểm trong RPC).
+            RPC_SpawnAttackNote(target.Object.InputAuthority, attackId, dodgeWindowSeconds);
             hit++;
         }
 
-        Debug.Log($"[MGRhythm] FEVER! P{attacker} → {hit} đối thủ, mỗi người -{feverDamage} HP");
+        Debug.Log($"[MGRhythm] FEVER! P{attacker} → {hit} đối thủ (đòn né được)");
         RPC_PlayFeverVfx(attacker);
+    }
+
+    /// <summary>
+    /// Host kiểm hạn né mỗi tick. Đòn nào hết hạn mà chưa né -> trừ máu.
+    /// </summary>
+    private void TickPendingAttacks()
+    {
+        if (!HasStateAuthority || _pendingAttacks.Count == 0) return;
+
+        // Gom id đã xử lý xong để xoá sau vòng lặp.
+        List<int> done = null;
+        foreach (var kv in _pendingAttacks)
+        {
+            var atk = kv.Value;
+            if (atk.dodged)
+            {
+                (done ??= new List<int>()).Add(kv.Key);
+                continue;
+            }
+            if (atk.deadline.Expired(Runner))
+            {
+                var td = GetMinigameData(atk.target);
+                if (td != null && !td.IsEliminated)
+                    td.TakeDamage(feverDamage);
+                (done ??= new List<int>()).Add(kv.Key);
+            }
+        }
+        if (done != null)
+            foreach (int id in done) _pendingAttacks.Remove(id);
+    }
+
+    /// <summary>Mục tiêu đã né được. Gọi trên host từ MGRhythmPlayerState.RPC_ReportDodge.</summary>
+    public void NotifyDodge(int attackId)
+    {
+        if (!HasStateAuthority) return;
+        if (!_pendingAttacks.TryGetValue(attackId, out var atk)) return;
+        atk.dodged = true;
+        _pendingAttacks[attackId] = atk;
+        Debug.Log($"[MGRhythm] P{atk.target} né được đòn #{attackId}");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_SpawnAttackNote(PlayerRef target, int attackId, float window)
+    {
+        // Chỉ máy sở hữu mục tiêu mới spawn note (để đúng người bị đánh xử lý).
+        if (Runner.LocalPlayer != target) return;
+        playfield?.SpawnAttackNote(attackId, window);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -226,6 +303,10 @@ public class MGRhythmController : BaseMinigameController
 
     protected override void CheckWinCondition()
     {
+        // Chạy mỗi tick trên host (base gọi từ FixedUpdateNetwork).
+        // Xử lý hạn né của các đòn tấn công đang chờ.
+        TickPendingAttacks();
+
         var alive = GetAlivePlayers();
 
         // Điều kiện 1: chỉ còn một người còn máu

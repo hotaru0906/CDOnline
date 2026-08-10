@@ -25,6 +25,17 @@ namespace RhythmGame
             Side = side;
             TargetTime = targetTime;
             _rt.SetParent(parent, false);
+
+            // Ép anchor + pivot về TÂM, bất kể prefab được cấu hình thế nào.
+            // Đây là chỗ note đỏ hay lệch: nếu sprite mũi tên phải có pivot khác
+            // mũi tên trái, cùng một anchoredPosition sẽ hiển thị lệch nhau.
+            // Ép ở đây thì hai bên luôn khớp track dù asset cấu hình khác.
+            _rt.anchorMin = new Vector2(0.5f, 0.5f);
+            _rt.anchorMax = new Vector2(0.5f, 0.5f);
+            _rt.pivot = new Vector2(0.5f, 0.5f);
+            _rt.localScale = Vector3.one;
+            _rt.localRotation = Quaternion.identity;
+
             _rt.anchoredPosition = new Vector2(-9999f, 9999f); // giấu tới frame vẽ đầu
             gameObject.SetActive(true);
         }

@@ -7,11 +7,23 @@ namespace RhythmGame
     [Serializable]
     public class NoteEntry
     {
-        /// <summary>Thời điểm note phải được ấn, tính bằng GIÂY từ lúc bài hát bắt đầu.</summary>
+        /// <summary>Thời điểm note phải được ấn (đầu note), tính bằng GIÂY từ lúc bài bắt đầu.</summary>
         public float time;
 
-        /// <summary>Lane 0..3, đếm từ TRÊN xuống DƯỚI trên màn hình.</summary>
+        /// <summary>Lane 0..3 (bản lane cũ) hoặc hướng 0=trái/1=phải (bản hình thoi).</summary>
         public int lane;
+
+        /// <summary>
+        /// Thời gian GIỮ, tính bằng giây. 0 = note thường (chỉ ấn một cái).
+        /// > 0 = hold note: ấn đầu, giữ suốt duration, thả ở cuối.
+        /// </summary>
+        public float duration = 0f;
+
+        /// <summary>
+        /// 0 = note thường / hold một hướng (dùng lane để biết trái/phải).
+        /// 1 = note ĐÔI: ấn giữ CẢ hai hướng cùng lúc (lane bị bỏ qua).
+        /// </summary>
+        public int type = 0;
     }
 
     /// <summary>Toàn bộ beatmap của một bài. Lưu/đọc bằng JsonUtility.</summary>

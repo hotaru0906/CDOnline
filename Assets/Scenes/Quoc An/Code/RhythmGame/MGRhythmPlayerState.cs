@@ -91,6 +91,16 @@ public class MGRhythmPlayerState : NetworkBehaviour
     }
 
     /// <summary>
+    /// Client báo đã né được đòn tấn công. Client CÓ input authority trên state của
+    /// chính mình nên RPC này hợp lệ; host nhận rồi chuyển cho controller xử lý.
+    /// </summary>
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    public void RPC_ReportDodge(int attackId)
+    {
+        MGRhythmController.Instance?.NotifyDodge(attackId);
+    }
+
+    /// <summary>
     /// Client báo fever vừa đầy. Host là bên DUY NHẤT quyết định sát thương,
     /// client không bao giờ tự trừ máu người khác.
     /// </summary>
