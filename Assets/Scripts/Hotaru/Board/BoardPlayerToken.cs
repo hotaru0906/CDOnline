@@ -27,13 +27,44 @@ public class BoardPlayerToken : MonoBehaviour
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 4f;    // nodes per second
-    [SerializeField] private float hopHeight = 0.4f;  // độ cao nhảy mỗi ô
+    [SerializeField] private string walkBoolParam = "isWalking";
+    private Animator _modelAnimator;
 
     [Header("Audio")]
     [SerializeField] private AudioSource audioSource;
 
     [Header("Shield VFX")]
     [SerializeField] private GameObject shieldVfxPrefab;
+
+    [Header("Glove VFX")]
+    [SerializeField] private GameObject gloveVfxInstance; // kéo sẵn object Glove (đã đặt vị trí trong scene) vào đây
+    [SerializeField] private string gloveTrigger = "Active";
+    [SerializeField] private float gloveTotalDuration = 2.5f;
+    private Animator _gloveAnimator;
+    private Coroutine _gloveRoutine;
+
+    [Header("Teleport VFX (Position Swap)")]
+    [SerializeField] private GameObject tpSelectionInstance; // pre-placed trong scene
+    [SerializeField] private GameObject tpBurstInstance;     // pre-placed trong scene, particle tự chạy
+    [SerializeField] private float tpBurstDuration = 2f;
+    private Coroutine _tpBurstRoutine;
+
+    [Header("Wings VFX (Rush Forward)")]
+    [SerializeField] private GameObject wingsVfxInstance; // pre-placed trong scene, giống Glove/TP
+    [SerializeField] private float flyRiseDuration = 0.5f;
+    [SerializeField] private float flyHoldDuration = 0.5f;
+    [SerializeField] private float flyDescendDuration = 1f;
+    [SerializeField] private float flyRiseOffset = 2f; // độ cao nhấc lên so với vị trí hiện tại (VD y=1 -> y=3)
+    private Coroutine _flyRoutine;
+
+    [Header("Steal Hand VFX")]
+    [SerializeField] private GameObject stealHandInstance; // pre-placed trong scene, giống Glove
+    [SerializeField] private float stealHandStartX = 4.5f;
+    [SerializeField] private float stealHandEndX = -4.5f;
+    [SerializeField] private float stealHandTravelDuration = 0.8f;
+    private Coroutine _stealHandRoutine;
+    private Renderer[] _stealHandRenderers;
+
     [SerializeField] private AudioClip jumpSound;
 
     [SerializeField] private float rotateSpeed = 14f; // toc độ xoay khi di chuyển (độ/giây)
@@ -65,9 +96,6 @@ public class BoardPlayerToken : MonoBehaviour
     private readonly Queue<int> _movementQueue = new();
     private bool _movementRunning = false;
 
-    /// <summary>
-    /// Gọi bởi BoardManager khi board phase bắt đầu để gán player và snap về node 0.
-    /// </summary>
     public void Initialize(int playerId, int slotIndex, int startNodeID)
     {
         ownerPlayerId = playerId;
@@ -177,7 +205,199 @@ public class BoardPlayerToken : MonoBehaviour
 
         _shieldVfxInstance.SetActive(false);
     }
+    public void SetGlovePreview(bool active)
+    {
+        if (gloveVfxInstance == null) return;
 
+        // Nếu đang chạy animation thật (confirm PushBack), không can thiệp
+        if (_gloveRoutine != null) return;
+
+        if (_gloveAnimator == null)
+            _gloveAnimator = gloveVfxInstance.GetComponentInChildren<Animator>();
+
+        gloveVfxInstance.SetActive(active);
+    }
+    private void CreateGloveVfxInstance()
+    {
+        if (gloveVfxInstance == null)
+        {
+            Debug.LogWarning("Glove VFX object is missing — kéo reference vào Inspector.");
+            return;
+        }
+
+        if (_gloveAnimator == null)
+            _gloveAnimator = gloveVfxInstance.GetComponentInChildren<Animator>();
+
+        gloveVfxInstance.SetActive(false);
+    }
+    public void PlayGloveHit()
+    {
+        if (gloveVfxInstance == null)
+        {
+            Debug.LogWarning("Glove VFX object is missing — kéo reference vào Inspector.");
+            return;
+        }
+
+        if (_gloveAnimator == null)
+            CreateGloveVfxInstance();
+
+        if (_gloveRoutine != null) StopCoroutine(_gloveRoutine);
+        _gloveRoutine = StartCoroutine(GloveRoutine());
+    }
+
+    private IEnumerator GloveRoutine()
+    {
+        gloveVfxInstance.SetActive(true);
+        _gloveAnimator?.SetTrigger(gloveTrigger);
+
+        yield return new WaitForSeconds(gloveTotalDuration);
+
+        gloveVfxInstance.SetActive(false);
+        _gloveRoutine = null;
+    }
+    public void SetTPSelectionPreview(bool active)
+    {
+        if (tpSelectionInstance == null) return;
+        tpSelectionInstance.SetActive(active);
+    }
+
+    public void PlayTPBurst()
+    {
+        if (tpBurstInstance == null) return;
+
+        if (_tpBurstRoutine != null) StopCoroutine(_tpBurstRoutine);
+        _tpBurstRoutine = StartCoroutine(TPBurstRoutine());
+    }
+
+    private IEnumerator TPBurstRoutine()
+    {
+        tpBurstInstance.SetActive(true);
+        yield return new WaitForSeconds(tpBurstDuration);
+        tpBurstInstance.SetActive(false);
+        _tpBurstRoutine = null;
+    }
+    public void PlayRushForwardFly(int targetNodeID)
+    {
+        if (_flyRoutine != null) StopCoroutine(_flyRoutine);
+        _flyRoutine = StartCoroutine(FlyRoutine(targetNodeID));
+    }
+    private IEnumerator FlyRoutine(int targetNodeID)
+    {
+        var path = BoardNodePath.Instance;
+        var node = path?.GetNodeByID(targetNodeID);
+        if (node == null) yield break;
+
+        IsMoving = true;
+        if (wingsVfxInstance != null) wingsVfxInstance.SetActive(true);
+
+        Vector3 startPos = transform.position;
+        Vector3 targetPos = node.GetSpawnPosition(playerSlotIndex) + Vector3.up * 0.5f; // khớp offset landing dùng chung toàn hệ thống
+        Vector3 peakPos = new Vector3(startPos.x, startPos.y + flyRiseOffset, startPos.z);
+
+        Vector3 dir = targetPos - startPos;
+        dir.y = 0f;
+        if (dir.sqrMagnitude > 0.001f)
+            transform.rotation = Quaternion.LookRotation(dir);
+
+        // 1. Rise — nhảy thẳng lên tại chỗ
+        float elapsed = 0f;
+        while (elapsed < flyRiseDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / flyRiseDuration);
+            transform.position = Vector3.Lerp(startPos, peakPos, t);
+            yield return null;
+        }
+        transform.position = peakPos;
+
+        // 2. Hold — giữ nguyên trên không
+        yield return new WaitForSeconds(flyHoldDuration);
+
+        // 3. Descend — bay ngang + hạ xuống cùng lúc, đáp đúng ô đích
+        elapsed = 0f;
+        while (elapsed < flyDescendDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / flyDescendDuration);
+            transform.position = Vector3.Lerp(peakPos, targetPos, t);
+            yield return null;
+        }
+        transform.position = targetPos;
+
+        CurrentNodeID = targetNodeID;
+
+        if (wingsVfxInstance != null) wingsVfxInstance.SetActive(false);
+
+        IsMoving = false;
+        _flyRoutine = null;
+        OnMoveFinished?.Invoke(this);
+    }
+    public void SetStealHandPreview(bool active)
+    {
+        if (stealHandInstance == null) return;
+        if (_stealHandRoutine != null) return; // đang chạy animation thật thì không can thiệp
+
+        ResetStealHandTransform();
+        stealHandInstance.SetActive(active);
+    }
+
+    public void PlayStealHandTravel()
+    {
+        if (stealHandInstance == null) return;
+
+        if (_stealHandRoutine != null) StopCoroutine(_stealHandRoutine);
+        _stealHandRoutine = StartCoroutine(StealHandTravelRoutine());
+    }
+
+    private void ResetStealHandTransform()
+    {
+        var localPos = stealHandInstance.transform.localPosition;
+        localPos.x = stealHandStartX;
+        stealHandInstance.transform.localPosition = localPos;
+        SetStealHandAlpha(1f);
+    }
+
+    private IEnumerator StealHandTravelRoutine()
+    {
+        if (_stealHandRenderers == null)
+            _stealHandRenderers = stealHandInstance.GetComponentsInChildren<Renderer>(true);
+
+        ResetStealHandTransform();
+        stealHandInstance.SetActive(true);
+
+        Vector3 startPos = stealHandInstance.transform.localPosition;
+        Vector3 endPos = startPos;
+        endPos.x = stealHandEndX;
+
+        float elapsed = 0f;
+        while (elapsed < stealHandTravelDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / stealHandTravelDuration);
+
+            stealHandInstance.transform.localPosition = Vector3.Lerp(startPos, endPos, t);
+            SetStealHandAlpha(1f - t);
+
+            yield return null;
+        }
+
+        stealHandInstance.transform.localPosition = endPos;
+        stealHandInstance.SetActive(false);
+        _stealHandRoutine = null;
+    }
+
+    private void SetStealHandAlpha(float alpha)
+    {
+        if (_stealHandRenderers == null) return;
+
+        foreach (var r in _stealHandRenderers)
+        {
+            if (r == null || r.material == null) continue;
+            Color c = r.material.color;
+            c.a = alpha;
+            r.material.color = c;
+        }
+    }
     public void AnimateMovement(int[] pathNodeIDs)
     {
         if (pathNodeIDs == null || pathNodeIDs.Length == 0)
@@ -285,19 +505,15 @@ public class BoardPlayerToken : MonoBehaviour
             return false;
         }
 
-        if (source == null)
-        {
-            _spawnedModelVisual = null;
-            _currentCharacterIndex = -1;
-            return false;
-        }
-
         _spawnedModelVisual = Instantiate(source, parent);
         _spawnedModelVisual.name = $"BoardVisual_P{ownerPlayerId}";
         _spawnedModelVisual.transform.localPosition = Vector3.zero;
         _spawnedModelVisual.transform.localRotation = Quaternion.identity;
 
         RemoveRuntimeComponents(_spawnedModelVisual);
+
+        // NEW: cache Animator ngay sau khi model sẵn sàng
+        _modelAnimator = _spawnedModelVisual.GetComponentInChildren<Animator>(true);
 
         _currentCharacterIndex = characterIndex;
         ShowTokenVisual(!hideTokenWhenModelLoaded);
@@ -328,15 +544,19 @@ public class BoardPlayerToken : MonoBehaviour
         if (tokenRenderer != null)
             tokenRenderer.enabled = visible;
     }
-
+    private void SetWalking(bool active)
+    {
+        if (_modelAnimator == null) return;
+        _modelAnimator.SetBool(walkBoolParam, active);
+    }
     private IEnumerator ProcessMovementQueue()
     {
         IsMoving = true;
+        SetWalking(true);
 
         while (_movementQueue.Count > 0)
         {
             int nodeID = _movementQueue.Dequeue();
-
             yield return MoveSingleStep(nodeID);
         }
 
@@ -352,12 +572,12 @@ public class BoardPlayerToken : MonoBehaviour
                 transform.position = finalNode.GetSpawnPosition(playerSlotIndex) + Vector3.up * 0.5f;
         }
 
+        SetWalking(false);
         IsMoving = false;
         _movementRunning = false;
 
         OnMoveFinished?.Invoke(this);
     }
-
     private IEnumerator MoveSingleStep(int nodeID)
     {
         var node = BoardNodePath.Instance?.GetNodeByID(nodeID);
@@ -394,14 +614,9 @@ public class BoardPlayerToken : MonoBehaviour
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
+            float t = elapsed / duration;
 
-            float t = Mathf.SmoothStep(0, 1, elapsed / duration);
-
-            float hop = Mathf.Sin(t * Mathf.PI) * hopHeight;
-
-            transform.position =
-                Vector3.Lerp(from, to, t)
-                + Vector3.up * hop;
+            transform.position = Vector3.Lerp(from, to, t); // bỏ hop, chỉ Lerp thẳng
 
             yield return null;
         }
@@ -412,7 +627,6 @@ public class BoardPlayerToken : MonoBehaviour
 
         PlayStepSound();
     }
-
 
     public void PlayJumpAnimation()
     {

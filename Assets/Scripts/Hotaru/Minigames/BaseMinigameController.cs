@@ -130,8 +130,6 @@ public abstract class BaseMinigameController : NetworkBehaviour
                 StartCoroutine(GrantKeyWhenInventoryReady(playerId, rank, keyAmount));
                 continue;
             }
-
-            inventory.AddKey(keyAmount);
             Debug.Log($"[{GetType().Name}] KeyReward: P{playerId} rank {rank} → +{keyAmount} key");
         }
     }
@@ -146,8 +144,6 @@ public abstract class BaseMinigameController : NetworkBehaviour
             var inventory = PlayerItemInventory.GetForPlayer(playerId);
             if (inventory != null)
             {
-                inventory.AddKey(keyAmount);
-                Debug.Log($"[{GetType().Name}] KeyReward (delayed): P{playerId} rank {rank} → +{keyAmount} key");
                 yield break;
             }
 

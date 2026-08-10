@@ -218,7 +218,6 @@ GameObject:
   - component: {fileID: 3676217483308576439}
   - component: {fileID: 6913654776587991026}
   - component: {fileID: 3874461249045105763}
-  - component: {fileID: -4448950941623081541}
   - component: {fileID: 7542557765201321062}
   m_Layer: 0
   m_Name: Chest
@@ -259,8 +258,7 @@ MonoBehaviour:
   ObjectInterest: 1
   Flags: 262145
   NestedObjects: []
-  NetworkedBehaviours:
-  - {fileID: -4448950941623081541}
+  NetworkedBehaviours: []
   ForceRemoteRenderTimeframe: 0
 --- !u!65 &3874461249045105763
 BoxCollider:
@@ -283,26 +281,6 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2.3428955, y: 2.130848, z: 1.7863436}
   m_Center: {x: 0.052946568, y: 0.56542397, z: 0.04490614}
---- !u!114 &-4448950941623081541
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5758192625339859525}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cd388d457d8b265488674919a4ecdce8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  visual: {fileID: 0}
-  _IsCollected:
-    _value: 0
-  rotateSpeed: 90
-  floatAmplitude: 0.15
-  floatSpeed: 2
-  boardNode: {fileID: 0}
-  _BoardNodeID: -1
 --- !u!95 &7542557765201321062
 Animator:
   serializedVersion: 7

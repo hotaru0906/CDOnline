@@ -12,7 +12,15 @@ public class BoardIntroController : MonoBehaviour
     [Header("Orbit")]
     [SerializeField] private float orbitRadius = 35f;
     [SerializeField] private float orbitHeight = 20f;
-    [SerializeField] private float orbitDuration = 8f;
+    [SerializeField] private float orbitDuration = 5f;
+
+    [Header("Billboard")]
+    [Tooltip("Transform đặt sẵn trong scene — vị trí + góc camera nhìn vào các billboard thông tin player")]
+    [SerializeField] private Transform billboardViewPoint;
+    [SerializeField] private float billboardDuration = 5f;
+    [SerializeField] private float billboardTransitionDuration = 1f;
+
+    public float TotalDuration => orbitDuration + billboardDuration;
 
     private void Awake()
     {
@@ -20,6 +28,19 @@ public class BoardIntroController : MonoBehaviour
 
         if (introCamera != null)
             introCamera.gameObject.SetActive(false);
+    }
+
+    private void Start()
+    {
+        StartCoroutine(NotifyReadyRoutine());
+    }
+
+    private IEnumerator NotifyReadyRoutine()
+    {
+        while (BoardManager.Instance == null)
+            yield return null;
+
+        BoardManager.Instance.NotifyClientReadyForIntro();
     }
 
     private Vector3 GetBoardCenter()
@@ -40,30 +61,41 @@ public class BoardIntroController : MonoBehaviour
         return center / nodes.Length;
     }
 
-    private Chest[] GetAllChests()
-    {
-        return FindObjectsByType<Chest>(FindObjectsSortMode.None);
-    }
     public IEnumerator PlayIntro()
     {
         spectatorCameraController?.SetIntroActive(true);
         introCamera.gameObject.SetActive(true);
         mainCamera.gameObject.SetActive(false);
 
+        BoardBillboardUI.PopulateAll();
+
+        // Player đi đầu tiên luôn là slot 0 (CurrentTurnIndex bắt đầu = 0)
+        BoardBillboardUI.StartFirstTurnGlowAll(0);
+
         yield return OrbitAroundBoard();
+        yield return BillboardStage();
 
-        Chest[] chests = GetAllChests();
-
-        Debug.Log($"[BoardIntro] Found {chests.Length} chests.");
-
-        if (chests.Length > 0)
-        {
-            yield return FocusChest(chests[0]);
-        }
+        BoardBillboardUI.StopFirstTurnGlowAll();
 
         introCamera.gameObject.SetActive(false);
         mainCamera.gameObject.SetActive(true);
         spectatorCameraController?.SetIntroActive(false);
+    }
+
+    private IEnumerator BillboardStage()
+    {
+        if (billboardViewPoint == null)
+        {
+            Debug.LogWarning("[BoardIntroController] Chưa gán Billboard View Point — bỏ qua bước billboard.");
+            yield return new WaitForSeconds(billboardDuration);
+            yield break;
+        }
+
+        yield return MoveCameraToTransform(billboardViewPoint, billboardTransitionDuration);
+
+        float holdDuration = billboardDuration - billboardTransitionDuration;
+        if (holdDuration > 0f)
+            yield return new WaitForSeconds(holdDuration);
     }
 
     private IEnumerator OrbitAroundBoard()
@@ -76,11 +108,9 @@ public class BoardIntroController : MonoBehaviour
             elapsed += Time.deltaTime;
 
             float t = elapsed / orbitDuration;
-
             t = Mathf.SmoothStep(0f, 1f, t);
 
             float angle = Mathf.Lerp(0f, 360f, t);
-
             float rad = angle * Mathf.Deg2Rad;
 
             Vector3 position =
@@ -92,68 +122,30 @@ public class BoardIntroController : MonoBehaviour
                 );
 
             introCamera.transform.position = position;
-
             introCamera.transform.LookAt(center);
 
             yield return null;
         }
     }
 
-    private IEnumerator MoveCameraTo(
-    Vector3 targetPosition,
-    Vector3 lookTarget,
-    float duration)
+    private IEnumerator MoveCameraToTransform(Transform target, float duration)
     {
         Vector3 startPos = introCamera.transform.position;
         Quaternion startRot = introCamera.transform.rotation;
 
-        Quaternion targetRot =
-            Quaternion.LookRotation(
-                lookTarget - targetPosition);
-
         float t = 0f;
-
         while (t < duration)
         {
             t += Time.deltaTime;
-
             float p = Mathf.SmoothStep(0f, 1f, t / duration);
 
-            introCamera.transform.position =
-                Vector3.Lerp(
-                    startPos,
-                    targetPosition,
-                    p);
-
-            introCamera.transform.rotation =
-                Quaternion.Slerp(
-                    startRot,
-                    targetRot,
-                    p);
+            introCamera.transform.position = Vector3.Lerp(startPos, target.position, p);
+            introCamera.transform.rotation = Quaternion.Slerp(startRot, target.rotation, p);
 
             yield return null;
         }
-    }
 
-    private IEnumerator FocusChest(Chest chest)
-    {
-        Vector3 chestPos = chest.transform.position;
-        Vector3 center = GetBoardCenter();
-
-        // Camera đứng hơi chếch phía trước rương
-        Vector3 direction =
-            (chestPos - center).normalized;
-
-        Vector3 cameraPos =
-            chestPos +
-            direction * 8f +
-            Vector3.up * 6f;
-
-        yield return MoveCameraTo(
-            cameraPos,
-            chestPos,
-            1.5f);
-
-        yield return new WaitForSeconds(1.5f);
+        introCamera.transform.position = target.position;
+        introCamera.transform.rotation = target.rotation;
     }
 }
