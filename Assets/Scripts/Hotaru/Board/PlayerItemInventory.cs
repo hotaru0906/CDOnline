@@ -23,25 +23,9 @@ public class PlayerItemInventory : NetworkBehaviour
     [Networked, Capacity(MAX_ROULETTE_SLOTS)]
     public NetworkArray<int> RouletteItems => default;
 
-    // =====================================================================
-    // PLAYER RESOURCES
-    // =====================================================================
-
-    /// <summary>
-    /// Number of keys player owns.
-    /// Keys are resources, not board items.
-    /// </summary>
-    [Networked]
-    public int KeyCount { get; set; }
-
-    [Networked]
-    public int ChestCount { get; set; }
-
-    public static System.Action<int, int, int> OnResourceChanged;
+    public static System.Action<int, int> OnResourceChanged;
     public static System.Action<int> OnInventoryRegistered;
     public static System.Action<int> OnInventoryUnregistered;
-
-    private int _lastRenderedKeyCount = -1;
     private int _lastRenderedChestCount = -1;
 
     // =====================================================================
@@ -88,10 +72,6 @@ public class PlayerItemInventory : NetworkBehaviour
             for (int i = 0; i < MAX_ROULETTE_SLOTS; i++)
                 RouletteItems.Set(i, -1);
 
-            KeyCount = 0;
-
-            ChestCount = 0;
-
             if (GameManager.Instance != null)
             {
                 GameManager.Instance.TryRestorePlayerResourceState(playerId, this);
@@ -100,12 +80,6 @@ public class PlayerItemInventory : NetworkBehaviour
                     GameManager.Instance.TryRestoreBoardItemsForPlayer(playerId, this);
             }
         }
-        Debug.Log($"[PlayerItemInventory] Registered for player {playerId}");
-
-        // Force one initial push so UI can pick up current values after scene transitions.
-        _lastRenderedKeyCount = KeyCount;
-        _lastRenderedChestCount = ChestCount;
-        OnResourceChanged?.Invoke(playerId, KeyCount, ChestCount);
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
@@ -120,14 +94,6 @@ public class PlayerItemInventory : NetworkBehaviour
         base.Render();
 
         int playerId = Object.InputAuthority.PlayerId;
-
-        if (_lastRenderedKeyCount == KeyCount && _lastRenderedChestCount == ChestCount)
-            return;
-
-        _lastRenderedKeyCount = KeyCount;
-        _lastRenderedChestCount = ChestCount;
-
-        OnResourceChanged?.Invoke(playerId, KeyCount, ChestCount);
     }
 
     // =====================================================================
@@ -209,196 +175,6 @@ public class PlayerItemInventory : NetworkBehaviour
             if (v != -1) list.Add((i, (BoardItemEffect)v));
         }
         return list;
-    }
-
-    // =====================================================================
-    // ROULETTE ITEMS API — chỉ gọi trên host
-    // =====================================================================
-
-    /// <summary>
-    /// Thêm Roulette item vào slot trống đầu tiên.
-    /// Nếu đầy (8 items): auto discard oldest.
-    /// </summary>
-    public bool AddRouletteItem(ItemEffect effect)
-    {
-        if (!HasStateAuthority)
-        {
-            Debug.LogWarning("[PlayerItemInventory] AddRouletteItem chỉ gọi được trên host!");
-            return false;
-        }
-
-        for (int i = 0; i < MAX_ROULETTE_SLOTS; i++)
-        {
-            if (RouletteItems.Get(i) == -1)
-            {
-                RouletteItems.Set(i, (int)effect);
-                Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} +Roulette:{effect} → slot {i}");
-                return true;
-            }
-        }
-
-        Debug.LogWarning($"[Inventory] P{Object.InputAuthority.PlayerId} RouletteItems FULL — từ chối {effect}");
-        return false;
-    }
-
-    /// <summary>Xóa Roulette item tại slot chỉ định.</summary>
-    public void RemoveRouletteItem(int slot)
-    {
-        if (!HasStateAuthority) return;
-        if (slot < 0 || slot >= MAX_ROULETTE_SLOTS) return;
-        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} -RouletteSlot{slot} ({(ItemEffect)RouletteItems.Get(slot)})");
-        RouletteItems.Set(slot, -1);
-    }
-
-    /// <summary>Số Roulette item đang giữ.</summary>
-    public int GetRouletteItemCount()
-    {
-        int count = 0;
-        for (int i = 0; i < MAX_ROULETTE_SLOTS; i++)
-            if (RouletteItems.Get(i) != -1) count++;
-        return count;
-    }
-
-    /// <summary>List ItemEffect (Roulette) đang giữ.</summary>
-    public List<ItemEffect> GetRouletteItems()
-    {
-        var list = new List<ItemEffect>();
-        for (int i = 0; i < MAX_ROULETTE_SLOTS; i++)
-        {
-            int v = RouletteItems.Get(i);
-            if (v != -1) list.Add((ItemEffect)v);
-        }
-        return list;
-    }
-
-    // =====================================================================
-    // KEY API
-    // =====================================================================
-
-    /// <summary>
-    /// Add keys to player.
-    /// </summary>
-    public void AddKey(int amount = 1)
-    {
-        if (!HasStateAuthority)
-        {
-            Debug.LogWarning("[PlayerItemInventory] AddKey chỉ được gọi trên Host!");
-            return;
-        }
-
-        if (amount <= 0)
-            return;
-
-        KeyCount += amount;
-
-        if (GameManager.Instance != null)
-            GameManager.Instance.SavePlayerResourceState(Object.InputAuthority.PlayerId, KeyCount, ChestCount);
-
-        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} +{amount} Key (Total={KeyCount})");
-    }
-
-    /// <summary>
-    /// Check if player has at least one key.
-    /// </summary>
-    public bool HasKey()
-    {
-        return KeyCount > 0;
-    }
-
-    /// <summary>
-    /// Consume keys.
-    /// Returns false if player doesn't have enough keys.
-    /// </summary>
-    public bool ConsumeKey(int amount = 1)
-    {
-        if (!HasStateAuthority)
-        {
-            Debug.LogWarning("[PlayerItemInventory] ConsumeKey chỉ được gọi trên Host!");
-            return false;
-        }
-
-        if (amount <= 0)
-            return false;
-
-        if (KeyCount < amount)
-        {
-            Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} không đủ Key.");
-            return false;
-        }
-
-        KeyCount -= amount;
-
-        if (GameManager.Instance != null)
-            GameManager.Instance.SavePlayerResourceState(Object.InputAuthority.PlayerId, KeyCount, ChestCount);
-
-        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} -{amount} Key (Remain={KeyCount})");
-
-        return true;
-    }
-
-    /// <summary>
-    /// Remove up to amount keys.
-    /// Returns the actual number removed.
-    /// </summary>
-    public int RemoveKeys(int amount)
-    {
-        if (!HasStateAuthority)
-        {
-            Debug.LogWarning("[PlayerItemInventory] RemoveKeys chỉ được gọi trên Host!");
-            return 0;
-        }
-
-        if (amount <= 0)
-            return 0;
-
-        int removed = Mathf.Min(KeyCount, amount);
-
-        KeyCount -= removed;
-
-        if (GameManager.Instance != null)
-            GameManager.Instance.SavePlayerResourceState(
-                Object.InputAuthority.PlayerId,
-                KeyCount,
-                ChestCount);
-
-        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} -{removed} Key (Remain={KeyCount})");
-
-        return removed;
-    }
-
-    public int GetKeyCount()
-    {
-        return KeyCount;
-    }
-
-    public void AddChest()
-    {
-        if (!HasStateAuthority)
-            return;
-
-        ChestCount++;
-
-        if (GameManager.Instance != null)
-            GameManager.Instance.SavePlayerResourceState(Object.InputAuthority.PlayerId, KeyCount, ChestCount);
-
-        Debug.Log($"[Inventory] P{Object.InputAuthority.PlayerId} Chest = {ChestCount}");
-    }
-
-    public void SetResourceCounts(int keyCount, int chestCount)
-    {
-        if (!HasStateAuthority)
-            return;
-
-        KeyCount = Mathf.Max(0, keyCount);
-        ChestCount = Mathf.Max(0, chestCount);
-
-        if (GameManager.Instance != null)
-            GameManager.Instance.SavePlayerResourceState(Object.InputAuthority.PlayerId, KeyCount, ChestCount);
-    }
-
-    public int GetChestCount()
-    {
-        return ChestCount;
     }
 }
 

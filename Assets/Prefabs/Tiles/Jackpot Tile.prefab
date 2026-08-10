@@ -35,6 +35,7 @@ Transform:
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 922509537258650208}
+  - {fileID: 6219105672952883821}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &7175477052611800971
@@ -361,3 +362,93 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 555769493147218609, guid: f7f7b221b134bdf4097445f9151296db, type: 3}
   m_PrefabInstance: {fileID: 827277915405142225}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &1930735497277542166
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 3664786625350629739}
+    m_Modifications:
+    - target: {fileID: 5174137553179017153, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_Name
+      value: Chest animation
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -1.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5174137553179017153, guid: a09339e2400e18b42a3f766609788539, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6278520777189509993}
+  m_SourcePrefab: {fileID: 100100000, guid: a09339e2400e18b42a3f766609788539, type: 3}
+--- !u!95 &6179918900378654199 stripped
+Animator:
+  m_CorrespondingSourceObject: {fileID: 5694839987367697121, guid: a09339e2400e18b42a3f766609788539, type: 3}
+  m_PrefabInstance: {fileID: 1930735497277542166}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &6219105672952883821 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5514070725948745083, guid: a09339e2400e18b42a3f766609788539, type: 3}
+  m_PrefabInstance: {fileID: 1930735497277542166}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &6702872490622415063 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5174137553179017153, guid: a09339e2400e18b42a3f766609788539, type: 3}
+  m_PrefabInstance: {fileID: 1930735497277542166}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &6278520777189509993
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6702872490622415063}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cbb9a10ade562d44c8ef93854fecfe6f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  nodeID: 0
+  chestAnimator: {fileID: 6179918900378654199}
+  openTrigger: ChestOpen

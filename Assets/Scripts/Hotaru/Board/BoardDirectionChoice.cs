@@ -10,7 +10,7 @@ public class BoardDirectionChoice : MonoBehaviour
 
     [Header("Colors")]
     [SerializeField] private Color normalColor = Color.white;
-    [SerializeField] private Color hintColor = new Color(0.2f, 0.8f, 1f, 1f);
+    [SerializeField] private Color hoverColor = Color.yellow;
     [SerializeField] private Color selectedColor = Color.green;
 
     [Header("Optional")]
@@ -19,7 +19,6 @@ public class BoardDirectionChoice : MonoBehaviour
 
     private Material[] _originalMaterials;
     private bool _isSelected;
-    private bool _isInteractable;
 
     private void Awake()
     {
@@ -30,14 +29,27 @@ public class BoardDirectionChoice : MonoBehaviour
         {
             _originalMaterials = meshRenderer.materials;
         }
+    }
 
-        _isInteractable = false;
+    private void OnMouseEnter()
+    {
+        if (!useHighlight || _isSelected)
+            return;
+
         SetColor(normalColor);
     }
 
-    private void OnMouseUpAsButton()
+    private void OnMouseExit()
     {
-        if (!_isInteractable || _isSelected)
+        if (!useHighlight || _isSelected)
+            return;
+
+        SetColor(hoverColor);
+    }
+
+    private void OnMouseDown()
+    {
+        if (_isSelected)
             return;
 
         if (BoardManager.Instance == null)
@@ -53,24 +65,6 @@ public class BoardDirectionChoice : MonoBehaviour
     {
         _isSelected = selected;
         SetColor(selected ? selectedColor : normalColor);
-    }
-
-    public void SetInteractable(bool interactable)
-    {
-        _isInteractable = interactable;
-
-        if (TryGetComponent<Collider>(out var collider))
-            collider.enabled = interactable;
-
-        if (!_isInteractable)
-        {
-            _isSelected = false;
-            SetColor(normalColor);
-        }
-        else if (!_isSelected)
-        {
-            SetColor(hintColor);
-        }
     }
 
     public void SetBranchIndex(int index)

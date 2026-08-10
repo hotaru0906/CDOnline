@@ -352,7 +352,26 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Gọi bởi Animation Event trên clip đấm. Vì animation (và Animation Event) chạy cục bộ
+    /// trên MÁY của bất kỳ client nào đang render nó (không riêng gì Host), ta KHÔNG được kiểm
+    /// tra hit trực tiếp tại đây — chỉ máy có StateAuthority mới được phép áp dụng kết quả hit
+    /// (xem TryApplyStun). Do đó chỉ gửi 1 RPC yêu cầu StateAuthority tự kiểm tra và xử lý.
+    /// </summary>
     public void AttackHitEvent()
+    {
+        if (!IsAttacking)
+            return;
+
+        RPC_RequestAttackHit();
+    }
+
+    /// <summary>
+    /// Chạy trên máy có StateAuthority (Host) bất kể ai gửi request lên - đảm bảo
+    /// CheckAttackHit()/TryApplyStun() luôn có đủ quyền để áp dụng stun cho player bị đánh.
+    /// </summary>
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestAttackHit()
     {
         if (!IsAttacking)
             return;

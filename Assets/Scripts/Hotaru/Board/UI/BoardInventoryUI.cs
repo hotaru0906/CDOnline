@@ -4,6 +4,12 @@ public class BoardInventoryUI : MonoBehaviour
 {
     [SerializeField] private BoardHandUI[] hands = new BoardHandUI[4];
     private bool _initialized = false;
+    public static BoardInventoryUI Instance { get; private set; }
+    private void Awake()
+    {
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        Instance = this;
+    }
     private void Start()
     {
         StartCoroutine(WaitForBoardManager());
@@ -22,6 +28,18 @@ public class BoardInventoryUI : MonoBehaviour
     {
         if (BoardManager.Instance != null)
             BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
+        if (Instance == this) Instance = null;
+    }
+    
+    public RectTransform GetLocalHandTransform()
+    {
+        int localId = GetLocalPlayerId();
+        foreach (var h in hands)
+        {
+            if (h != null && h.PlayerId == localId)
+                return h.GetComponent<RectTransform>();
+        }
+        return null;
     }
 
     // =====================================================================
@@ -44,7 +62,7 @@ public class BoardInventoryUI : MonoBehaviour
             int pid = bm.GetPlayerIDAtSlot(i);
 
             Debug.Log($"[BoardInventoryUI] slot={i} pid={pid} isLocal={pid == localId}");
-            
+
             if (pid < 0)
             {
                 hands[i].gameObject.SetActive(false);

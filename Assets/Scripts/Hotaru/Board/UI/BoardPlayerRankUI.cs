@@ -27,7 +27,6 @@ public class BoardPlayerRankUI : MonoBehaviour
         {
             PlayerItemInventory.OnInventoryRegistered -= OnInventoryRegistered;
             PlayerItemInventory.OnInventoryUnregistered -= OnInventoryUnregistered;
-            PlayerItemInventory.OnResourceChanged -= OnResourceChanged;
 
             if (BoardManager.Instance != null)
                 BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
@@ -63,7 +62,6 @@ public class BoardPlayerRankUI : MonoBehaviour
 
         PlayerItemInventory.OnInventoryRegistered += OnInventoryRegistered;
         PlayerItemInventory.OnInventoryUnregistered += OnInventoryUnregistered;
-        PlayerItemInventory.OnResourceChanged += OnResourceChanged;
         BoardManager.Instance.OnTurnStarted += OnTurnStarted;
         _subscribed = true;
     }
@@ -77,7 +75,7 @@ public class BoardPlayerRankUI : MonoBehaviour
         SetActiveTurn(playerId);
     }
 
-    private void OnResourceChanged(int playerId, int keyCount, int chestCount)
+    private void OnResourceChanged(int playerId)
     {
         var bm = BoardManager.Instance;
         if (bm == null)
@@ -91,7 +89,6 @@ public class BoardPlayerRankUI : MonoBehaviour
             if (bm.GetPlayerIDAtSlot(i) != playerId)
                 continue;
 
-            entries[i].SetResourceData(keyCount, chestCount);
             return;
         }
 
@@ -134,13 +131,9 @@ public class BoardPlayerRankUI : MonoBehaviour
             string name = BoardHUDController.Instance?.GetPlayerName(pid) ?? $"P{pid}";
 
             var inventory = PlayerItemInventory.GetForPlayer(pid);
-            int keyCount = inventory != null ? inventory.GetKeyCount() : 0;
-            int chestCount = inventory != null ? inventory.GetChestCount() : 0;
 
             entries[i].SetData(
                 playerName  : name,
-                keyCount    : keyCount,
-                chestCount  : chestCount,
                 isActiveTurn: false
             );
         }
