@@ -4,9 +4,6 @@ using System.Collections;
 
 public class ItemPickUIController : MonoBehaviour
 {
-    [Header("Panel")]
-    [SerializeField] private GameObject panelRoot;
-
     [Header("Cards (đúng thứ tự slot 0-3)")]
     [SerializeField] private ItemPickCardView[] cards = new ItemPickCardView[4];
 
@@ -14,8 +11,31 @@ public class ItemPickUIController : MonoBehaviour
     [SerializeField] private TMP_Text turnAnnouncementText; // "[Name] is picking a card"
     [SerializeField] private TMP_Text timerText;
 
-    private void OnEnable() => TrySubscribe();
+    private void OnEnable()
+    {
+        TrySubscribe();
+        SyncCurrentStateImmediately();
+    }
 
+    private void SyncCurrentStateImmediately()
+    {
+        if (GameManager.Instance == null) return;
+        if (GameManager.Instance.CurrentState != GameState.PickItem) return;
+
+        for (int i = 0; i < cards.Length; i++)
+        {
+            if (cards[i] == null) continue;
+
+            if (GameManager.Instance.IsItemSlotTaken(i))
+                cards[i].gameObject.SetActive(false);
+            else
+                cards[i].Setup(i, OnCardClicked);
+        }
+
+        int turnPlayerId = GameManager.Instance.ItemPickTurnPlayerId;
+        if (turnPlayerId >= 0)
+            HandleTurnStarted(turnPlayerId, 0f);
+    }
     private void OnDisable()
     {
         if (GameManager.Instance == null) return;
@@ -39,8 +59,6 @@ public class ItemPickUIController : MonoBehaviour
         GameManager.Instance.OnItemPickTimerTick += HandleTimerTick;
         GameManager.Instance.OnItemPicked += HandleItemPicked;
         GameManager.Instance.OnItemPickPhaseEnded += HandlePhaseEnded;
-
-        if (panelRoot != null) panelRoot.SetActive(false);
     }
 
     private IEnumerator WaitAndSubscribe()
@@ -51,8 +69,6 @@ public class ItemPickUIController : MonoBehaviour
 
     private void HandlePoolChanged()
     {
-        if (panelRoot != null) panelRoot.SetActive(true);
-
         for (int i = 0; i < cards.Length; i++)
         {
             if (cards[i] == null) continue;
@@ -73,7 +89,10 @@ public class ItemPickUIController : MonoBehaviour
 
         foreach (var card in cards)
         {
-            if (card != null) card.SetInteractable(isLocalTurn);
+            if (card == null) continue;
+            // chỉ bật interactable cho card CHƯA bị lấy
+            bool taken = GameManager.Instance.IsItemSlotTaken(System.Array.IndexOf(cards, card));
+            card.SetInteractable(isLocalTurn && !taken);
         }
     }
 
@@ -101,7 +120,6 @@ public class ItemPickUIController : MonoBehaviour
 
     private void HandlePhaseEnded()
     {
-        if (panelRoot != null) panelRoot.SetActive(false);
         if (turnAnnouncementText != null) turnAnnouncementText.text = string.Empty;
         if (timerText != null) timerText.text = string.Empty;
     }

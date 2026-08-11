@@ -780,7 +780,7 @@ public class GameManager : NetworkBehaviour
             case UIPanelType.Result:
                 resultUI = panel.gameObject;
                 break;
-            case UIPanelType.ItemPickCard:          
+            case UIPanelType.ItemPickCard:
                 itemPickUI = panel.gameObject;
                 break;
             case UIPanelType.MinigameTutorial:
@@ -1471,19 +1471,17 @@ public class GameManager : NetworkBehaviour
                 continue;
             }
 
-            SaveBoardItems(
-                slot,
+            // ĐỔI: dùng SaveBoardItemsByPlayer (playerId key) để nhất quán với GetBoardItemsByPlayer khi restore
+            SaveBoardItemsByPlayer(
+                playerId,
                 inv.BoardItems.Get(0),
                 inv.BoardItems.Get(1),
                 inv.BoardItems.Get(2),
                 inv.BoardItems.Get(3));
 
             Debug.Log(
-                $"Saved Slot {slot}: " +
-                $"[{inv.BoardItems.Get(0)}, " +
-                $"{inv.BoardItems.Get(1)}, " +
-                $"{inv.BoardItems.Get(2)}, " +
-                $"{inv.BoardItems.Get(3)}]");
+                $"Saved Player {playerId}: " +
+                $"[{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
         }
 
         SaveCurrentPlayerResources();
@@ -1752,7 +1750,7 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
-        SetActiveUI(itemPickUI, true); 
+        SetActiveUI(itemPickUI, true);
 
         if (CameraManager.Instance != null)
             CameraManager.Instance.SetCameraRotationLocked(true);
@@ -1772,18 +1770,38 @@ public class GameManager : NetworkBehaviour
     private void StartItemPickPhase()
     {
         if (!HasStateAuthority) return;
+
+        if (boardItemPool == null)
+        {
+            Debug.LogWarning("[GameManager] BoardItemPool chưa gán — bỏ qua ItemPick phase, đi thẳng Board.");
+            ProceedFromScoreboard();
+            return;
+        }
+
+        var ranking = GetLastMinigameRanking();
+        if (Mathf.Min(3, ranking.Length) <= 0)
+        {
+            Debug.LogWarning("[GameManager] Không có ranking hợp lệ — bỏ qua ItemPick phase.");
+            ProceedFromScoreboard();
+            return;
+        }
+
         ChangeState(GameState.PickItem);
     }
 
     private void GenerateItemPickPool()
     {
         if (!HasStateAuthority) return;
+        if (boardItemPool == null) return;
 
-        if (boardItemPool == null)
+        // MỚI: đảm bảo inventory của từng player đã có đủ item cũ TRƯỚC khi cho phép pick thêm,
+        // phòng trường hợp PlayerItemInventory bị tạo mới (rỗng) khi đổi sang minigame scene.
+        var ranking = GetLastMinigameRanking();
+        foreach (var pid in ranking)
         {
-            Debug.LogError("[GameManager] BoardItemPool chưa được assign trong Inspector! Bỏ qua ItemPick phase.");
-            FinishItemPickPhase();
-            return;
+            var inv = PlayerItemInventory.GetForPlayer(pid);
+            if (inv != null)
+                TryRestoreBoardItemsForPlayer(pid, inv);
         }
 
         var picked = new System.Collections.Generic.List<BoardItemEffect>();
@@ -1793,7 +1811,7 @@ public class GameManager : NetworkBehaviour
             guard++;
             var data = boardItemPool.GetRandom();
             if (data == null) break;
-            picked.Add(data.effectType); // Cho phép trùng thẻ giữa các slot (roll độc lập)
+            picked.Add(data.effectType);
         }
 
         while (picked.Count < itemPickCount)
@@ -2059,6 +2077,7 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
+        SetActiveUI(itemPickUI, false);
 
         // Hiện cursor trong lobby
         if (CursorManager.Instance != null)
@@ -2088,12 +2107,9 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
+        SetActiveUI(itemPickUI, false);
 
         SetActiveUI(votingUI, true);
-
-        // XÓA ĐOẠN NÀY:
-        // if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady && HasStateAuthority)
-        //     MinigameVotingManager.Instance.PrepareNextVotingRound();
 
         if (CameraManager.Instance != null)
             CameraManager.Instance.SetCameraRotationLocked(true);
@@ -2130,7 +2146,6 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[GameManager] Entered Tutorial state");
 
-        // Ẩn tất cả UI panels (minigame UI sẽ được show sau khi scene load)
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
         SetActiveUI(minigameTieBreakerUI, false);
@@ -2138,6 +2153,7 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
+        SetActiveUI(itemPickUI, false);
 
         // Khóa xoay camera khi xem tutorial
         if (CameraManager.Instance != null)
@@ -2212,11 +2228,11 @@ public class GameManager : NetworkBehaviour
     {
         Debug.Log("[GameManager] Entered Playing state");
 
-        // Ẩn tất cả UI panels
         SetActiveUI(lobbyUI, false);
         SetActiveUI(votingUI, false);
         SetActiveUI(scoreboardUI, false);
         SetActiveUI(resultUI, false);
+        SetActiveUI(itemPickUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
 
@@ -2342,6 +2358,7 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, false);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
+        SetActiveUI(itemPickUI, false);
 
         // Lock cursor — board dùng click UI để tung xúc xắc
         if (CursorManager.Instance != null)
@@ -2442,6 +2459,7 @@ public class GameManager : NetworkBehaviour
         SetActiveUI(resultUI, true);
         SetActiveUI(minigameTutorialUI, false);
         SetActiveUI(minigameCountdownUI, false);
+        SetActiveUI(itemPickUI, false);
 
         // Hiện cursor
         if (CursorManager.Instance != null)

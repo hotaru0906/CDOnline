@@ -12,7 +12,7 @@ using System.Collections.Generic;
 /// </summary>
 public class PlayerItemInventory : NetworkBehaviour
 {
-    private const int MAX_BOARD_SLOTS    = 4;
+    private const int MAX_BOARD_SLOTS = 4;
     private const int MAX_ROULETTE_SLOTS = 8;
 
     /// <summary>Board items (BoardItemEffect). -1 = slot trống.</summary>
@@ -49,7 +49,6 @@ public class PlayerItemInventory : NetworkBehaviour
 
     public override void Spawned()
     {
-
         Debug.Log(
         $"Spawned InstanceID={GetInstanceID()} " +
         $"PlayerId={Object.InputAuthority.PlayerId}");
@@ -76,8 +75,11 @@ public class PlayerItemInventory : NetworkBehaviour
             {
                 GameManager.Instance.TryRestorePlayerResourceState(playerId, this);
 
-                if (GameManager.Instance.CurrentState == GameState.Board)
-                    GameManager.Instance.TryRestoreBoardItemsForPlayer(playerId, this);
+                // SỬA: bỏ điều kiện "chỉ khi CurrentState == Board".
+                // TryRestoreBoardItemsForPlayer đã tự check "hasAny" bên trong (an toàn khi gọi dù
+                // chưa có gì để restore), nên restore ngay bất kể đang ở state nào — quan trọng nhất
+                // là lúc respawn vào MINIGAME scene (state = Tutorial), item cũ vẫn phải được nạp lại.
+                GameManager.Instance.TryRestoreBoardItemsForPlayer(playerId, this);
             }
         }
     }

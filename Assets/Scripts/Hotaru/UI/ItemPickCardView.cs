@@ -40,12 +40,14 @@ public class ItemPickCardView : MonoBehaviour
         pickButton.interactable = false;
     }
 
-    public void SetInteractable(bool interactable) => pickButton.interactable = interactable;
-
+    public void SetInteractable(bool interactable)
+    {
+        Debug.Log($"[ItemPickCardView] slot={_slotIndex} SetInteractable({interactable})");
+        pickButton.interactable = interactable;
+    }
     public void HandleClick()
     {
-        Debug.Log($"[ItemPickCardView] Card clicked: slotIndex={_slotIndex}");
-        //pickButton.interactable = false;
+        pickButton.interactable = false;
         _onClicked?.Invoke(_slotIndex);
     }
 
