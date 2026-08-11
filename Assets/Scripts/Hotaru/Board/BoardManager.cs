@@ -1784,6 +1784,7 @@ public class BoardManager : NetworkBehaviour
         Debug.Log("=================================");
 
         WinnerPlayerId = winnerPlayerId;
+        GameManager.Instance?.SaveFinalWinner(winnerPlayerId);
 
         // Lưu vị trí/board item như bình thường trước khi rời board (tùy bạn có muốn giữ không)
         GameManager.Instance?.SavePlayerBoardPosition(winnerPlayerId, GetNodeIDAtSlot(GetSlotByPlayerId(winnerPlayerId)));

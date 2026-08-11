@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Collections.Generic;
 
 public enum CameraMode
 {
@@ -48,6 +49,11 @@ public class CameraManager : MonoBehaviour
     private Transform _localPlayerTransform;
     private Transform _currentSharedCameraPosition;
     private CameraMode _currentMode = CameraMode.Fixed;
+
+    // ===== Spectator =====
+    private bool _isSpectating = false;
+    private readonly List<PlayerController> _spectateTargets = new();
+    private int _spectateIndex = 0;
 
     // Flag để biết đang chờ MinigameCamera setup shared camera
     private bool _pendingSharedCameraMode = false;
@@ -591,6 +597,42 @@ public class CameraManager : MonoBehaviour
         else if (_currentMode == CameraMode.ThirdPerson && cameraOrbit != null)
             return cameraOrbit.Yaw;
         return mainCamera.transform.eulerAngles.y;
+    }
+
+    public void StartSpectate()
+    {
+        _isSpectating = true;
+
+        _spectateTargets.Clear();
+
+        PlayerMinigameData[] players = FindObjectsOfType<PlayerMinigameData>();
+
+        foreach (var player in players)
+        {
+            if (player == null)
+                continue;
+
+            if (player.IsEliminated)
+                continue;
+
+            PlayerController controller = player.GetComponent<PlayerController>();
+
+            if (controller == null)
+                continue;
+
+            _spectateTargets.Add(controller);
+        }
+
+        _spectateIndex = 0;
+
+        if (_spectateTargets.Count > 0)
+        {
+            UpdatePlayerTarget(_spectateTargets[_spectateIndex].transform);
+
+            Debug.Log($"[CameraManager] Spectating {_spectateTargets[_spectateIndex].name}");
+        }
+
+        Debug.Log($"[CameraManager] Spectate Targets: {_spectateTargets.Count}");
     }
 
     private void OnGUI()

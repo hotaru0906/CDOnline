@@ -101,6 +101,17 @@ public class GameManager : NetworkBehaviour
 
     [Networked]
     public int FinalWinnerId { get; private set; } = -1;
+
+    public void SaveFinalWinner(int winnerId)
+    {
+        if (!HasStateAuthority) return;
+        FinalWinnerId = winnerId;
+    }
+
+    /// <summary>
+    /// Xếp hạng minigame vừa kết thúc — PlayerId theo rank 1→4 (-1 = không có)
+    /// BoardManager đọc để xác định thứ tự tung xúc xắc.
+    /// </summary>
     [Networked] public int MgRank1 { get; private set; } = -1;
     [Networked] public int MgRank2 { get; private set; } = -1;
     [Networked] public int MgRank3 { get; private set; } = -1;

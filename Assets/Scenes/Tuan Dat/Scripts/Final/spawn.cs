@@ -16,18 +16,52 @@ public class spawn : MonoBehaviour
     {
         if (autoApplyOnStart)
         {
-            StartCoroutine(ApplySpawnAfterOneFrame());
+            StartCoroutine(ApplySpawnWhenPlayersReady());
         }
     }
 
-    private IEnumerator ApplySpawnAfterOneFrame()
+    private IEnumerator ApplySpawnWhenPlayersReady()
     {
-        yield return null;
+        float elapsed = 0f;
+        const float maxWait = 2.0f;
+
+        while (elapsed < maxWait)
+        {
+            var playerDatas = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
+            if (playerDatas != null && playerDatas.Length > 0)
+            {
+                bool allReady = true;
+                foreach (var playerData in playerDatas)
+                {
+                    if (playerData == null || playerData.Object == null || playerData.GetComponent<PlayerController>() == null)
+                    {
+                        allReady = false;
+                        break;
+                    }
+                }
+
+                if (allReady)
+                {
+                    ApplyFinalSceneSpawn();
+                    yield break;
+                }
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        Debug.LogWarning("[FinalSceneSpawn] Hết thời gian chờ, vẫn chưa có PlayerNetworkData đầy đủ. Chạy ApplyFinalSceneSpawn() dù vậy.");
         ApplyFinalSceneSpawn();
     }
 
     public void ApplyFinalSceneSpawn()
     {
+        if (GameManager.Instance != null && !GameManager.Instance.HasStateAuthority)
+        {
+            Debug.Log("[FinalSceneSpawn] Chỉ host/state authority mới xử lý spawn final.");
+            return;
+        }
         var playerDatas = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None);
         if (playerDatas == null || playerDatas.Length == 0)
         {
@@ -35,52 +69,62 @@ public class spawn : MonoBehaviour
             return;
         }
 
-        bool hasStateAuthority = false;
-        foreach (var playerData in playerDatas)
-        {
-            if (playerData != null && playerData.Object != null && playerData.Object.HasStateAuthority)
-            {
-                hasStateAuthority = true;
-                break;
-            }
-        }
-
-        if (!hasStateAuthority)
-        {
-            Debug.Log("[FinalSceneSpawn] Không phải host/state authority, chờ host xử lý spawn.");
-            return;
-        }
-
         int winnerPlayerId = ResolveWinnerPlayerId();
+        Debug.Log($"[FinalSceneSpawn] WinnerPlayerId={winnerPlayerId}. Top1 point={(top1SpawnPoint != null ? top1SpawnPoint.position.ToString() : "NULL")}");
+
+        // 1) Collect PlayerController instances (only where NetworkObject exists)
+        var controllers = new System.Collections.Generic.List<PlayerController>();
+        var playerIds = new System.Collections.Generic.List<int>();
 
         for (int i = 0; i < playerDatas.Length; i++)
         {
-            var playerData = playerDatas[i];
-            if (playerData == null || playerData.Object == null)
-                continue;
+            var pd = playerDatas[i];
+            if (pd == null || pd.Object == null) continue;
+            var pc = pd.GetComponent<PlayerController>();
+            if (pc == null) continue;
+            controllers.Add(pc);
+            playerIds.Add(pd.Object.InputAuthority.PlayerId);
+        }
 
-            if (!playerData.Object.HasStateAuthority)
-                continue;
+        if (controllers.Count == 0)
+        {
+            Debug.LogWarning("[FinalSceneSpawn] Không có PlayerController nào để teleport.");
+            return;
+        }
 
-            int playerId = playerData.Object.InputAuthority.PlayerId;
-            var controller = playerData.GetComponent<PlayerController>();
-            if (controller == null)
-                continue;
+        // 2) Freeze all players on host/state authority to prevent client movement overwriting
+        foreach (var pc in controllers)
+        {
+            try { pc.SetFrozen(true); } catch { }
+        }
 
-            if (winnerPlayerId >= 0 && playerId == winnerPlayerId)
+        // 3) Teleport winner and others
+        for (int i = 0; i < controllers.Count; i++)
+        {
+            var pc = controllers[i];
+            int pid = playerIds[i];
+
+            if (winnerPlayerId >= 0 && pid == winnerPlayerId)
             {
-                TeleportToPoint(controller, top1SpawnPoint, "Top 1");
+                TeleportToPoint(pc, top1SpawnPoint, "Top 1");
             }
             else
             {
-                Vector3 sharedPos = GetSharedOtherSpawnPosition(playerId, playerDatas.Length);
+                Vector3 sharedPos = GetSharedOtherSpawnPosition(pid, controllers.Count);
                 Quaternion sharedRot = otherPlayersSpawnPoint != null ? otherPlayersSpawnPoint.rotation : Quaternion.identity;
-                controller.Teleport(sharedPos);
-                controller.transform.rotation = sharedRot;
-                controller.SetFrozen(false);
-                Debug.Log($"[FinalSceneSpawn] P{playerId} spawn ở điểm chung: {sharedPos}");
+                pc.Teleport(sharedPos);
+                pc.transform.rotation = sharedRot;
+                Debug.Log($"[FinalSceneSpawn] P{pid} teleport to shared: {sharedPos}");
             }
         }
+
+        // 4) Unfreeze players so they can receive input again
+        foreach (var pc in controllers)
+        {
+            try { pc.SetFrozen(false); } catch { }
+        }
+
+        Debug.Log("[FinalSceneSpawn] Teleport complete for all players.");
     }
 
     private int ResolveWinnerPlayerId()
