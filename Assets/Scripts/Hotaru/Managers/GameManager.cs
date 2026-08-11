@@ -13,7 +13,8 @@ public enum GameState
     Board,           // Phase bàn cờ sau mỗi minigame
     Roulette,        // Cò Quay Nga (cuối game)
     Result,
-    PickItem
+    PickItem,
+    Final
 }
 
 /// <summary>
@@ -56,6 +57,10 @@ public class GameManager : NetworkBehaviour
     private Coroutine _scoreboardCoroutine;
     private Coroutine _countdownCoroutine;
     private Coroutine _startVotingCoroutine;
+
+    [Header("Final Scene")]
+    [SerializeField] private string finalSceneName = "FinalScene";
+
     #endregion
 
     #region Minigame Data
@@ -107,11 +112,6 @@ public class GameManager : NetworkBehaviour
         if (!HasStateAuthority) return;
         FinalWinnerId = winnerId;
     }
-
-    /// <summary>
-    /// Xếp hạng minigame vừa kết thúc — PlayerId theo rank 1→4 (-1 = không có)
-    /// BoardManager đọc để xác định thứ tự tung xúc xắc.
-    /// </summary>
     [Networked] public int MgRank1 { get; private set; } = -1;
     [Networked] public int MgRank2 { get; private set; } = -1;
     [Networked] public int MgRank3 { get; private set; } = -1;
@@ -198,7 +198,12 @@ public class GameManager : NetworkBehaviour
     [Networked] public NetworkBool ItemPickTaken3 { get; private set; } = false;
 
     [Networked] public int ItemPickTurnPlayerId { get; private set; } = -1;
-    [Networked] public int ItemPickTurnOrderIndex { get; private set; } = -1; // 0=top1, 1=top2, 2=top3
+    [Networked] public int ItemPickTurnOrderIndex { get; private set; } = -1;
+
+    [Networked] public int FinalRank1PlayerId { get; private set; } = -1;
+    [Networked] public int FinalRank2PlayerId { get; private set; } = -1;
+    [Networked] public int FinalRank3PlayerId { get; private set; } = -1;
+    [Networked] public int FinalRank4PlayerId { get; private set; } = -1;
 
     public void SavePlayerCharacter(int playerId, int characterIndex)
     {
@@ -1103,16 +1108,14 @@ public class GameManager : NetworkBehaviour
         {
             case GameState.Lobby: HandleLobbyState(); break;
             case GameState.Voting: HandleVotingState(); break;
-            case GameState.Tutorial:
-                HandleTutorialState();
-                ShowMinigameTutorial();
-                break;
+            case GameState.Tutorial: HandleTutorialState(); ShowMinigameTutorial(); break;
             case GameState.Playing: HandlePlayingState(); break;
             case GameState.Scoreboard: HandleScoreboardState(); break;
             case GameState.Board: HandleBoardState(); break;
             case GameState.Roulette: HandleRouletteState(); break;
             case GameState.Result: HandleResultState(); break;
             case GameState.PickItem: HandlePickItemState(); break;
+            case GameState.Final: HandleFinalState(); break;
         }
     }
     #endregion
@@ -1328,11 +1331,8 @@ public class GameManager : NetworkBehaviour
     {
         if (!HasStateAuthority)
         {
-            Debug.LogWarning("[GameManager] Only Host can call EndMinigame()");
             return;
         }
-
-        Debug.Log($"[GameManager] Ending minigame... Winner: {winnerId}");
 
         if (RouletteManager.Instance != null)
         {
@@ -1618,11 +1618,6 @@ public class GameManager : NetworkBehaviour
 
         StartVoting(VotingType.MinigameOnly);
     }
-
-    /// <summary>
-    /// Lưu xếp hạng minigame — gọi bởi MinigameController trước EndMinigame().
-    /// rankedPlayerIds: PlayerId theo thứ tự rank 1 → rank N.
-    /// </summary>
     public void SetMinigameRanking(int[] rankedPlayerIds)
     {
         if (!HasStateAuthority) return;
@@ -1634,10 +1629,6 @@ public class GameManager : NetworkBehaviour
 
         Debug.Log($"[GameManager] Minigame ranking set: {string.Join(", ", rankedPlayerIds)}");
     }
-
-    /// <summary>
-    /// Trả về mảng PlayerId theo rank (bỏ qua slot -1).
-    /// </summary>
     public int[] GetLastMinigameRanking()
     {
         var list = new System.Collections.Generic.List<int>();
@@ -1647,10 +1638,6 @@ public class GameManager : NetworkBehaviour
         if (MgRank4 >= 0) list.Add(MgRank4);
         return list.ToArray();
     }
-
-    /// <summary>
-    /// Bắt đầu Roulette (Cò Quay Nga)
-    /// </summary>
     public void StartRoulette()
     {
         if (!HasStateAuthority)
@@ -1662,11 +1649,6 @@ public class GameManager : NetworkBehaviour
         Debug.Log("[GameManager] Starting Roulette...");
         ChangeState(GameState.Roulette);
     }
-
-    /// <summary>
-    /// Gọi bởi RouletteManager khi Roulette kết thúc
-    /// </summary>
-    /// <param name="winnerId">PlayerId của người thắng cuối cùng, -1 nếu không xác định</param>
     public void OnRouletteComplete(int winnerId)
     {
         if (!HasStateAuthority) return;
@@ -1689,6 +1671,38 @@ public class GameManager : NetworkBehaviour
             Debug.Log("[GameManager] Multiple players left. Starting voting for next minigame...");
             StartVoting(VotingType.MinigameOnly);
         }
+    }
+
+    public void SaveFinalRankings(int[] rankedIds)
+    {
+        if (!HasStateAuthority) return;
+
+        FinalRank1PlayerId = rankedIds.Length > 0 ? rankedIds[0] : -1;
+        FinalRank2PlayerId = rankedIds.Length > 1 ? rankedIds[1] : -1;
+        FinalRank3PlayerId = rankedIds.Length > 2 ? rankedIds[2] : -1;
+        FinalRank4PlayerId = rankedIds.Length > 3 ? rankedIds[3] : -1;
+
+        Debug.Log($"[GameManager] Final Rankings saved: {string.Join(",", rankedIds)}");
+    }
+
+    public void GoToFinal()
+    {
+        if (!HasStateAuthority) return;
+        ChangeState(GameState.Final);
+    }
+
+    private void HandleFinalState()
+    {
+        if (!HasStateAuthority) return;
+
+        int sceneIndex = GetSceneIndex(finalSceneName);
+        if (sceneIndex < 0)
+        {
+            return;
+        }
+        var sceneRef = SceneRef.FromIndex(sceneIndex);
+        if (sceneRef.IsValid)
+            Runner.LoadScene(sceneRef);
     }
 
 
