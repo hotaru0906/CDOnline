@@ -42,9 +42,9 @@ namespace RhythmGame
 
         [Header("HUD người chơi cục bộ")]
         [SerializeField] private Image feverFill;      // Filled, Horizontal, Left
-        [SerializeField] private TextMeshProUGUI comboText;
-        [SerializeField] private TextMeshProUGUI judgeText;
-        [SerializeField] private TextMeshProUGUI scoreText;
+        [SerializeField] private TMP_Text comboText;
+        [SerializeField] private TMP_Text judgeText;
+        [SerializeField] private TMP_Text scoreText;
         [SerializeField] private GameObject localFeverBurstVfx;
 
         [Header("Hàng 4 người ở đáy")]
@@ -89,6 +89,9 @@ namespace RhythmGame
         private float holdFeverPerSecond = 8f;
         [SerializeField, Tooltip("Được thả sớm hơn đích ngần này giây mà vẫn tính hoàn thành.")]
         private float releaseGraceSeconds = 0.12f;
+
+        [Header("Nền động (tuỳ chọn)")]
+        [SerializeField] private BackgroundPulse backgroundPulse;
 
         private static readonly KeyCode[] LeftKeys = { KeyCode.A, KeyCode.LeftArrow };
         private static readonly KeyCode[] RightKeys = { KeyCode.D, KeyCode.RightArrow };
@@ -625,6 +628,7 @@ namespace RhythmGame
                 localFeverBurstVfx.SetActive(false);
                 localFeverBurstVfx.SetActive(true);
             }
+            backgroundPulse?.FeverPunch();
             _localState?.RPC_ReportFeverFull();
         }
 
