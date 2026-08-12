@@ -3068,7 +3068,6 @@ GameObject:
   m_Component:
   - component: {fileID: 228322609}
   - component: {fileID: 228322611}
-  - component: {fileID: 228322610}
   m_Layer: 7
   m_Name: 'Wardrobe '
   m_TagString: Untagged
@@ -3092,26 +3091,6 @@ Transform:
   - {fileID: 4521547834328443553}
   m_Father: {fileID: 2094321017}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &228322610
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 228322608}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d56895c4dbcdb3b4781b55713ad20e4f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  interactionKey: 101
-  promptText: Interact
-  showKeyHint: 1
-  promptIcon: {fileID: 0}
-  interactionRange: 3
-  OnInteract:
-    m_PersistentCalls:
-      m_Calls: []
 --- !u!65 &228322611
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -12619,44 +12598,17 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 7
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: -3309056508310971335, guid: c533c10f37d12c941bf5dfea26e26cac, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 6967361487159559488, guid: c533c10f37d12c941bf5dfea26e26cac, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 520307588}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: c533c10f37d12c941bf5dfea26e26cac, type: 3}
 --- !u!4 &520307586 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3399158795423394286, guid: c533c10f37d12c941bf5dfea26e26cac, type: 3}
   m_PrefabInstance: {fileID: 520307585}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &520307587 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 6967361487159559488, guid: c533c10f37d12c941bf5dfea26e26cac, type: 3}
-  m_PrefabInstance: {fileID: 520307585}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &520307588
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 520307587}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d56895c4dbcdb3b4781b55713ad20e4f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  interactionKey: 101
-  promptText: Interact
-  showKeyHint: 1
-  promptIcon: {fileID: 0}
-  interactionRange: 3
-  OnInteract:
-    m_PersistentCalls:
-      m_Calls: []
 --- !u!1 &522243802
 GameObject:
   m_ObjectHideFlags: 0
@@ -31339,7 +31291,6 @@ GameObject:
   m_Component:
   - component: {fileID: 2138204649}
   - component: {fileID: 2138204651}
-  - component: {fileID: 2138204650}
   m_Layer: 7
   m_Name: Door
   m_TagString: Untagged
@@ -31363,26 +31314,6 @@ Transform:
   - {fileID: 167600084}
   m_Father: {fileID: 2094321017}
   m_LocalEulerAnglesHint: {x: 0, y: 90, z: 0}
---- !u!114 &2138204650
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2138204648}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d56895c4dbcdb3b4781b55713ad20e4f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  interactionKey: 101
-  promptText: Interact
-  showKeyHint: 1
-  promptIcon: {fileID: 0}
-  interactionRange: 3
-  OnInteract:
-    m_PersistentCalls:
-      m_Calls: []
 --- !u!65 &2138204651
 BoxCollider:
   m_ObjectHideFlags: 0

@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 
@@ -30,17 +31,17 @@ public class BoardHUDController : MonoBehaviour
 
     private void Start()
     {
-        if (BoardManager.Instance != null)
-        {
-            BoardManager.Instance.OnTurnStarted += OnTurnStarted;
-            Debug.Log("[BoardHUD] Subscribed to OnTurnStarted");
-        }
-        else
-        {
-            Debug.LogError("[BoardHUD] BoardManager.Instance is NULL in Start!");
-        }
-
+        StartCoroutine(WaitForBoardManagerAndSubscribe());
         playerRankPanel?.Refresh();
+    }
+
+    private IEnumerator WaitForBoardManagerAndSubscribe()
+    {
+        while (BoardManager.Instance == null)
+            yield return null;
+
+        BoardManager.Instance.OnTurnStarted += OnTurnStarted;
+        Debug.Log("[BoardHUD] Subscribed to OnTurnStarted");
     }
 
 

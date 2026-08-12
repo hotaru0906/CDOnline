@@ -77,12 +77,6 @@ public class LoadingScreen : MonoBehaviour
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             // Sort order cao nhất để che tất cả canvas khác
             canvas.sortingOrder = sortingOrder;
-            
-            Debug.Log($"[LoadingScreen] Canvas setup - RenderMode: {canvas.renderMode}, SortingOrder: {canvas.sortingOrder}");
-        }
-        else
-        {
-            Debug.LogWarning("[LoadingScreen] Canvas component not found!");
         }
     }
 
@@ -243,7 +237,6 @@ public class LoadingScreen : MonoBehaviour
         // Auto progress đến 50-60% trong khi chờ
         StartCoroutine(AutoProgressCoroutine());
 
-        Debug.Log($"[LoadingScreen] Show: {message}");
     }
 
     private IEnumerator AutoProgressCoroutine()
@@ -303,8 +296,6 @@ public class LoadingScreen : MonoBehaviour
         {
             canvasGroup.blocksRaycasts = false;
         }
-
-        Debug.Log("[LoadingScreen] Hide");
     }
 
     private static void EnsureInstance()
@@ -316,7 +307,6 @@ public class LoadingScreen : MonoBehaviour
             if (prefab != null)
             {
                 _instance = Instantiate(prefab);
-                Debug.Log("[LoadingScreen] Instantiated from Resources");
             }
             else
             {

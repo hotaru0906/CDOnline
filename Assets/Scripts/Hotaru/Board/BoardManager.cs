@@ -1370,7 +1370,8 @@ public class BoardManager : NetworkBehaviour
 
         gambleWheelUI.ShowWheel(resultIndex, rewardIndex =>
         {
-            ApplyGambleResult(playerId, rewardIndex);
+            if (HasStateAuthority)
+                ApplyGambleResult(playerId, rewardIndex);
         });
     }
 
