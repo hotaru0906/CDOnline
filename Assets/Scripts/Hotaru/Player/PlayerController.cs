@@ -183,16 +183,6 @@ public class PlayerController : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        if (_minigameData != null && _minigameData.IsEliminated)
-        {
-            // Dừng mọi chuyển động còn sót lại
-            ResetVelocity();
-
-            // Hủy trạng thái đánh nếu đang đánh
-            ForceIdle();
-
-            return;
-        }
 
         if (AttackTimer > 0)
         {
@@ -364,6 +354,11 @@ public class PlayerController : NetworkBehaviour
             return;
 
         RPC_RequestAttackHit();
+    }
+
+    public void TriggerAttackHit()
+    {
+        AttackHitEvent();
     }
 
     /// <summary>
