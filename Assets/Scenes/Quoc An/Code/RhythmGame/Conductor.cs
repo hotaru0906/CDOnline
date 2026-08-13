@@ -86,6 +86,31 @@ namespace RhythmGame
             IsPlaying = true;
         }
 
+        /// <summary>
+        /// Bắt đầu nhạc khi ĐÃ TRỄ: client nhận state muộn, đáng lẽ bài đã chạy được
+        /// alreadyElapsed giây. Phát ngay lập tức từ đúng vị trí đó, và đặt mốc gốc
+        /// lùi về quá khứ để RawSongPosition khớp timeline note.
+        /// Nhờ vậy client trễ vẫn đồng bộ với nhạc, không lệch cố định.
+        /// </summary>
+        public void StartSongAlreadyElapsed(double alreadyElapsed)
+        {
+            double now = UnityEngine.AudioSettings.dspTime;
+            alreadyElapsed = System.Math.Max(0.0, alreadyElapsed);
+
+            // Mốc gốc lùi về quá khứ: bây giờ RawSongPosition ~ alreadyElapsed.
+            dspSongStart = now - alreadyElapsed;
+            lastDsp = now;
+            smoothedDsp = now;
+
+            // Phát ngay, nhảy tới đúng vị trí trong clip.
+            if (source.clip != null)
+                source.time = Mathf.Clamp((float)alreadyElapsed, 0f, source.clip.length - 0.01f);
+            source.Play();
+            IsPlaying = true;
+
+            Debug.Log($"[Conductor] Bắt đầu bù trễ: đã trôi {alreadyElapsed:F3}s.");
+        }
+
         public void StopSong()
         {
             if (source != null) source.Stop();

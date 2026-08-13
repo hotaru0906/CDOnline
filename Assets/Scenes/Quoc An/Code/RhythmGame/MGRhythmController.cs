@@ -34,7 +34,7 @@ public class MGRhythmController : BaseMinigameController
 
     [Header("Song Sync")]
     [SerializeField, Tooltip("Host đặt lịch bắt đầu nhạc sau ngần này giây, đủ để mọi client nhận được state.")]
-    private float songStartDelay = 2.5f;
+    private float songStartDelay = 3.5f;
 
     [SerializeField, Tooltip("Chơi tiếp bao nhiêu giây sau khi hết nhạc rồi mới kết thúc.")]
     private float songTailSeconds = 2f;
@@ -141,31 +141,35 @@ public class MGRhythmController : BaseMinigameController
     {
         base.Render();
 
-        if (_songScheduled || SongStartTick <= 0) return;
-        if (IsGameEnded) return;
+        // Đặt lịch nhạc trong Render vì Render chạy TIN CẬY trên mọi máy, kể cả
+        // client (proxy). FixedUpdateNetwork chạy không đáng tin trên proxy nên
+        // client sẽ không có nhạc/note.
+        if (_songScheduled || SongStartTick <= 0 || IsGameEnded) return;
 
         _songScheduled = true;
-        ScheduleLocalSong();
-    }
 
-    private void ScheduleLocalSong()
-    {
-        // Quy đổi tick của Fusion sang giây, rồi cộng vào dspTime CỤC BỘ.
-        double secondsUntilStart = (SongStartTick - (int)Runner.Tick) * (double)Runner.DeltaTime;
+        int ticksLeft = SongStartTick - (int)Runner.Tick;
+        double secondsUntilStart = ticksLeft * (double)Runner.DeltaTime;
 
-        if (secondsUntilStart < 0.1)
+        if (secondsUntilStart >= 0.08)
         {
-            // Client vào trễ hoặc lag nặng. Vẫn chơi được, chỉ là bắt đầu muộn hơn
-            // vài chục ms so với người khác — không ảnh hưởng công bằng vì
-            // chấm điểm là cục bộ và note của họ vẫn khớp nhạc của họ.
-            Debug.LogWarning($"[MGRhythm] Nhận start tick trễ ({secondsUntilStart:F3}s), bắt đầu bù.");
-            secondsUntilStart = 0.1;
+            // Còn thời gian: đặt lịch phát đúng lúc như bình thường.
+            conductor.StartSongAtDsp(UnityEngine.AudioSettings.dspTime + secondsUntilStart);
+        }
+        else
+        {
+            // Nhận state TRỄ: đáng lẽ nhạc đã chạy được (-secondsUntilStart) giây.
+            // Bù bằng cách phát ngay từ đúng vị trí đó -> không lệch cố định.
+            conductor.StartSongAlreadyElapsed(-secondsUntilStart);
         }
 
-        conductor.StartSongAtDsp(UnityEngine.AudioSettings.dspTime + secondsUntilStart);
         playfield.BeginPlay();
+        Debug.Log($"[MGRhythm] Nhạc bắt đầu (còn {secondsUntilStart:F3}s) — lane của tôi: {GetLocalLane()}");
+    }
 
-        Debug.Log($"[MGRhythm] Nhạc bắt đầu sau {secondsUntilStart:F3}s — lane của tôi: {GetLocalLane()}");
+    public override void FixedUpdateNetwork()
+    {
+        base.FixedUpdateNetwork();
     }
 
     // ----------------------------------------------------------------
