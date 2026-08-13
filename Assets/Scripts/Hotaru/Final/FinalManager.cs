@@ -31,8 +31,13 @@ public class FinalManager : NetworkBehaviour
     [SerializeField] private Transform behindP2P3Position;
 
     [Header("Cutscenes")]
-    [SerializeField] private PlayableDirector cutscene1Director;
-    [SerializeField] private PlayableDirector cutscene2Director;
+    // GameObject cha chua PlayableDirector - bat Play On Awake tren Director, o day chi
+    // SetActive(true) de kich hoat Play (thay vi goi Director.Play() truc tiep).
+    // Object nay phai duoc de INACTIVE san trong scene tu dau.
+    [SerializeField] private GameObject cutscene1Root;
+    [SerializeField] private PlayableDirector cutscene1Director; // dung de doc duration
+    [SerializeField] private GameObject cutscene2Root;
+    [SerializeField] private PlayableDirector cutscene2Director; // dung de doc duration
 
     [Header("Cameras")]
     [SerializeField] private Camera cutsceneCamera;      // camera riêng cho Timeline, tắt sau khi cutscene xong
@@ -57,7 +62,6 @@ public class FinalManager : NetworkBehaviour
     #endregion
 
     #region Local State (host-only bookkeeping)
-    private HashSet<int> _readyPlayerIds = new HashSet<int>();
     private int _expectedPlayerCount = 0;
     private bool _advanceStarted = false;
 
@@ -91,8 +95,10 @@ public class FinalManager : NetworkBehaviour
         if (cutsceneCamera != null) cutsceneCamera.gameObject.SetActive(false);
         if (playableSharedCamera != null) playableSharedCamera.gameObject.SetActive(false);
 
-        // Mỗi client (kể cả host) tự báo ready sau khi Spawned hoàn tất.
-        NotifyClientReadyForFinal();
+        // Cutscene root phai tat san trong scene (Play On Awake se tu chay khi active len).
+        // O day chi de phong hoa neu quen tat trong Editor.
+        if (cutscene1Root != null) cutscene1Root.SetActive(false);
+        if (cutscene2Root != null) cutscene2Root.SetActive(false);
 
         if (HasStateAuthority)
         {
@@ -111,11 +117,6 @@ public class FinalManager : NetworkBehaviour
         int count = 0;
         foreach (var p in Runner.ActivePlayers) count++;
         return count;
-    }
-
-    private int CountSpawnedPlayerControllers()
-    {
-        return FindObjectsByType<PlayerController>(FindObjectsSortMode.None).Length;
     }
     #endregion
 
@@ -141,57 +142,17 @@ public class FinalManager : NetworkBehaviour
     #endregion
 
     #region Phase A - Waiting Players
-    private void NotifyClientReadyForFinal()
-    {
-        int myId = Runner != null ? Runner.LocalPlayer.PlayerId : -1;
-        if (myId < 0) return;
-
-        RPC_ClientReadyForFinal(myId);
-    }
-
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_ClientReadyForFinal(int playerId)
-    {
-        if (!HasStateAuthority) return;
-
-        if (_readyPlayerIds.Add(playerId))
-        {
-            Debug.Log($"[FinalManager] Client ready: {_readyPlayerIds.Count}/{_expectedPlayerCount} (P{playerId})");
-        }
-    }
-
+    // Gia lap doi player ket noi: doi han 8 giay roi bat dau, khong check ready/spawn nua
+    // (logic check ready RPC + PlayerController count truoc day chua on dinh - se quay lai sau).
     private IEnumerator WaitForAllClientsReadyThenAdvance()
     {
         if (_advanceStarted) yield break;
         _advanceStarted = true;
 
-        float elapsed = 0f;
+        Debug.Log($"[FinalManager] Gia lap doi player ket noi trong {clientReadyTimeout}s...");
+        yield return new WaitForSeconds(clientReadyTimeout);
 
-        // Dieu kien du de qua Phase B: (1) tat ca client da bao ready qua RPC,
-        // VA (2) PlayerController cua tung nguoi da thuc su spawn trong Final Scene.
-        // Chi dua vao (1) la khong du: FinalManager (dat san trong scene) spawn
-        // rat som, truoc khi player prefab duoc respawn/teleport vao scene moi xong.
-        while (elapsed < clientReadyTimeout)
-        {
-            bool allRpcReady = _readyPlayerIds.Count >= _expectedPlayerCount;
-            bool allPlayersSpawned = CountSpawnedPlayerControllers() >= _expectedPlayerCount;
-
-            if (allRpcReady && allPlayersSpawned)
-                break;
-
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        int spawnedCount = CountSpawnedPlayerControllers();
-        if (_readyPlayerIds.Count < _expectedPlayerCount || spawnedCount < _expectedPlayerCount)
-        {
-            Debug.LogWarning($"[FinalManager] Timeout {clientReadyTimeout}s - RPC ready {_readyPlayerIds.Count}/{_expectedPlayerCount}, PlayerController spawned {spawnedCount}/{_expectedPlayerCount}. Van tiep tuc.");
-        }
-        else
-        {
-            Debug.Log("[FinalManager] Tat ca client + player object da san sang.");
-        }
+        Debug.Log("[FinalManager] Het thoi gian cho - bat dau Phase B.");
 
         AdvanceToPhase(FinalPhaseState.PreCutscene1Teleport);
     }
@@ -222,7 +183,7 @@ public class FinalManager : NetworkBehaviour
                 if (HasStateAuthority) OnEnterBattlePhase();
                 break;
             case FinalPhaseState.PostBattleTeleport:
-                if (HasStateAuthority) OnEnterPostBattleTeleportStub();
+                if (HasStateAuthority) TeleportPostBattle();
                 break;
             case FinalPhaseState.Cutscene2:
                 // TODO: Phase F
@@ -394,10 +355,10 @@ public class FinalManager : NetworkBehaviour
         foreach (var p in players)
             p.SetFrozen(true);
 
-        if (cutscene1Director != null)
-            cutscene1Director.Play();
+        if (cutscene1Root != null)
+            cutscene1Root.SetActive(true); // Play On Awake tren Director se tu Play khi object active len
         else
-            Debug.LogError("[FinalManager] cutscene1Director chua duoc gan trong Inspector!");
+            Debug.LogError("[FinalManager] cutscene1Root chua duoc gan trong Inspector!");
     }
 
     private IEnumerator WaitCutscene1ThenBranch()
@@ -593,20 +554,125 @@ public class FinalManager : NetworkBehaviour
     }
     #endregion
 
-    #region Phase Complete (tam thoi - se hoan thien o buoc luu ket qua / Phase F)
+    #region Phase F - Teleport theo rank + Cutscene 2
+    // Ca 2 case 3 nguoi va 4 nguoi deu chay cutscene 2 sau khi teleport xong.
+    // Chi case 2 nguoi la khong vao day (da Complete ngay sau cutscene 1).
+    private void TeleportPostBattle()
+    {
+        int totalPlayers = CountActivePlayers();
+
+        var playerIds = new List<int>();
+        var positions = new List<Vector3>();
+        var rotations = new List<Quaternion>();
+
+        // rank2 (index 1) luon dung canh top1.
+        if (_finalRanking.Count >= 2)
+        {
+            if (besideThroneP2Position != null)
+                ApplyTeleportToController(_finalRanking[1], besideThroneP2Position.position, besideThroneP2Position.rotation, playerIds, positions, rotations);
+            else
+                Debug.LogError("[FinalManager] besideThroneP2Position chua duoc gan trong Inspector!");
+        }
+
+        if (totalPlayers == 4)
+        {
+            // rank3 -> behind P2/P3, rank4 -> cage.
+            if (_finalRanking.Count >= 3)
+            {
+                if (behindP2P3Position != null)
+                    ApplyTeleportToController(_finalRanking[2], behindP2P3Position.position, behindP2P3Position.rotation, playerIds, positions, rotations);
+                else
+                    Debug.LogError("[FinalManager] behindP2P3Position chua duoc gan trong Inspector!");
+            }
+
+            if (_finalRanking.Count >= 4)
+            {
+                if (cageTransform != null)
+                    ApplyTeleportToController(_finalRanking[3], cageTransform.position, cageTransform.rotation, playerIds, positions, rotations);
+                else
+                    Debug.LogError("[FinalManager] cageTransform chua duoc gan trong Inspector!");
+            }
+        }
+        else // totalPlayers == 3
+        {
+            // rank3 -> vao cage.
+            if (_finalRanking.Count >= 3)
+            {
+                if (cageTransform != null)
+                    ApplyTeleportToController(_finalRanking[2], cageTransform.position, cageTransform.rotation, playerIds, positions, rotations);
+                else
+                    Debug.LogError("[FinalManager] cageTransform chua duoc gan trong Inspector!");
+            }
+        }
+
+        RPC_SyncFinalTeleport(playerIds.ToArray(), positions.ToArray(), rotations.ToArray());
+
+        Debug.Log($"[FinalManager] Phase F teleport hoan tat theo ranking: [{string.Join(", ", _finalRanking)}]. Chuan bi Play cutscene 2.");
+
+        StartCoroutine(PlayCutscene2ThenComplete());
+    }
+
+    // Host tim PlayerController theo playerId, teleport ngay tren host va gom vao list de sync sau.
+    private void ApplyTeleportToController(int playerId, Vector3 position, Quaternion rotation,
+        List<int> outIds, List<Vector3> outPositions, List<Quaternion> outRotations)
+    {
+        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        foreach (var p in players)
+        {
+            if (p.Object.InputAuthority.PlayerId != playerId) continue;
+
+            ApplyTeleport(p, position, rotation);
+            outIds.Add(playerId);
+            outPositions.Add(position);
+            outRotations.Add(rotation);
+            return;
+        }
+
+        Debug.LogWarning($"[FinalManager] Khong tim thay PlayerController cho playerId={playerId} khi teleport Phase F.");
+    }
+
+    private IEnumerator PlayCutscene2ThenComplete()
+    {
+        RPC_PlayCutscene2();
+
+        float duration = (cutscene2Director != null) ? (float)cutscene2Director.duration : 0f;
+        if (duration > 0f)
+            yield return new WaitForSeconds(duration);
+
+        RPC_OnCutscene2Finished();
+
+        AdvanceToPhase(FinalPhaseState.Complete);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_PlayCutscene2()
+    {
+        if (cutsceneCamera != null) cutsceneCamera.gameObject.SetActive(true);
+        if (playableSharedCamera != null) playableSharedCamera.gameObject.SetActive(false);
+
+        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        foreach (var p in players)
+            p.SetFrozen(true);
+
+        if (cutscene2Root != null)
+            cutscene2Root.SetActive(true);
+        else
+            Debug.LogError("[FinalManager] cutscene2Root chua duoc gan trong Inspector!");
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_OnCutscene2Finished()
+    {
+        if (cutsceneCamera != null) cutsceneCamera.gameObject.SetActive(false);
+        if (playableSharedCamera != null) playableSharedCamera.gameObject.SetActive(true);
+    }
+    #endregion
+
+    #region Phase Complete (tam thoi - se hoan thien o buoc luu ket qua)
     private void OnEnterCompletePhase()
     {
         // TODO (buoc sau): luu FinalRank qua GameManager.SaveFinalRankings() roi chuyen GameState.Result.
         Debug.Log("[FinalManager] Phase Complete - se hoan thien logic luu ket qua + chuyen Result o buoc sau.");
-    }
-    #endregion
-
-    #region Phase F stub (chua code - se lam o buoc sau)
-    private void OnEnterPostBattleTeleportStub()
-    {
-        // TODO (buoc sau - Phase F): teleport top2/top3/top4 theo _finalRanking, play cutscene2 (case 4 nguoi),
-        // roi chuyen sang Complete.
-        Debug.Log($"[FinalManager] PostBattleTeleport (stub) - ranking san sang: [{string.Join(", ", _finalRanking)}]. Se code teleport + cutscene2 o buoc sau.");
     }
     #endregion
 }
