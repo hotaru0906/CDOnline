@@ -18,6 +18,16 @@ public class PlayerNetworkData : NetworkBehaviour
     [Networked, OnChangedRender(nameof(OnScoreChanged))]
     public int Score { get; set; }
 
+    // ===== Battle (Phase D/E - Final Battle Core) =====
+    // Không dùng OnChangedRender ở đây — detect thay đổi + trigger ragdoll/frozen
+    // được xử lý trong Render() (so sánh với _lastBattleEliminatedState), đúng pattern
+    // PlayerMinigameData đang dùng cho IsDead/IsEliminated.
+    [Networked] public float BattleHP { get; private set; }
+    [Networked] public NetworkBool IsBattleEliminated { get; private set; }
+
+    private PlayerController _playerController;
+    private bool _lastBattleEliminatedState;
+
     public override void Spawned()
     {
         // xác định player local
@@ -53,6 +63,28 @@ public class PlayerNetworkData : NetworkBehaviour
 
         // Cập nhật tên hiển thị
         UpdateNameDisplay();
+
+        _playerController = GetComponent<PlayerController>();
+        _lastBattleEliminatedState = IsBattleEliminated;
+    }
+
+    public override void Render()
+    {
+        if (_lastBattleEliminatedState != IsBattleEliminated)
+        {
+            _lastBattleEliminatedState = IsBattleEliminated;
+
+            if (IsBattleEliminated)
+            {
+                _playerController?.ActivateRagdoll();
+                _playerController?.SetFrozen(true, false); // false = khong hien freezeVFX, dung ragdoll lam feedback
+            }
+            else
+            {
+                _playerController?.DeactivateRagdoll();
+                _playerController?.SetFrozen(false);
+            }
+        }
     }
 
     /// <summary>
@@ -69,10 +101,8 @@ public class PlayerNetworkData : NetworkBehaviour
 
     private void OnPlayerNameChanged()
     {
-        // Called when name changes on any client
         Debug.Log($"[PlayerNetworkData] Name changed to: {PlayerName}");
 
-        // Cập nhật UI hiển thị tên player
         UpdateNameDisplay();
         if (BoardHUDController.Instance != null)
         {
@@ -80,9 +110,6 @@ public class PlayerNetworkData : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Cập nhật tên hiển thị trên World Space Canvas
-    /// </summary>
     public void UpdateNameDisplay()
     {
         var nameDisplay = GetComponentInChildren<PlayerNameDisplay>();
@@ -107,38 +134,61 @@ public class PlayerNetworkData : NetworkBehaviour
     {
         Debug.Log($"[PlayerNetworkData] {PlayerName} score changed to: {Score}");
 
-        // Notify ScoreboardManager to refresh
         if (ScoreboardManager.Instance != null)
         {
             ScoreboardManager.Instance.RefreshFromPlayers();
         }
     }
 
-    /// <summary>
-    /// Thêm điểm cho player (Host only)
-    /// </summary>
     public void AddScore(int amount)
     {
         if (!HasStateAuthority) return;
         Score += amount;
     }
 
-    /// <summary>
-    /// Set điểm cho player (Host only)
-    /// </summary>
     public void SetScore(int value)
     {
         if (!HasStateAuthority) return;
         Score = value;
     }
 
-    /// <summary>
-    /// Reset điểm về 0 (Host only)
-    /// </summary>
     public void ResetScore()
     {
         if (!HasStateAuthority) return;
         Score = 0;
+    }
+
+    // ===== Battle API (Host only) =====
+
+    /// <summary>
+    /// Set BattleHP tối đa khi bắt đầu battle (Host only).
+    /// </summary>
+    public void ResetBattleHP(float maxHP)
+    {
+        if (!HasStateAuthority) return;
+        BattleHP = maxHP;
+        IsBattleEliminated = false;
+    }
+
+    /// <summary>
+    /// Trừ/set BattleHP (Host only). Không tự trigger elimination —
+    /// PlayerBattleController là nơi quyết định khi nào BattleHP <= 0 thì gọi SetBattleEliminated.
+    /// </summary>
+    public void SetBattleHP(float value)
+    {
+        if (!HasStateAuthority) return;
+        BattleHP = Mathf.Max(0f, value);
+    }
+
+    /// <summary>
+    /// Đánh dấu đã bị loại trong battle (Host only). Cờ riêng, không liên quan
+    /// PlayerMinigameData.IsEliminated. Ragdoll/frozen được trigger ở Render()
+    /// trên MỌI client khi cờ này đổi, giống pattern PlayerMinigameData.
+    /// </summary>
+    public void SetBattleEliminated(bool eliminated)
+    {
+        if (!HasStateAuthority) return;
+        IsBattleEliminated = eliminated;
     }
 
     public void ToggleReady()

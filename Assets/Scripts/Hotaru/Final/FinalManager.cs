@@ -416,11 +416,16 @@ public class FinalManager : NetworkBehaviour
         {
             int pid = p.Object.InputAuthority.PlayerId;
             bool isBattler = System.Array.IndexOf(battlerIds, pid) >= 0;
-            // Battler duoc mo input; winner (dang o thronePosition) giu nguyen frozen.
             p.SetFrozen(!isBattler);
+
+            // Chi Host moi duoc phep set Networked property cua PlayerBattleController.
+            if (HasStateAuthority && isBattler)
+            {
+                var battleController = p.GetComponent<PlayerBattleController>();
+                battleController?.ActivateForBattle();
+            }
         }
 
-        // Cutscene xong, battle bat dau -> hien UI rieng cua Final Scene (neu co, vd HUD battle).
         ShowFinalSceneUI();
     }
     #endregion
@@ -559,6 +564,16 @@ public class FinalManager : NetworkBehaviour
     // Chi case 2 nguoi la khong vao day (da Complete ngay sau cutscene 1).
     private void TeleportPostBattle()
     {
+        var allPlayers = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        foreach (var p in allPlayers)
+        {
+            var battleController = p.GetComponent<PlayerBattleController>();
+            if (battleController != null)
+            {
+                battleController.ResetAfterBattle();
+            }
+        }
+
         int totalPlayers = CountActivePlayers();
 
         var playerIds = new List<int>();
@@ -668,11 +683,48 @@ public class FinalManager : NetworkBehaviour
     }
     #endregion
 
-    #region Phase Complete (tam thoi - se hoan thien o buoc luu ket qua)
+    #region Phase Complete
     private void OnEnterCompletePhase()
     {
-        // TODO (buoc sau): luu FinalRank qua GameManager.SaveFinalRankings() roi chuyen GameState.Result.
-        Debug.Log("[FinalManager] Phase Complete - se hoan thien logic luu ket qua + chuyen Result o buoc sau.");
+        if (!HasStateAuthority) return;
+
+        int totalPlayers = CountActivePlayers();
+        int winnerId = GameManager.Instance != null ? GameManager.Instance.FinalWinnerId : -1;
+
+        // Case 2 nguoi: _finalRanking chua duoc FinalizeBattleRanking() dien (khong qua battle).
+        // Tu dung o day: rank1 = winner, rank2 = nguoi con lai.
+        if (totalPlayers == 2 && _finalRanking.Count == 0)
+        {
+            var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+            foreach (var p in players)
+            {
+                int pid = p.Object.InputAuthority.PlayerId;
+                if (pid != winnerId)
+                {
+                    _finalRanking.Add(winnerId);
+                    _finalRanking.Add(pid);
+                    break;
+                }
+            }
+        }
+
+        if (_finalRanking.Count == 0)
+        {
+            Debug.LogError("[FinalManager] OnEnterCompletePhase: _finalRanking rong - khong the luu ket qua.");
+            return;
+        }
+
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.SaveFinalRankings(_finalRanking.ToArray());
+            Debug.Log($"[FinalManager] Da luu final rankings: [{string.Join(", ", _finalRanking)}]");
+        }
+        else
+        {
+            Debug.LogError("[FinalManager] GameManager.Instance null - khong the SaveFinalRankings.");
+        }
+
+        // TODO (buoc sau, ngoai pham vi "nen"): chuyen GameState.Result.
     }
     #endregion
 }
