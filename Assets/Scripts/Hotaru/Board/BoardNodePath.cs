@@ -141,9 +141,9 @@ public class BoardNodePath : MonoBehaviour
     /// </summary>
     public BoardNode GetNodeAfterSteps(BoardNode current, int steps, out int[] visitedNodeIDs)
     {
-        var path     = new List<int>();
+        var path = new List<int>();
         var traveled = new List<BoardNode>() { current }; // lịch sử đường đi để bounce back
-        int tIdx     = 0;   // index trong traveled hiện tại
+        int tIdx = 0;   // index trong traveled hiện tại
         bool bouncing = false;
 
         for (int i = 0; i < steps; i++)
@@ -242,12 +242,6 @@ public class BoardNodePath : MonoBehaviour
 
         return nodes[nextIdx];
     }
-
-    /// <summary>
-    /// Tính đường đi LÙI 'steps' bước từ currentNode, dựa theo thứ tự trong nodes list.
-    /// Dùng cho PushBack Board item — di chuyển target về phía sau.
-    /// Nếu currentNode không có trong list (ví dụ dead-end branch), trả về currentNode.
-    /// </summary>
     public BoardNode GetNodeBeforeSteps(BoardNode current, int steps, out int[] visitedNodeIDs)
     {
         var path = new List<int>();
@@ -261,11 +255,16 @@ public class BoardNodePath : MonoBehaviour
 
         for (int i = 0; i < steps; i++)
         {
-            int prevIdx = GetNextValidIndex(idx, -1);
-            if (prevIdx < 0 || prevIdx == idx)
-                break;
+            if (idx <= 0) break; // đã ở node đầu tiên — dừng cứng, không wrap qua cuối danh sách
 
-            idx = prevIdx;
+            idx--;
+
+            if (nodes[idx] == null)
+            {
+                idx++; // node bị null giữa chừng (hiếm) — không lùi tiếp để tránh lỗi
+                break;
+            }
+
             path.Add(nodes[idx].nodeID);
         }
 

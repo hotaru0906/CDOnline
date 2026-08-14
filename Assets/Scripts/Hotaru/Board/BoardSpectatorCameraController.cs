@@ -237,7 +237,7 @@ public class BoardSpectatorCameraController : MonoBehaviour
 
     private void UpdateTargetFromBoard(int? playerId = null)
     {
-        if (_boardManager != null)
+        if (_boardManager != null && _boardManager.Object != null && _boardManager.Object.IsValid)
         {
             int targetPlayerId = playerId ?? _boardManager.CurrentPlayerID;
             _currentTarget = FindTokenByPlayerId(targetPlayerId)?.transform;

@@ -30,7 +30,7 @@ public class BoardInventoryUI : MonoBehaviour
             BoardManager.Instance.OnTurnStarted -= OnTurnStarted;
         if (Instance == this) Instance = null;
     }
-    
+
     public RectTransform GetLocalHandTransform()
     {
         int localId = GetLocalPlayerId();
@@ -102,19 +102,13 @@ public class BoardInventoryUI : MonoBehaviour
             _initialized = true;
         }
 
-        // Reset item used flag cho tất cả hands
-        foreach (var h in hands)
-            h?.ResetItemUsed();
-
-        // Refresh tất cả hands từ inventory
-        foreach (var h in hands)
-            h?.RefreshHand();
-
-        // Expand/collapse
         for (int i = 0; i < hands.Length; i++)
         {
-            if (hands[i] == null)
-                continue;
+            if (hands[i] == null) continue;
+            if (bm.GetPlayerIDAtSlot(i) < 0) continue; // slot rỗng — hand đang inactive, bỏ qua
+
+            hands[i].ResetItemUsed();
+            hands[i].RefreshHand();
 
             bool isMyTurn =
                 hands[i].IsLocalPlayer &&

@@ -84,16 +84,14 @@ public class MinigameTieBreakerUI : MonoBehaviour
         subscribed = false;
     }
 
-    private void HandleTieBreakStarted(int[] candidateIndices, int winnerIndex, float duration)
+    private void HandleTieBreakStarted(int[] candidateIndices, int winnerIndex, float delayBeforeSpin, float spinDurationFromHost)
     {
         PopulateCandidates(candidateIndices);
 
         if (spinCoroutine != null)
-        {
             StopCoroutine(spinCoroutine);
-        }
 
-        spinCoroutine = StartCoroutine(RunSpin(candidateIndices, winnerIndex, duration));
+        spinCoroutine = StartCoroutine(RunSpin(candidateIndices, winnerIndex, delayBeforeSpin, spinDurationFromHost));
     }
 
     private void HandleTieBreakEnded(int winnerIndex)
@@ -157,20 +155,22 @@ public class MinigameTieBreakerUI : MonoBehaviour
         return result;
     }
 
-    private IEnumerator RunSpin(int[] candidateIndices, int winnerIndex, float delayBeforeSpin)
+    private IEnumerator RunSpin(int[] wheelOrderRaw, int winnerIndex, float delayBeforeSpin, float spinDurationFromHost)
     {
-        if (candidateIndices == null || candidateIndices.Length == 0)
+        if (wheelOrderRaw == null || wheelOrderRaw.Length == 0)
         {
             spinCoroutine = null;
             yield break;
         }
 
         if (delayBeforeSpin > 0f)
-        {
             yield return new WaitForSeconds(delayBeforeSpin);
-        }
 
-        int[] wheelOrder = BuildWheelOrder(candidateIndices);
+        // Dùng duration từ host để mọi client đồng bộ chính xác cùng 1 thời lượng - tránh lệch
+        // với thời gian host đợi trước khi ẩn panel (nguyên nhân gây "đứng hình" ở client).
+        float effectiveSpinDuration = spinDurationFromHost > 0f ? spinDurationFromHost : spinDuration;
+
+        int[] wheelOrder = BuildWheelOrder(wheelOrderRaw);
         int winnerSlot = GetWinnerSlot(wheelOrder, winnerIndex);
         if (winnerSlot < 0)
         {
@@ -178,8 +178,6 @@ public class MinigameTieBreakerUI : MonoBehaviour
             Debug.LogWarning($"[MinigameTieBreakerUI] Winner index {winnerIndex} not found in wheel order; falling back to slot 0.");
         }
 
-        int resolvedWinnerIndex = wheelOrder[winnerSlot];
-        float extraSpin = 1080f + Random.Range(0f, 360f);
         float startAngle = wheelRoot != null ? wheelRoot.localEulerAngles.z : 0f;
 
         float arrowAngle = 90f;
@@ -187,70 +185,45 @@ public class MinigameTieBreakerUI : MonoBehaviour
         {
             Vector3 arrowVector = arrowRoot.position - wheelRoot.position;
             arrowAngle = Mathf.Atan2(arrowVector.y, arrowVector.x) * Mathf.Rad2Deg;
-            Debug.Log($"[MinigameTieBreakerUI] arrowVector={arrowVector} arrowAngle={arrowAngle:F2} offset={wheelArrowOffsetAngle}");
         }
 
-        float targetDelta = Mathf.DeltaAngle(0f, arrowAngle + wheelArrowOffsetAngle);
-        float targetRotation = startAngle + extraSpin + targetDelta;
+        // QUAN TRỌNG: đo góc HIỆN TẠI (trước khi xoay) của đúng icon sẽ thắng, để biết cần xoay
+        // bao nhiêu độ mới đưa icon đó về đúng vị trí mũi tên. Thiếu bước này là lý do bánh xe
+        // trước đây luôn dừng ở một góc gần-như-ngẫu-nhiên, không liên quan tới winnerIndex.
+        float winnerCurrentAngle = arrowAngle;
+        if (candidateIcons != null && winnerSlot < candidateIcons.Length && candidateIcons[winnerSlot] != null && wheelRoot != null)
+        {
+            Vector3 iconWorldPos = candidateIcons[winnerSlot].rectTransform.position;
+            Vector2 vec = new Vector2(iconWorldPos.x - wheelRoot.position.x, iconWorldPos.y - wheelRoot.position.y);
+            winnerCurrentAngle = Mathf.Atan2(vec.y, vec.x) * Mathf.Rad2Deg;
+        }
 
-        Debug.Log($"[MinigameTieBreakerUI] startAngle={startAngle:F2} winnerSlot={winnerSlot} resolvedWinner={resolvedWinnerIndex} arrowAngle={arrowAngle:F2} targetDelta={targetDelta:F2} targetRotation={targetRotation:F2}");
+        float neededDelta = Mathf.DeltaAngle(winnerCurrentAngle, arrowAngle + wheelArrowOffsetAngle);
+
+        // Số vòng quay thêm chỉ để đẹp mắt - LUÔN là bội số 360 nên không ảnh hưởng ô dừng lại,
+        // mỗi client random số vòng khác nhau cũng không sao vì đích đến cuối cùng vẫn giống nhau.
+        int extraFullTurns = 3 + Random.Range(0, 2);
+        float targetRotation = startAngle + extraFullTurns * 360f + neededDelta;
 
         float elapsed = 0f;
-        while (elapsed < spinDuration)
+        while (elapsed < effectiveSpinDuration)
         {
-            float t = elapsed / spinDuration;
+            float t = elapsed / effectiveSpinDuration;
             float easedT = 1f - Mathf.Pow(1f - t, 3f);
             float angle = startAngle + (targetRotation - startAngle) * easedT;
 
             if (wheelRoot != null)
-            {
                 wheelRoot.localRotation = Quaternion.Euler(0f, 0f, angle);
-            }
 
             elapsed += Time.deltaTime;
             yield return null;
         }
 
         if (wheelRoot != null)
-        {
             wheelRoot.localRotation = Quaternion.Euler(0f, 0f, targetRotation);
-        }
 
-        // Actual winner must be determined by the icon physically under the arrow, not by the preselected winner index.
-        int actualSlotUnderArrow = winnerSlot;
-        float bestDelta = float.MaxValue;
-        if (candidateIcons != null && wheelRoot != null)
-        {
-            Vector3 wheelWorldPos = wheelRoot.position;
-            for (int i = 0; i < candidateIcons.Length; i++)
-            {
-                if (candidateIcons[i] == null)
-                    continue;
-
-                Vector3 iconWorldPos = candidateIcons[i].rectTransform.position;
-                Vector2 vec = new Vector2(iconWorldPos.x - wheelWorldPos.x, iconWorldPos.y - wheelWorldPos.y);
-                float iconAngle = Mathf.Atan2(vec.y, vec.x) * Mathf.Rad2Deg;
-                float delta = Mathf.Abs(Mathf.DeltaAngle(iconAngle, arrowAngle + wheelArrowOffsetAngle));
-                Debug.Log($"[MinigameTieBreakerUI] slotCheck[{i}] iconAngle={iconAngle:F2} delta={delta:F2} wheelOrderVal={wheelOrder[i]}");
-
-                if (delta < bestDelta)
-                {
-                    bestDelta = delta;
-                    actualSlotUnderArrow = i;
-                }
-            }
-        }
-
-        int finalResolvedWinner = wheelOrder[actualSlotUnderArrow];
-        Debug.Log($"[MinigameTieBreakerUI] final winner slot={actualSlotUnderArrow} final winner actualIndex={finalResolvedWinner}");
-
-        HighlightSlot(actualSlotUnderArrow, true);
-        ShowWinner(finalResolvedWinner);
-
-        if (VotingManager.Instance != null && VotingManager.Instance.IsReady)
-        {
-            VotingManager.Instance.ConfirmTieBreakResult(finalResolvedWinner);
-        }
+        HighlightSlot(winnerSlot, true);
+        ShowWinner(winnerIndex); // luôn dùng winnerIndex từ host - không tự dò/tự quyết định lại
 
         spinCoroutine = null;
     }

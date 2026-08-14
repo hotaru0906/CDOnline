@@ -13,7 +13,6 @@ public enum BoardPhaseState
     WaitingForTargetSelect,
     WaitingForItemTarget,
     NextTurn,
-
     BoardComplete
 }
 
@@ -1371,7 +1370,8 @@ public class BoardManager : NetworkBehaviour
 
         gambleWheelUI.ShowWheel(resultIndex, rewardIndex =>
         {
-            ApplyGambleResult(playerId, rewardIndex);
+            if (HasStateAuthority)
+                ApplyGambleResult(playerId, rewardIndex);
         });
     }
 
@@ -1779,17 +1779,8 @@ public class BoardManager : NetworkBehaviour
         if (!HasStateAuthority)
             return;
 
-        Debug.Log("=================================");
-        Debug.Log($"PLAYER {winnerPlayerId} WINS!");
-        Debug.Log("=================================");
-
-        WinnerPlayerId = winnerPlayerId;
-        GameManager.Instance?.SaveFinalWinner(winnerPlayerId);
-
-        // Lưu vị trí/board item như bình thường trước khi rời board (tùy bạn có muốn giữ không)
-        GameManager.Instance?.SavePlayerBoardPosition(winnerPlayerId, GetNodeIDAtSlot(GetSlotByPlayerId(winnerPlayerId)));
-
-        RPC_EndGame(winnerPlayerId);
+        GameManager.Instance.SaveFinalWinner(winnerPlayerId);
+        GameManager.Instance.GoToFinal();
     }
 
     private int GetSlotByPlayerId(int playerId)
@@ -1797,23 +1788,6 @@ public class BoardManager : NetworkBehaviour
         for (int i = 0; i < ActivePlayerCount; i++)
             if (GetPlayerIDAtSlot(i) == playerId) return i;
         return -1;
-    }
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_EndGame(int winnerPlayerId)
-    {
-        BoardState = BoardPhaseState.BoardComplete;
-
-        _lastTileMessage = $"P{winnerPlayerId} THẮNG! (Hạng 1)";
-        _lastTileMessageTimer = 5f;
-
-        Debug.Log($"[BoardManager] Winner = P{winnerPlayerId}, chuyển scene End...");
-
-        if (HasStateAuthority)
-        {
-            // Chuyển toàn bộ client sang scene End cùng lúc
-            Runner.LoadScene(endGameSceneRef);
-        }
     }
     public void DebugTeleportPlayerToNode(int playerId, int targetNodeID)
     {

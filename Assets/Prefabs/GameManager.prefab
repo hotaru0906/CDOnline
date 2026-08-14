@@ -53,11 +53,13 @@ MonoBehaviour:
   minigameTieBreakerUI: {fileID: 3274880228735022498, guid: 7bc14fae8a1ad7d4993aa3efbf457933, type: 3}
   scoreboardUI: {fileID: 0}
   resultUI: {fileID: 0}
+  itemPickUI: {fileID: 0}
   minigameCountdownUI: {fileID: 0}
   countdownText: {fileID: 0}
   minigameTutorialUI: {fileID: 0}
   countdownTime: 3
   scoreboardDisplayDuration: 3
+  finalSceneName: Final
   availableMinigames:
   - {fileID: 11400000, guid: 32db69738dc488a4b9f5c84da97bb1eb, type: 2}
   - {fileID: 11400000, guid: 42116482f6a56cd4680d23dd7988ef42, type: 2}
@@ -68,6 +70,9 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 520b80c3fa898554ead73a2123d9922f, type: 2}
   rouletteSceneName: Roulette Test
   boardSceneName: BoardScene
+  boardItemPool: {fileID: 11400000, guid: 9d787db242280a242ba1dcf54be47f0b, type: 2}
+  itemPickCount: 4
+  itemPickTurnDuration: 10
   _CurrentState: 0
   _CurrentRound: 0
   _IsFirstBoard:
@@ -115,14 +120,6 @@ MonoBehaviour:
     _value: 0
   _KeyCollected3:
     _value: 0
-  _ChestNode0: -1
-  _ChestNode1: -1
-  _ChestNode2: -1
-  _ChestNode3: -1
-  _ChestNode4: -1
-  _ChestNode5: -1
-  _ChestNode6: -1
-  _ChestNode7: -1
   _BoardItem_P0_S0: -1
   _BoardItem_P0_S1: -1
   _BoardItem_P0_S2: -1
@@ -139,14 +136,6 @@ MonoBehaviour:
   _BoardItem_P3_S1: -1
   _BoardItem_P3_S2: -1
   _BoardItem_P3_S3: -1
-  _KeyCount_P0: 0
-  _KeyCount_P1: 0
-  _KeyCount_P2: 0
-  _KeyCount_P3: 0
-  _ChestCount_P0: 0
-  _ChestCount_P1: 0
-  _ChestCount_P2: 0
-  _ChestCount_P3: 0
   _ShieldActive_P0:
     _value: 0
   _ShieldActive_P1:
@@ -159,6 +148,24 @@ MonoBehaviour:
   _ResourcePlayerId_P1: -1
   _ResourcePlayerId_P2: -1
   _ResourcePlayerId_P3: -1
+  _ItemPickSlot0: -1
+  _ItemPickSlot1: -1
+  _ItemPickSlot2: -1
+  _ItemPickSlot3: -1
+  _ItemPickTaken0:
+    _value: 0
+  _ItemPickTaken1:
+    _value: 0
+  _ItemPickTaken2:
+    _value: 0
+  _ItemPickTaken3:
+    _value: 0
+  _ItemPickTurnPlayerId: -1
+  _ItemPickTurnOrderIndex: -1
+  _FinalRank1PlayerId: -1
+  _FinalRank2PlayerId: -1
+  _FinalRank3PlayerId: -1
+  _FinalRank4PlayerId: -1
   _BoardItemsPlayerId0: -1
   _BoardItemsPlayerId1: -1
   _BoardItemsPlayerId2: -1
@@ -423,6 +430,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 0a2a84da929469044b534f6e25dd6757, type: 2}
   - {fileID: 11400000, guid: 0cf5b9ebe61a87a4dae394932268a7ea, type: 2}
   - {fileID: 11400000, guid: 520b80c3fa898554ead73a2123d9922f, type: 2}
+  - {fileID: 11400000, guid: c40ac4c53b7b2c546bccb729ee22544d, type: 2}
+  - {fileID: 11400000, guid: f5be6db10b378164fbee6a38e3d00643, type: 2}
   displayCount: 5
-  shuffleMinigames: 1
-  cooldownRoundsAfterPlay: 3

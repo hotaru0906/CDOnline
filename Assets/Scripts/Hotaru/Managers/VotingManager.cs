@@ -63,15 +63,15 @@ public class VotingManager : NetworkBehaviour
     public event Action<int, int> OnVoteCountChanged; // (minigameIndex, newCount)
     public event Action OnAllPlayersVoted; // Khi tất cả đã vote
     public event Action<VotingType> OnVotingTypeChanged_Event;
-    public event Action<int[], int, float> OnTieBreakStarted; // (availableIndices, winnerAvailableIndex, duration)
-    public event Action<int> OnTieBreakEnded; // winnerAvailableIndex
+    // 1) Đổi kiểu event để mang thêm spinDuration
+    public event Action<int[], int, float, float> OnTieBreakStarted; // (wheelSlots, winnerActualIndex, delayBeforeSpin, spinDuration)
+    public event Action<int> OnTieBreakEnded;
     #endregion
 
     #region Local State
     private bool hasVoted = false;
     private int localVoteIndex = -1;
     private int pendingTieWinnerIndex = -1;
-    private int confirmedTieWinnerIndex = -1;
     private bool hasReachedAllVotedQuickEnd = false;
     #endregion
 
@@ -358,14 +358,35 @@ public class VotingManager : NetworkBehaviour
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnTieBreakStarted(int[] candidateIndices, int winnerIndex, float duration)
+    private void RPC_OnTieBreakStarted(int[] candidateIndices, int winnerIndex, float delayBeforeSpin, float spinDuration)
     {
         if (GameManager.Instance != null)
-        {
             GameManager.Instance.ShowMinigameTieBreakerPanel();
-        }
 
-        OnTieBreakStarted?.Invoke(candidateIndices, winnerIndex, duration);
+        OnTieBreakStarted?.Invoke(candidateIndices, winnerIndex, delayBeforeSpin, spinDuration);
+    }
+
+    private IEnumerator CompleteTieBreakAfterDelay()
+    {
+        yield return new WaitForSeconds(tieBreakUiDelay + tieBreakSpinDuration + tieBreakResultHoldDuration);
+
+        if (!HasStateAuthority)
+            yield break;
+
+        // Không còn confirmedTieWinnerIndex nữa - luôn dùng đúng người thắng đã chọn từ đầu.
+        WinnerIndex = pendingTieWinnerIndex >= 0 ? pendingTieWinnerIndex : CalculateWinner();
+
+        string winnerName = "(unknown)";
+        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
+        {
+            var md = MinigameVotingManager.Instance.GetMinigameByActualIndex(WinnerIndex);
+            if (md != null) winnerName = md.minigameName;
+        }
+        Debug.Log($"[VotingManager] Tie-break completed. Winner actualIndex: {WinnerIndex} name: {winnerName}");
+
+        RPC_OnTieBreakEnded(WinnerIndex);
+        RPC_OnVotingEnded(WinnerIndex);
+        StartWinningMinigame(WinnerIndex, true);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -447,7 +468,6 @@ public class VotingManager : NetworkBehaviour
 
         return top;
     }
-
     private void StartTieBreak(List<int> tiedIndices)
     {
         if (!HasStateAuthority || tiedIndices == null || tiedIndices.Count == 0)
@@ -459,69 +479,53 @@ public class VotingManager : NetworkBehaviour
             return;
         }
 
-        List<int> actualCandidates = new List<int>();
+        List<int> tiedActual = new List<int>();
         for (int i = 0; i < tiedIndices.Count; i++)
         {
             int actualIndex = MinigameVotingManager.Instance.GetActualIndexByAvailableIndex(tiedIndices[i]);
-            if (actualIndex >= 0 && !actualCandidates.Contains(actualIndex))
-            {
-                actualCandidates.Add(actualIndex);
-            }
+            if (actualIndex >= 0 && !tiedActual.Contains(actualIndex))
+                tiedActual.Add(actualIndex);
         }
 
-        const int wheelSlotCount = 6;
-        HashSet<int> excludeActual = new HashSet<int>(actualCandidates);
-        while (actualCandidates.Count < wheelSlotCount)
-        {
-            int extraActual = MinigameVotingManager.Instance.GetRandomEligibleActualMinigameIndexExcluding(excludeActual);
-            if (extraActual < 0)
-                break;
-
-            actualCandidates.Add(extraActual);
-            excludeActual.Add(extraActual);
-        }
-
-        if (actualCandidates.Count == 0)
+        if (tiedActual.Count == 0)
         {
             Debug.LogWarning("[VotingManager] No actual candidates available for tie-break");
             return;
         }
 
-        confirmedTieWinnerIndex = -1;
-        pendingTieWinnerIndex = actualCandidates[UnityEngine.Random.Range(0, actualCandidates.Count)];
+        const int wheelSlotCount = 6;
+        List<int> wheelSlots = new List<int>();
 
-        int candidateCount = Mathf.Min(actualCandidates.Count, 10);
-        int[] candidates = new int[candidateCount];
-        for (int i = 0; i < candidateCount; i++)
+        if (wheelSlotCount % tiedActual.Count == 0)
         {
-            candidates[i] = actualCandidates[i];
+            // Hoà 2 -> 1,2,1,2,1,2 | Hoà 3 -> 1,2,3,1,2,3 | Hoà 1 (không nên xảy ra) -> lặp 6 lần | Hoà 6 -> mỗi cái 1 lần
+            int repeats = wheelSlotCount / tiedActual.Count;
+            for (int r = 0; r < repeats; r++)
+                wheelSlots.AddRange(tiedActual);
+        }
+        else
+        {
+            // Hoà 4 hoặc hoà cả 5 (không ai vote): mỗi minigame hoà xuất hiện đúng 1 lần,
+            // lấp phần còn lại bằng minigame KHÁC (đang chờ trong hàng đợi), không lặp lại.
+            wheelSlots.AddRange(tiedActual);
+            HashSet<int> exclude = new HashSet<int>(tiedActual);
+            while (wheelSlots.Count < wheelSlotCount)
+            {
+                int extra = MinigameVotingManager.Instance.GetRandomEligibleActualMinigameIndexExcluding(exclude);
+                if (extra < 0) break;
+                wheelSlots.Add(extra);
+                exclude.Add(extra);
+            }
         }
 
-        Debug.Log($"[VotingManager] Tie detected between {candidateCount} options. Opening tie-break UI after {tieBreakUiDelay}s. Winner preselected: #{pendingTieWinnerIndex}");
-        RPC_OnTieBreakStarted(candidates, pendingTieWinnerIndex, tieBreakUiDelay);
+        // Host chọn người thắng DUY NHẤT 1 lần ở đây - đây là kết quả cuối cùng, UI chỉ hiển thị lại.
+        pendingTieWinnerIndex = tiedActual[UnityEngine.Random.Range(0, tiedActual.Count)];
+
+        int[] candidates = wheelSlots.ToArray();
+
+        Debug.Log($"[VotingManager] Tie giữa {tiedActual.Count} minigame -> wheel: [{string.Join(",", candidates)}]. Winner: #{pendingTieWinnerIndex}");
+        RPC_OnTieBreakStarted(candidates, pendingTieWinnerIndex, tieBreakUiDelay, tieBreakSpinDuration);
         StartCoroutine(CompleteTieBreakAfterDelay());
-    }
-
-    private IEnumerator CompleteTieBreakAfterDelay()
-    {
-        yield return new WaitForSeconds(tieBreakUiDelay + tieBreakSpinDuration + tieBreakResultHoldDuration);
-
-        if (!HasStateAuthority)
-            yield break;
-
-        int finalWinner = confirmedTieWinnerIndex >= 0 ? confirmedTieWinnerIndex : pendingTieWinnerIndex;
-        WinnerIndex = finalWinner >= 0 ? finalWinner : CalculateWinner();
-        string winnerName = "(unknown)";
-        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
-        {
-            var md = MinigameVotingManager.Instance.GetMinigameByActualIndex(WinnerIndex);
-            if (md != null) winnerName = md.minigameName;
-        }
-        Debug.Log($"[VotingManager] Tie-break completed. Winner actualIndex: {WinnerIndex} name: {winnerName}");
-
-        RPC_OnTieBreakEnded(WinnerIndex);
-        RPC_OnVotingEnded(WinnerIndex);
-        StartWinningMinigame(WinnerIndex, true);
     }
 
     private void RevealVoteCounts()
@@ -534,45 +538,6 @@ public class VotingManager : NetworkBehaviour
             int count = VoteCounts.Get(i);
             RPC_BroadcastVoteUpdate(i, count);
         }
-    }
-
-    public void ConfirmTieBreakResult(int winnerIndex)
-    {
-        if (MinigameVotingManager.Instance == null || !MinigameVotingManager.Instance.IsReady)
-            return;
-
-        if (winnerIndex < 0 || winnerIndex >= MinigameVotingManager.Instance.TotalMinigameCount)
-        {
-            Debug.LogWarning($"[VotingManager] ConfirmTieBreakResult received invalid index: {winnerIndex}");
-            return;
-        }
-
-        if (HasStateAuthority)
-        {
-            SetConfirmedTieWinner(winnerIndex);
-        }
-        else
-        {
-            RPC_ConfirmTieBreakResult(winnerIndex);
-        }
-    }
-
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    private void RPC_ConfirmTieBreakResult(int winnerIndex)
-    {
-        SetConfirmedTieWinner(winnerIndex);
-    }
-
-    private void SetConfirmedTieWinner(int winnerIndex)
-    {
-        confirmedTieWinnerIndex = winnerIndex;
-        string name = "(unknown)";
-        if (MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady)
-        {
-            var md = MinigameVotingManager.Instance.GetMinigameByActualIndex(winnerIndex);
-            if (md != null) name = md.minigameName;
-        }
-        Debug.Log($"[VotingManager] Tie-break result confirmed by wheel: #{winnerIndex} name: {name}");
     }
 
     private void StartWinningMinigame(int winnerIndex, bool isActualIndex = false)

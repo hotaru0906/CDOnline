@@ -200,6 +200,13 @@ public class BoardHandUI : MonoBehaviour
 
     private void ScaleTo(float targetScale)
     {
+        if (!gameObject.activeInHierarchy)
+        {
+            // Object đang tắt (hand không dùng tới) — set thẳng scale, không cần animate
+            _rect.localScale = Vector3.one * targetScale;
+            return;
+        }
+
         if (_scaleRoutine != null) StopCoroutine(_scaleRoutine);
         _scaleRoutine = StartCoroutine(ScaleRoutine(targetScale));
     }
