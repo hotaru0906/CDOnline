@@ -1,6 +1,5 @@
 using Fusion;
 using UnityEngine;
-using UnityEngine.Playables;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -9,9 +8,6 @@ public enum FinalPhaseState
     WaitingPlayers,
     PreCutscene1Teleport,
     Cutscene1,
-    Battle,
-    PostBattleTeleport,
-    Cutscene2,
     Complete
 }
 
@@ -24,24 +20,13 @@ public class FinalManager : NetworkBehaviour
     #region Inspector References
     [Header("Spawn Points")]
     [SerializeField] private Transform winnerSpawnPoint;
-    [SerializeField] private Transform[] loserSpawnPoints; // 3 điểm cho nhóm 3-4 người battle
-    [SerializeField] private Transform cageTransform;
-    [SerializeField] private Transform thronePosition;
-    [SerializeField] private Transform besideThroneP2Position;
-    [SerializeField] private Transform behindP2P3Position;
+    [SerializeField] private Transform[] cageSpawnPoints; // Tat ca nguoi thua (khong phai top1) vao day, moi nguoi 1 diem rieng de khong dinh collider
 
-    [Header("Cutscenes")]
-    // GameObject cha chua PlayableDirector - bat Play On Awake tren Director, o day chi
-    // SetActive(true) de kich hoat Play (thay vi goi Director.Play() truc tiep).
-    // Object nay phai duoc de INACTIVE san trong scene tu dau.
-    [SerializeField] private GameObject cutscene1Root;
-    [SerializeField] private PlayableDirector cutscene1Director; // dung de doc duration
-    [SerializeField] private GameObject cutscene2Root;
-    [SerializeField] private PlayableDirector cutscene2Director; // dung de doc duration
-
-    [Header("Cameras")]
-    [SerializeField] private Camera cutsceneCamera;      // camera riêng cho Timeline, tắt sau khi cutscene xong
-    [SerializeField] private Camera playableSharedCamera; // camera chung, 1 góc nhìn cho toàn bộ player
+    [Header("Cutscene")]
+    // Cutscene giờ chạy hoàn toàn bằng code (FinalCutsceneController), không dùng Timeline nữa.
+    // Camera trong FinalCutsceneController sẽ ở lại làm gameplay camera luôn sau khi cutscene xong,
+    // nên FinalManager không cần quản lý việc bật/tắt camera nữa.
+    [SerializeField] private FinalCutsceneController finalCutsceneController;
 
     [Header("Timing")]
     [SerializeField] private float clientReadyTimeout = 8f;
@@ -51,9 +36,6 @@ public class FinalManager : NetworkBehaviour
     // Mặc định set Inactive sẵn trong scene; ở đây chỉ đảm bảo tắt đề phòng quên set,
     // và sẽ được bật lại (ShowFinalSceneUI) sau khi cutscene chạy xong.
     [SerializeField] private GameObject[] finalSceneUIRoots;
-
-    [Header("Debug")]
-    [SerializeField] private bool showDebugPanel = true;
     #endregion
 
     #region Networked State
@@ -62,15 +44,7 @@ public class FinalManager : NetworkBehaviour
     #endregion
 
     #region Local State (host-only bookkeeping)
-    private int _expectedPlayerCount = 0;
     private bool _advanceStarted = false;
-
-    // Phase D/E - Battle & Elimination
-    // Thu tu bi loai: nguoi thua dau tien (index 0) = rank thap nhat.
-    private List<int> _eliminationOrder = new List<int>();
-    // Ket qua rank cuoi cung sau battle: index0 = rank1 (winner) ... rank cuoi = rank thap nhat.
-    // Duoc FinalizeBattleRanking() dien day du, dung o Phase F (teleport theo rank) va buoc luu ket qua.
-    private List<int> _finalRanking = new List<int>();
     #endregion
 
     #region Lifecycle
@@ -90,19 +64,8 @@ public class FinalManager : NetworkBehaviour
         // của Final Scene (result panel, rank display...) tắt sẵn phòng khi quên set trong scene.
         HideFinalSceneUI();
 
-        // 2 camera setup: cutscene camera tắt sẵn, playable shared camera cũng tắt sẵn
-        // (sẽ bật cutsceneCamera lên ngay trước khi Play Timeline ở Phase C).
-        if (cutsceneCamera != null) cutsceneCamera.gameObject.SetActive(false);
-        if (playableSharedCamera != null) playableSharedCamera.gameObject.SetActive(false);
-
-        // Cutscene root phai tat san trong scene (Play On Awake se tu chay khi active len).
-        // O day chi de phong hoa neu quen tat trong Editor.
-        if (cutscene1Root != null) cutscene1Root.SetActive(false);
-        if (cutscene2Root != null) cutscene2Root.SetActive(false);
-
         if (HasStateAuthority)
         {
-            _expectedPlayerCount = CountActivePlayers();
             StartCoroutine(WaitForAllClientsReadyThenAdvance());
         }
     }
@@ -130,7 +93,7 @@ public class FinalManager : NetworkBehaviour
         }
     }
 
-    // Gọi sau khi cutscene (1 hoặc 2, tuỳ case) chạy xong — sẽ wire vào ở Phase C/F.
+    // Gọi sau khi cutscene chạy xong.
     private void ShowFinalSceneUI()
     {
         if (finalSceneUIRoots == null) return;
@@ -179,15 +142,6 @@ public class FinalManager : NetworkBehaviour
             case FinalPhaseState.Cutscene1:
                 if (HasStateAuthority) PlayCutscene1();
                 break;
-            case FinalPhaseState.Battle:
-                if (HasStateAuthority) OnEnterBattlePhase();
-                break;
-            case FinalPhaseState.PostBattleTeleport:
-                if (HasStateAuthority) TeleportPostBattle();
-                break;
-            case FinalPhaseState.Cutscene2:
-                // TODO: Phase F
-                break;
             case FinalPhaseState.Complete:
                 if (HasStateAuthority) OnEnterCompletePhase();
                 break;
@@ -227,8 +181,6 @@ public class FinalManager : NetworkBehaviour
             return;
         }
 
-        int totalPlayers = players.Length;
-
         var playerIds = new List<int>();
         var positions = new List<Vector3>();
         var rotations = new List<Quaternion>();
@@ -246,53 +198,33 @@ public class FinalManager : NetworkBehaviour
             Debug.LogError("[FinalManager] winnerSpawnPoint chua duoc gan trong Inspector!");
         }
 
-        if (totalPlayers == 2)
+        // Tat ca nguoi con lai (khong phan biet 1, 2 hay 3 nguoi) deu vao cage, moi nguoi 1 diem
+        // rieng trong cageSpawnPoints de tranh spawn chong len nhau bi day collider.
+        if (cageSpawnPoints == null || cageSpawnPoints.Length < losers.Count)
         {
-            // 2 nguoi: nguoi con lai vao thang cage.
-            if (losers.Count > 0 && cageTransform != null)
-            {
-                var loser = losers[0];
-                int lid = loser.Object.InputAuthority.PlayerId;
-
-                ApplyTeleport(loser, cageTransform.position, cageTransform.rotation);
-                playerIds.Add(lid);
-                positions.Add(cageTransform.position);
-                rotations.Add(cageTransform.rotation);
-            }
-            else if (cageTransform == null)
-            {
-                Debug.LogError("[FinalManager] cageTransform chua duoc gan trong Inspector!");
-            }
+            Debug.LogError($"[FinalManager] cageSpawnPoints khong du ({(cageSpawnPoints == null ? 0 : cageSpawnPoints.Length)}) cho {losers.Count} nguoi choi.");
         }
-        else
+
+        for (int i = 0; i < losers.Count; i++)
         {
-            // 3-4 nguoi: nhung nguoi con lai vao loserSpawnPoints[0..n], khong ai vao long.
-            if (loserSpawnPoints == null || loserSpawnPoints.Length < losers.Count)
-            {
-                Debug.LogError($"[FinalManager] loserSpawnPoints khong du ({(loserSpawnPoints == null ? 0 : loserSpawnPoints.Length)}) cho {losers.Count} nguoi choi.");
-            }
+            if (cageSpawnPoints == null || i >= cageSpawnPoints.Length || cageSpawnPoints[i] == null)
+                continue;
 
-            for (int i = 0; i < losers.Count; i++)
-            {
-                if (loserSpawnPoints == null || i >= loserSpawnPoints.Length || loserSpawnPoints[i] == null)
-                    continue;
+            var loser = losers[i];
+            int lid = loser.Object.InputAuthority.PlayerId;
+            var sp = cageSpawnPoints[i];
 
-                var loser = losers[i];
-                int lid = loser.Object.InputAuthority.PlayerId;
-                var sp = loserSpawnPoints[i];
-
-                ApplyTeleport(loser, sp.position, sp.rotation);
-                playerIds.Add(lid);
-                positions.Add(sp.position);
-                rotations.Add(sp.rotation);
-            }
+            ApplyTeleport(loser, sp.position, sp.rotation);
+            playerIds.Add(lid);
+            positions.Add(sp.position);
+            rotations.Add(sp.rotation);
         }
 
         RPC_SyncFinalTeleport(playerIds.ToArray(), positions.ToArray(), rotations.ToArray());
 
-        Debug.Log($"[FinalManager] Phase B teleport hoan tat cho {playerIds.Count}/{totalPlayers} players.");
+        Debug.Log($"[FinalManager] Phase B teleport hoan tat cho {playerIds.Count}/{players.Length} players.");
 
-        // Teleport xong -> sang Phase C (Cutscene 1). Se code cu the o buoc sau.
+        // Teleport xong -> sang Phase C (Cutscene 1).
         AdvanceToPhase(FinalPhaseState.Cutscene1);
     }
 
@@ -340,346 +272,62 @@ public class FinalManager : NetworkBehaviour
     private void PlayCutscene1()
     {
         RPC_PlayCutscene1();
-        StartCoroutine(WaitCutscene1ThenBranch());
+        StartCoroutine(WaitCutscene1ThenComplete());
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_PlayCutscene1()
     {
-        // Camera: bat cutscene camera, tat shared camera (dung 1 goc nhin duy nhat trong luc Play).
-        if (cutsceneCamera != null) cutsceneCamera.gameObject.SetActive(true);
-        if (playableSharedCamera != null) playableSharedCamera.gameObject.SetActive(false);
-
         // Khoa input toan bo player trong luc cutscene.
         var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
         foreach (var p in players)
             p.SetFrozen(true);
 
-        if (cutscene1Root != null)
-            cutscene1Root.SetActive(true); // Play On Awake tren Director se tu Play khi object active len
+        // Moi client tu chay coroutine cutscene cua rieng minh (camera la local, khong can sync
+        // vi tri tung frame qua network - chi can trigger dong loat qua RPC nay la du).
+        if (finalCutsceneController != null)
+            StartCoroutine(finalCutsceneController.PlayCutscene());
         else
-            Debug.LogError("[FinalManager] cutscene1Root chua duoc gan trong Inspector!");
+            Debug.LogError("[FinalManager] finalCutsceneController chua duoc gan trong Inspector!");
     }
 
-    private IEnumerator WaitCutscene1ThenBranch()
+    private IEnumerator WaitCutscene1ThenComplete()
     {
-        float duration = (cutscene1Director != null) ? (float)cutscene1Director.duration : 0f;
+        float duration = (finalCutsceneController != null) ? finalCutsceneController.TotalDuration : 0f;
         if (duration > 0f)
             yield return new WaitForSeconds(duration);
 
         RPC_OnCutscene1Finished();
 
-        int totalPlayers = CountActivePlayers();
-
-        if (totalPlayers <= 2)
-        {
-            // 2 nguoi: ket thuc Final flow ngay sau cutscene 1.
-            AdvanceToPhase(FinalPhaseState.Complete);
-        }
-        else
-        {
-            // 3-4 nguoi: mo input cho nhom con lai bat dau battle.
-            AdvanceToPhase(FinalPhaseState.Battle);
-        }
+        AdvanceToPhase(FinalPhaseState.Complete);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_OnCutscene1Finished()
     {
-        // Cutscene camera tat lien sau khi chay xong -> chuyen qua shared playable camera.
-        if (cutsceneCamera != null) cutsceneCamera.gameObject.SetActive(false);
-        if (playableSharedCamera != null) playableSharedCamera.gameObject.SetActive(true);
-    }
-    #endregion
+        // Camera cua FinalCutsceneController da o san vi tri cuoi (finalCameraPoint) va o lai lam
+        // gameplay camera - khong can bat/tat camera nao khac o day nua.
 
-    #region Phase D - Enter Battle (mo input cho nhom battle)
-    private void OnEnterBattlePhase()
-    {
-        int winnerId = GameManager.Instance != null ? GameManager.Instance.FinalWinnerId : -1;
-
-        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        var battlerIds = new List<int>();
-        foreach (var p in players)
-        {
-            int pid = p.Object.InputAuthority.PlayerId;
-            if (pid != winnerId) battlerIds.Add(pid);
-        }
-
-        RPC_UnlockBattleInput(battlerIds.ToArray());
-    }
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_UnlockBattleInput(int[] battlerIds)
-    {
+        // Mo lai input cho tat ca player - di chuyen binh thuong.
         var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
         foreach (var p in players)
-        {
-            int pid = p.Object.InputAuthority.PlayerId;
-            bool isBattler = System.Array.IndexOf(battlerIds, pid) >= 0;
-            p.SetFrozen(!isBattler);
+            p.SetFrozen(false);
 
-            // Chi Host moi duoc phep set Networked property cua PlayerBattleController.
-            if (HasStateAuthority && isBattler)
-            {
-                var battleController = p.GetComponent<PlayerBattleController>();
-                battleController?.ActivateForBattle();
-            }
-        }
+        // QUAN TRONG: GameState.Final khong di qua HandlePlayingState/HandleRouletteState nen
+        // PlayerInputHandler.InputEnabled van dang giu gia tri false tu state truoc do (Board/
+        // Scoreboard...). Neu khong bat lai o day thi player se bi SetFrozen(false) nhung van
+        // khong nhan duoc input gi de di chuyen. Bat lai giong pattern cac state khac.
+        if (PlayerInputHandler.Instance != null)
+            PlayerInputHandler.Instance.InputEnabled = true;
 
+        if (CameraManager.Instance != null)
+            CameraManager.Instance.SetCameraRotationLocked(false);
+
+        if (CursorManager.Instance != null)
+            CursorManager.Instance.HideCursor();
+
+        // Hien UI rieng cua Final Scene sau khi cutscene chay xong.
         ShowFinalSceneUI();
-    }
-    #endregion
-
-    #region Phase D/E - Battle & Elimination API
-    // ============================================================
-    // TODO (chua co logic battle thuc te - se lam sau):
-    // Battle system that tries de xac dinh top2-3-4 CHUA duoc thiet ke.
-    // O day chi chuan bi san API de sau nay code battle goi vao:
-    //   - FinalManager.Instance.ReportPlayerEliminated(playerId) moi khi
-    //     1 nguoi trong nhom battle bi loai.
-    //   - Khi da du so nguoi bi loai (= tong battler - 1), tu dong finalize
-    //     ranking va chuyen sang Phase PostBattleTeleport.
-    // Battle co the la minigame rieng, PvP, hay bat cu co che nao -
-    // chi can goi dung ham nay theo dung thu tu loai la du.
-    // ============================================================
-
-    /// <summary>
-    /// Goi khi 1 player trong nhom battle bi loai. Host-only.
-    /// Thu tu goi ham nay quyet dinh rank: goi som nhat = rank thap nhat.
-    /// </summary>
-    public void ReportPlayerEliminated(int playerId)
-    {
-        if (!HasStateAuthority) return;
-        if (Phase != FinalPhaseState.Battle)
-        {
-            Debug.LogWarning($"[FinalManager] ReportPlayerEliminated goi sai phase ({Phase}) - bo qua.");
-            return;
-        }
-        if (_eliminationOrder.Contains(playerId))
-        {
-            Debug.LogWarning($"[FinalManager] Player {playerId} da duoc bao eliminated truoc do - bo qua.");
-            return;
-        }
-
-        _eliminationOrder.Add(playerId);
-        Debug.Log($"[FinalManager] Player {playerId} eliminated. Thu tu hien tai: [{string.Join(", ", _eliminationOrder)}]");
-
-        CheckBattleCompletion();
-    }
-
-    private void CheckBattleCompletion()
-    {
-        int totalPlayers = CountActivePlayers();
-        int totalBattlers = totalPlayers - 1; // tru winner
-        int neededEliminations = totalBattlers - 1; // con lai 1 nguoi song sot cuoi = top2
-
-        if (_eliminationOrder.Count >= neededEliminations)
-        {
-            FinalizeBattleRanking();
-        }
-    }
-
-    /// <summary>
-    /// Tinh ranking cuoi cung tu _eliminationOrder va chuyen sang Phase PostBattleTeleport.
-    /// Case 4 nguoi (3 battler): elim[0]=top4, elim[1]=top3, nguoi con song=top2.
-    /// Case 3 nguoi (2 battler): elim[0]=top3 (vao thang cage), nguoi con song=top2.
-    /// Cong thuc chung: rank = [winner, survivor, ...elimination order dao nguoc].
-    /// </summary>
-    private void FinalizeBattleRanking()
-    {
-        int winnerId = GameManager.Instance != null ? GameManager.Instance.FinalWinnerId : -1;
-
-        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        System.Array.Sort(players, (a, b) =>
-            a.Object.InputAuthority.PlayerId.CompareTo(b.Object.InputAuthority.PlayerId));
-
-        int survivorId = -1;
-        foreach (var p in players)
-        {
-            int pid = p.Object.InputAuthority.PlayerId;
-            if (pid == winnerId) continue;
-            if (!_eliminationOrder.Contains(pid))
-            {
-                survivorId = pid;
-                break;
-            }
-        }
-
-        if (survivorId < 0)
-        {
-            Debug.LogError("[FinalManager] Khong xac dinh duoc survivor (top2) - kiem tra lai so lan ReportPlayerEliminated.");
-            return;
-        }
-
-        _finalRanking.Clear();
-        _finalRanking.Add(winnerId);   // rank1
-        _finalRanking.Add(survivorId); // rank2
-
-        // Nguoi bi loai cuoi cung = rank3, nguoi bi loai dau tien = rank4 (neu co).
-        for (int i = _eliminationOrder.Count - 1; i >= 0; i--)
-            _finalRanking.Add(_eliminationOrder[i]);
-
-        Debug.Log($"[FinalManager] Battle ranking finalized: [{string.Join(", ", _finalRanking)}] (rank1..rank{_finalRanking.Count})");
-
-        AdvanceToPhase(FinalPhaseState.PostBattleTeleport);
-    }
-    #endregion
-
-    #region Debug (chi de test rank battle thu cong, chua co battle logic thuc)
-    private void OnGUI()
-    {
-        if (!showDebugPanel || !HasStateAuthority) return;
-        if (Phase != FinalPhaseState.Battle) return;
-
-        GUILayout.BeginArea(new Rect(10, 10, 260, 300));
-        GUILayout.Label("[DEBUG] Final Battle - Force Eliminate:");
-
-        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        System.Array.Sort(players, (a, b) =>
-            a.Object.InputAuthority.PlayerId.CompareTo(b.Object.InputAuthority.PlayerId));
-
-        int winnerId = GameManager.Instance != null ? GameManager.Instance.FinalWinnerId : -1;
-
-        foreach (var p in players)
-        {
-            int pid = p.Object.InputAuthority.PlayerId;
-            if (pid == winnerId) continue; // winner khong battle
-            if (_eliminationOrder.Contains(pid)) continue; // da bi loai roi
-
-            if (GUILayout.Button($"Eliminate P{pid}"))
-            {
-                ReportPlayerEliminated(pid);
-            }
-        }
-
-        GUILayout.Space(6);
-        GUILayout.Label($"Elimination order: [{string.Join(", ", _eliminationOrder)}]");
-
-        GUILayout.EndArea();
-    }
-    #endregion
-
-    #region Phase F - Teleport theo rank + Cutscene 2
-    // Ca 2 case 3 nguoi va 4 nguoi deu chay cutscene 2 sau khi teleport xong.
-    // Chi case 2 nguoi la khong vao day (da Complete ngay sau cutscene 1).
-    private void TeleportPostBattle()
-    {
-        var allPlayers = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        foreach (var p in allPlayers)
-        {
-            var battleController = p.GetComponent<PlayerBattleController>();
-            if (battleController != null)
-            {
-                battleController.ResetAfterBattle();
-            }
-        }
-
-        int totalPlayers = CountActivePlayers();
-
-        var playerIds = new List<int>();
-        var positions = new List<Vector3>();
-        var rotations = new List<Quaternion>();
-
-        // rank2 (index 1) luon dung canh top1.
-        if (_finalRanking.Count >= 2)
-        {
-            if (besideThroneP2Position != null)
-                ApplyTeleportToController(_finalRanking[1], besideThroneP2Position.position, besideThroneP2Position.rotation, playerIds, positions, rotations);
-            else
-                Debug.LogError("[FinalManager] besideThroneP2Position chua duoc gan trong Inspector!");
-        }
-
-        if (totalPlayers == 4)
-        {
-            // rank3 -> behind P2/P3, rank4 -> cage.
-            if (_finalRanking.Count >= 3)
-            {
-                if (behindP2P3Position != null)
-                    ApplyTeleportToController(_finalRanking[2], behindP2P3Position.position, behindP2P3Position.rotation, playerIds, positions, rotations);
-                else
-                    Debug.LogError("[FinalManager] behindP2P3Position chua duoc gan trong Inspector!");
-            }
-
-            if (_finalRanking.Count >= 4)
-            {
-                if (cageTransform != null)
-                    ApplyTeleportToController(_finalRanking[3], cageTransform.position, cageTransform.rotation, playerIds, positions, rotations);
-                else
-                    Debug.LogError("[FinalManager] cageTransform chua duoc gan trong Inspector!");
-            }
-        }
-        else // totalPlayers == 3
-        {
-            // rank3 -> vao cage.
-            if (_finalRanking.Count >= 3)
-            {
-                if (cageTransform != null)
-                    ApplyTeleportToController(_finalRanking[2], cageTransform.position, cageTransform.rotation, playerIds, positions, rotations);
-                else
-                    Debug.LogError("[FinalManager] cageTransform chua duoc gan trong Inspector!");
-            }
-        }
-
-        RPC_SyncFinalTeleport(playerIds.ToArray(), positions.ToArray(), rotations.ToArray());
-
-        Debug.Log($"[FinalManager] Phase F teleport hoan tat theo ranking: [{string.Join(", ", _finalRanking)}]. Chuan bi Play cutscene 2.");
-
-        StartCoroutine(PlayCutscene2ThenComplete());
-    }
-
-    // Host tim PlayerController theo playerId, teleport ngay tren host va gom vao list de sync sau.
-    private void ApplyTeleportToController(int playerId, Vector3 position, Quaternion rotation,
-        List<int> outIds, List<Vector3> outPositions, List<Quaternion> outRotations)
-    {
-        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        foreach (var p in players)
-        {
-            if (p.Object.InputAuthority.PlayerId != playerId) continue;
-
-            ApplyTeleport(p, position, rotation);
-            outIds.Add(playerId);
-            outPositions.Add(position);
-            outRotations.Add(rotation);
-            return;
-        }
-
-        Debug.LogWarning($"[FinalManager] Khong tim thay PlayerController cho playerId={playerId} khi teleport Phase F.");
-    }
-
-    private IEnumerator PlayCutscene2ThenComplete()
-    {
-        RPC_PlayCutscene2();
-
-        float duration = (cutscene2Director != null) ? (float)cutscene2Director.duration : 0f;
-        if (duration > 0f)
-            yield return new WaitForSeconds(duration);
-
-        RPC_OnCutscene2Finished();
-
-        AdvanceToPhase(FinalPhaseState.Complete);
-    }
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_PlayCutscene2()
-    {
-        if (cutsceneCamera != null) cutsceneCamera.gameObject.SetActive(true);
-        if (playableSharedCamera != null) playableSharedCamera.gameObject.SetActive(false);
-
-        var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        foreach (var p in players)
-            p.SetFrozen(true);
-
-        if (cutscene2Root != null)
-            cutscene2Root.SetActive(true);
-        else
-            Debug.LogError("[FinalManager] cutscene2Root chua duoc gan trong Inspector!");
-    }
-
-    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void RPC_OnCutscene2Finished()
-    {
-        if (cutsceneCamera != null) cutsceneCamera.gameObject.SetActive(false);
-        if (playableSharedCamera != null) playableSharedCamera.gameObject.SetActive(true);
     }
     #endregion
 
@@ -688,36 +336,18 @@ public class FinalManager : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        int totalPlayers = CountActivePlayers();
         int winnerId = GameManager.Instance != null ? GameManager.Instance.FinalWinnerId : -1;
-
-        // Case 2 nguoi: _finalRanking chua duoc FinalizeBattleRanking() dien (khong qua battle).
-        // Tu dung o day: rank1 = winner, rank2 = nguoi con lai.
-        if (totalPlayers == 2 && _finalRanking.Count == 0)
+        if (winnerId < 0)
         {
-            var players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-            foreach (var p in players)
-            {
-                int pid = p.Object.InputAuthority.PlayerId;
-                if (pid != winnerId)
-                {
-                    _finalRanking.Add(winnerId);
-                    _finalRanking.Add(pid);
-                    break;
-                }
-            }
-        }
-
-        if (_finalRanking.Count == 0)
-        {
-            Debug.LogError("[FinalManager] OnEnterCompletePhase: _finalRanking rong - khong the luu ket qua.");
+            Debug.LogError("[FinalManager] OnEnterCompletePhase: FinalWinnerId khong hop le - khong the luu ket qua.");
             return;
         }
 
         if (GameManager.Instance != null)
         {
-            GameManager.Instance.SaveFinalRankings(_finalRanking.ToArray());
-            Debug.Log($"[FinalManager] Da luu final rankings: [{string.Join(", ", _finalRanking)}]");
+            // Chi luu top1 (winner). Khong con battle nen khong the xac dinh rank2/3/4.
+            GameManager.Instance.SaveFinalRankings(new[] { winnerId });
+            Debug.Log($"[FinalManager] Da luu final rankings (chi winner): {winnerId}");
         }
         else
         {
