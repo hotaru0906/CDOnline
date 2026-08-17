@@ -20,7 +20,8 @@ public class MenuManager : MonoBehaviour
     [SerializeField] private UISlideAnimator playOnlineAnimator;    // BUTTONGROUP của Play Online
     [SerializeField] private UISlideAnimator findLobbyAnimator;     // BUTTONGROUP của Find Lobby
     [SerializeField] private UISlideAnimator createRoomAnimator;    // BUTTONGROUP của Create Room
-    [SerializeField] private UISlideAnimator itemUIAnimator;        // BUTTONGROUP của Item UI
+    [SerializeField] private UISlideAnimator settingsAnimator;       // BUTTONGROUP của Settings / Options
+    [HideInInspector] [SerializeField] private UISlideAnimator itemUIAnimator; // Giữ cho Item UI nếu còn dùng
 
     [Header("Animation Settings")]
     [SerializeField] private float slideAnimationDuration = 0.5f;
@@ -79,6 +80,8 @@ public class MenuManager : MonoBehaviour
             findLobbyAnimator.SetHiddenPositionImmediate();
         if (createRoomAnimator != null)
             createRoomAnimator.SetHiddenPositionImmediate();
+        if (settingsAnimator != null)
+            settingsAnimator.SetHiddenPositionImmediate();
         if (itemUIAnimator != null)
             itemUIAnimator.SetHiddenPositionImmediate();
 
@@ -122,9 +125,16 @@ public class MenuManager : MonoBehaviour
     {
         if (settingsManager == null) return;
 
-        // Chỉ ẩn menu KHI settings mở thành công
-        if (settingsManager.OpenSettings())
-            OnSettingsOpened();
+        if (!settingsManager.OpenSettings())
+            return;
+
+        if (_currentAnimator != null)
+            _currentAnimator.HideAsync();
+
+        if (settingsAnimator != null)
+            settingsAnimator.ShowAsync();
+
+        OnSettingsOpened();
     }
 
     private void SetScreenVisible(GameObject screen, bool visible)
@@ -144,11 +154,30 @@ public class MenuManager : MonoBehaviour
         }
     }
 
-    public void OnSettingsOpened() => SetScreenVisible(_currentScreen, false);
-    public void OnSettingsClosed() => SetScreenVisible(_currentScreen, true);
+    public void OnSettingsOpened()
+    {
+        SetScreenVisible(_currentScreen, false);
+
+        if (_currentAnimator != null)
+            _currentAnimator.HideAsync();
+    }
+
+    public void OnSettingsClosed()
+    {
+        SetScreenVisible(_currentScreen, true);
+
+        if (_currentAnimator != null)
+            _currentAnimator.ShowAsync();
+
+        if (settingsAnimator != null)
+            settingsAnimator.HideAsync();
+    }
 
     public void ShowItemUI()
     {
+        if (_currentAnimator != null)
+            _currentAnimator.HideAsync();
+
         SlideScreen(canvasItemUI, itemUIAnimator, SlideDirection.Forward);
         if (customizationManager != null)
             customizationManager.Activate();
