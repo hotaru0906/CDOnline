@@ -4,12 +4,21 @@ using System.Linq;
 
 /// <summary>
 /// Hiển thị danh sách player trong Tutorial UI của minigame.
-/// Status: Ready (đã load xong, PlayerController đã spawn) - Not Ready (còn đang loading).
+/// Status: Ready (đã load xong, PlayerController đã spawn VÀ dữ liệu network đã sync)
+///        - Not Ready (còn đang loading, hoặc dữ liệu network chưa sync xong).
+///
+/// Do Host/Client có thể kết nối lệch thời điểm, thông tin (icon, tên) của 1 player
+/// có thể hiện SAI/placeholder trong lúc dữ liệu network chưa kịp đến — trường hợp này
+/// UI sẽ tự ép status = NOT READY (xem MinigameTutorialPlayerItemUI.UpdateData) và
+/// tự làm mới định kỳ mỗi <see cref="refreshInterval"/> giây cho tới khi đúng.
 /// </summary>
 public class MinigameTutorialPlayerListUI : MonoBehaviour
 {
     [SerializeField] private Transform contentParent;
     [SerializeField] private MinigameTutorialPlayerItemUI itemPrefab;
+
+    [Tooltip("Chu kỳ (giây) làm mới lại icon/tên/status của từng item.")]
+    [SerializeField] private float refreshInterval = 1f;
 
     private List<MinigameTutorialPlayerItemUI> _items = new List<MinigameTutorialPlayerItemUI>();
     private HashSet<int> _lastPlayerIds = new HashSet<int>();
@@ -17,17 +26,31 @@ public class MinigameTutorialPlayerListUI : MonoBehaviour
     private void OnEnable()
     {
         RefreshList();
+
+        // Refresh dữ liệu hiển thị (icon/tên/status) định kỳ, KHÔNG chạy mỗi frame,
+        // vì việc này chỉ cần đủ nhanh để bắt kịp lúc network sync xong, không cần realtime.
+        InvokeRepeating(nameof(RefreshItemsData), refreshInterval, refreshInterval);
+    }
+
+    private void OnDisable()
+    {
+        CancelInvoke(nameof(RefreshItemsData));
     }
 
     private void Update()
     {
+        // Theo dõi join/leave: cần đủ nhanh để danh sách không bị trễ khi có người vào/ra phòng.
+        // Việc này rẻ (so sánh HashSet id), khác với việc refresh icon/tên/status ở trên.
         var players = GetSortedPlayers();
 
         if (!IsSamePlayerSet(players))
         {
             RefreshList(players);
         }
+    }
 
+    private void RefreshItemsData()
+    {
         foreach (var item in _items)
         {
             if (item != null)
@@ -35,12 +58,6 @@ public class MinigameTutorialPlayerListUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Lấy danh sách player và sắp xếp theo PlayerId - đây là khóa ỔN ĐỊNH và ĐỒNG BỘ qua mạng.
-    /// KHÔNG dựa vào thứ tự trả về của FindObjectsByType (FindObjectsSortMode.None), vì thứ tự
-    /// đó chỉ phản ánh cách object tồn tại cục bộ trên từng máy (Host/Client load xong ở thời
-    /// điểm khác nhau => thứ tự khác nhau), dẫn đến 1 slot UI hiển thị tên khác nhau giữa các máy.
-    /// </summary>
     private List<PlayerNetworkData> GetSortedPlayers()
     {
         var players = FindObjectsByType<PlayerNetworkData>(FindObjectsSortMode.None)

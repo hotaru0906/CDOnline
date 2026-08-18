@@ -36,6 +36,8 @@ public class SFXManager : MonoBehaviour
     [Header("3D Audio Settings")]
     [SerializeField] private float minDistance3D = 1f;
     [SerializeField] private float maxDistance3D = 20f;
+    [Header("Board SFX")]
+    [SerializeField] private BoardSfxLibrary boardSfxLibrary;
 
     // Cache SFX Group để không tìm lại mỗi lần
     private UnityEngine.Audio.AudioMixerGroup _sfxGroup; // THÊM

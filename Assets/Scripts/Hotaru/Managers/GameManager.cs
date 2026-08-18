@@ -61,6 +61,9 @@ public class GameManager : NetworkBehaviour
     [Header("Final Scene")]
     [SerializeField] private string finalSceneName = "FinalScene";
 
+    [Header("Item Pick Settings")]
+    [SerializeField] private float itemPickRevealHoldDuration = 2f;
+
     #endregion
 
     #region Minigame Data
@@ -77,6 +80,7 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private BoardItemPool boardItemPool;
     [SerializeField] private int itemPickCount = 4;
     [SerializeField] private float itemPickTurnDuration = 10f;
+    [SerializeField] private float top1RevealDuration = 2f;
     private Coroutine _itemPickCoroutine;
     #endregion
 
@@ -160,21 +164,29 @@ public class GameManager : NetworkBehaviour
     [Networked] public int BoardItem_P0_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S2 { get; private set; } = -1;
     [Networked] public int BoardItem_P0_S3 { get; private set; } = -1;
+    [Networked] public int BoardItem_P0_S4 { get; private set; } = -1;
+    [Networked] public int BoardItem_P0_S5 { get; private set; } = -1;
 
     [Networked] public int BoardItem_P1_S0 { get; private set; } = -1;
     [Networked] public int BoardItem_P1_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P1_S2 { get; private set; } = -1;
     [Networked] public int BoardItem_P1_S3 { get; private set; } = -1;
+    [Networked] public int BoardItem_P1_S4 { get; private set; } = -1;
+    [Networked] public int BoardItem_P1_S5 { get; private set; } = -1;
 
     [Networked] public int BoardItem_P2_S0 { get; private set; } = -1;
     [Networked] public int BoardItem_P2_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P2_S2 { get; private set; } = -1;
     [Networked] public int BoardItem_P2_S3 { get; private set; } = -1;
+    [Networked] public int BoardItem_P2_S4 { get; private set; } = -1;
+    [Networked] public int BoardItem_P2_S5 { get; private set; } = -1;
 
     [Networked] public int BoardItem_P3_S0 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S1 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S2 { get; private set; } = -1;
     [Networked] public int BoardItem_P3_S3 { get; private set; } = -1;
+    [Networked] public int BoardItem_P3_S4 { get; private set; } = -1;
+    [Networked] public int BoardItem_P3_S5 { get; private set; } = -1;
 
     [Networked] public NetworkBool ShieldActive_P0 { get; private set; } = false;
     [Networked] public NetworkBool ShieldActive_P1 { get; private set; } = false;
@@ -436,10 +448,7 @@ public class GameManager : NetworkBehaviour
 
     public void SaveBoardItemsByPlayer(
     int playerId,
-    int s0,
-    int s1,
-    int s2,
-    int s3)
+    int s0, int s1, int s2, int s3, int s4, int s5)
     {
         if (!HasStateAuthority)
             return;
@@ -450,34 +459,26 @@ public class GameManager : NetworkBehaviour
         {
             case 0:
                 BoardItemsPlayerId0 = playerId;
-                BoardItem_P0_S0 = s0;
-                BoardItem_P0_S1 = s1;
-                BoardItem_P0_S2 = s2;
-                BoardItem_P0_S3 = s3;
+                BoardItem_P0_S0 = s0; BoardItem_P0_S1 = s1; BoardItem_P0_S2 = s2;
+                BoardItem_P0_S3 = s3; BoardItem_P0_S4 = s4; BoardItem_P0_S5 = s5;
                 break;
 
             case 1:
                 BoardItemsPlayerId1 = playerId;
-                BoardItem_P1_S0 = s0;
-                BoardItem_P1_S1 = s1;
-                BoardItem_P1_S2 = s2;
-                BoardItem_P1_S3 = s3;
+                BoardItem_P1_S0 = s0; BoardItem_P1_S1 = s1; BoardItem_P1_S2 = s2;
+                BoardItem_P1_S3 = s3; BoardItem_P1_S4 = s4; BoardItem_P1_S5 = s5;
                 break;
 
             case 2:
                 BoardItemsPlayerId2 = playerId;
-                BoardItem_P2_S0 = s0;
-                BoardItem_P2_S1 = s1;
-                BoardItem_P2_S2 = s2;
-                BoardItem_P2_S3 = s3;
+                BoardItem_P2_S0 = s0; BoardItem_P2_S1 = s1; BoardItem_P2_S2 = s2;
+                BoardItem_P2_S3 = s3; BoardItem_P2_S4 = s4; BoardItem_P2_S5 = s5;
                 break;
 
             case 3:
                 BoardItemsPlayerId3 = playerId;
-                BoardItem_P3_S0 = s0;
-                BoardItem_P3_S1 = s1;
-                BoardItem_P3_S2 = s2;
-                BoardItem_P3_S3 = s3;
+                BoardItem_P3_S0 = s0; BoardItem_P3_S1 = s1; BoardItem_P3_S2 = s2;
+                BoardItem_P3_S3 = s3; BoardItem_P3_S4 = s4; BoardItem_P3_S5 = s5;
                 break;
         }
     }
@@ -485,42 +486,18 @@ public class GameManager : NetworkBehaviour
     public int[] GetBoardItemsByPlayer(int playerId)
     {
         if (BoardItemsPlayerId0 == playerId)
-            return new[]
-            {
-                BoardItem_P0_S0,
-                BoardItem_P0_S1,
-                BoardItem_P0_S2,
-                BoardItem_P0_S3
-            };
+            return new[] { BoardItem_P0_S0, BoardItem_P0_S1, BoardItem_P0_S2, BoardItem_P0_S3, BoardItem_P0_S4, BoardItem_P0_S5 };
 
         if (BoardItemsPlayerId1 == playerId)
-            return new[]
-            {
-                BoardItem_P1_S0,
-                BoardItem_P1_S1,
-                BoardItem_P1_S2,
-                BoardItem_P1_S3
-            };
+            return new[] { BoardItem_P1_S0, BoardItem_P1_S1, BoardItem_P1_S2, BoardItem_P1_S3, BoardItem_P1_S4, BoardItem_P1_S5 };
 
         if (BoardItemsPlayerId2 == playerId)
-            return new[]
-            {
-                BoardItem_P2_S0,
-                BoardItem_P2_S1,
-                BoardItem_P2_S2,
-                BoardItem_P2_S3
-            };
+            return new[] { BoardItem_P2_S0, BoardItem_P2_S1, BoardItem_P2_S2, BoardItem_P2_S3, BoardItem_P2_S4, BoardItem_P2_S5 };
 
         if (BoardItemsPlayerId3 == playerId)
-            return new[]
-            {
-                BoardItem_P3_S0,
-                BoardItem_P3_S1,
-                BoardItem_P3_S2,
-                BoardItem_P3_S3
-            };
+            return new[] { BoardItem_P3_S0, BoardItem_P3_S1, BoardItem_P3_S2, BoardItem_P3_S3, BoardItem_P3_S4, BoardItem_P3_S5 };
 
-        return new[] { -1, -1, -1, -1 };
+        return new[] { -1, -1, -1, -1, -1, -1 };
     }
 
     public void SavePlayerResourceState(int playerId)
@@ -715,6 +692,8 @@ public class GameManager : NetworkBehaviour
     public event Action<int> OnItemPickTimerTick;             // remaining seconds
     public event Action<int, int, BoardItemEffect> OnItemPicked; // playerId, slotIndex, effect
     public event Action OnItemPickPhaseEnded;
+    public event Action OnTop1RevealAllCards;      // MỚI
+    public event Action OnTop1HideRemainingCards;  // MỚI
     #endregion
 
     #region Unity Lifecycle
@@ -1471,17 +1450,15 @@ public class GameManager : NetworkBehaviour
                 continue;
             }
 
-            // ĐỔI: dùng SaveBoardItemsByPlayer (playerId key) để nhất quán với GetBoardItemsByPlayer khi restore
             SaveBoardItemsByPlayer(
-                playerId,
-                inv.BoardItems.Get(0),
-                inv.BoardItems.Get(1),
-                inv.BoardItems.Get(2),
-                inv.BoardItems.Get(3));
+    playerId,
+    inv.BoardItems.Get(0), inv.BoardItems.Get(1), inv.BoardItems.Get(2),
+    inv.BoardItems.Get(3), inv.BoardItems.Get(4), inv.BoardItems.Get(5));
 
             Debug.Log(
                 $"Saved Player {playerId}: " +
-                $"[{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, {inv.BoardItems.Get(3)}]");
+                $"[{inv.BoardItems.Get(0)}, {inv.BoardItems.Get(1)}, {inv.BoardItems.Get(2)}, " +
+                $"{inv.BoardItems.Get(3)}, {inv.BoardItems.Get(4)}, {inv.BoardItems.Get(5)}]");
         }
 
         SaveCurrentPlayerResources();
@@ -1532,20 +1509,16 @@ public class GameManager : NetworkBehaviour
         bool hasAny = false;
         foreach (var v in savedItems)
         {
-            if (v != -1)
-            {
-                hasAny = true;
-                break;
-            }
+            if (v != -1) { hasAny = true; break; }
         }
 
         if (!hasAny)
             return false;
 
-        for (int s = 0; s < 4; s++)
+        for (int s = 0; s < 6; s++)
             inventory.RemoveBoardItem(s);
 
-        for (int s = 0; s < 4; s++)
+        for (int s = 0; s < 6; s++)
         {
             if (savedItems[s] != -1)
             {
@@ -1870,12 +1843,37 @@ public class GameManager : NetworkBehaviour
         int playerId = ranking[ItemPickTurnOrderIndex];
         ItemPickTurnPlayerId = playerId;
 
-        Debug.Log($"[GameManager] ItemPick turn #{ItemPickTurnOrderIndex} -> Player {playerId}");
-
-        RPC_NotifyItemPickTurnStarted(playerId, itemPickTurnDuration);
-
         if (_itemPickCoroutine != null)
             StopCoroutine(_itemPickCoroutine);
+
+        if (ItemPickTurnOrderIndex == 0)
+        {
+            // MỚI: Lượt Top1 - lật ngửa hết các thẻ còn lại trước, chưa tính giờ vội
+            Debug.Log($"[GameManager] ItemPick turn #0 (Top1) -> Player {playerId}. Revealing all cards first.");
+            RPC_NotifyTop1RevealAll();
+            _itemPickCoroutine = StartCoroutine(RunTop1RevealThenStartTurn(playerId));
+        }
+        else
+        {
+            Debug.Log($"[GameManager] ItemPick turn #{ItemPickTurnOrderIndex} -> Player {playerId}");
+            RPC_NotifyItemPickTurnStarted(playerId, itemPickTurnDuration);
+            _itemPickCoroutine = StartCoroutine(RunItemPickTurnTimer());
+        }
+    }
+
+    // MỚI: chờ animation lật bài của Top1 xong rồi mới bắt đầu tính giờ chọn
+    private IEnumerator RunTop1RevealThenStartTurn(int playerId)
+    {
+        yield return new WaitForSeconds(top1RevealDuration);
+
+        // Phòng trường hợp state đã đổi giữa lúc chờ (edge case)
+        if (CurrentState != GameState.PickItem || ItemPickTurnPlayerId != playerId)
+        {
+            _itemPickCoroutine = null;
+            yield break;
+        }
+
+        RPC_NotifyItemPickTurnStarted(playerId, itemPickTurnDuration);
         _itemPickCoroutine = StartCoroutine(RunItemPickTurnTimer());
     }
 
@@ -1958,13 +1956,14 @@ public class GameManager : NetworkBehaviour
             bool added = inv.AddBoardItem(effect);
             if (added)
             {
-                // Đồng bộ ngay vào networked backup theo playerId để không mất khi qua BoardScene
                 SaveBoardItemsByPlayer(
                     playerId,
                     inv.BoardItems.Get(0),
                     inv.BoardItems.Get(1),
                     inv.BoardItems.Get(2),
-                    inv.BoardItems.Get(3));
+                    inv.BoardItems.Get(3),
+                    inv.BoardItems.Get(4),
+                    inv.BoardItems.Get(5));
             }
             else
             {
@@ -1976,6 +1975,8 @@ public class GameManager : NetworkBehaviour
 
         RPC_NotifyItemPicked(playerId, slotIndex, (int)effect);
 
+        bool wasTop1Turn = (ItemPickTurnOrderIndex == 0); // MỚI: kiểm tra trước khi tăng index
+
         if (_itemPickCoroutine != null)
         {
             StopCoroutine(_itemPickCoroutine);
@@ -1984,6 +1985,13 @@ public class GameManager : NetworkBehaviour
 
         ItemPickTurnPlayerId = -1;
         ItemPickTurnOrderIndex++;
+
+        if (wasTop1Turn)
+        {
+            // MỚI: Top1 chọn xong -> úp lại 3 thẻ còn lại trước khi sang lượt Top2
+            RPC_NotifyTop1HideRemaining();
+        }
+
         StartNextItemPickTurn();
     }
 
@@ -1998,6 +2006,12 @@ public class GameManager : NetworkBehaviour
 
         RPC_NotifyItemPickPhaseEnded();
 
+        StartCoroutine(ProceedFromScoreboardAfterDelay());
+    }
+
+    private IEnumerator ProceedFromScoreboardAfterDelay()
+    {
+        yield return new WaitForSeconds(itemPickRevealHoldDuration);
         ProceedFromScoreboard();
     }
 
@@ -2074,6 +2088,17 @@ public class GameManager : NetworkBehaviour
     private void RPC_NotifyItemPickPhaseEnded()
     {
         OnItemPickPhaseEnded?.Invoke();
+    }
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_NotifyTop1RevealAll()
+    {
+        OnTop1RevealAllCards?.Invoke();
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void RPC_NotifyTop1HideRemaining()
+    {
+        OnTop1HideRemainingCards?.Invoke();
     }
 
     #endregion

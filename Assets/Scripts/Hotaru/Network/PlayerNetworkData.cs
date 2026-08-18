@@ -17,13 +17,15 @@ public class PlayerNetworkData : NetworkBehaviour
 
     [Networked, OnChangedRender(nameof(OnScoreChanged))]
     public int Score { get; set; }
-
-    // ===== Battle (Phase D/E - Final Battle Core) =====
-    // Không dùng OnChangedRender ở đây — detect thay đổi + trigger ragdoll/frozen
-    // được xử lý trong Render() (so sánh với _lastBattleEliminatedState), đúng pattern
-    // PlayerMinigameData đang dùng cho IsDead/IsEliminated.
     [Networked] public float BattleHP { get; private set; }
     [Networked] public NetworkBool IsBattleEliminated { get; private set; }
+
+    /// <summary>
+    /// True khi dữ liệu (PlayerName, CharacterIndex...) đã thật sự được sync từ chủ sở hữu
+    /// (InputAuthority) lên network, KHÔNG chỉ đơn thuần trùng giá trị mặc định.
+    /// Dùng để UI (vd MinigameTutorialPlayerItemUI) phân biệt "dữ liệu thật" với "placeholder".
+    /// </summary>
+    [Networked] public NetworkBool IsDataSynced { get; private set; }
 
     private PlayerController _playerController;
     private bool _lastBattleEliminatedState;
@@ -48,7 +50,7 @@ public class PlayerNetworkData : NetworkBehaviour
             // Sync lên network cho người khác thấy
             RPC_SetPlayerName(savedName);
             RPC_SetCharacterIndex(savedIndex);
-            
+            RPC_MarkDataSynced();
         }
 
         // Host sets default name for new players
@@ -265,5 +267,14 @@ public class PlayerNetworkData : NetworkBehaviour
         ColorID = value;
     }
 
-    
+    /// <summary>
+    /// Đánh dấu dữ liệu cơ bản (tên, nhân vật...) của player này đã thật sự sync xong.
+    /// Chỉ InputAuthority gửi, ngay sau khi đã gửi các RPC set dữ liệu ban đầu trong Spawned().
+    /// </summary>
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void RPC_MarkDataSynced()
+    {
+        IsDataSynced = true;
+    }
+
 }

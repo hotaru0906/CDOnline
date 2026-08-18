@@ -6,21 +6,24 @@ using System.Collections.Generic;
 public class GraphicsSettings : MonoBehaviour
 {
     [Header("=== Dropdowns ===")]
+    [Tooltip("3 option (Fullscreen / Windowed / Borderless) được thiết kế SẴN trong Editor. " +
+             "Code KHÔNG sinh options cho dropdown này, chỉ đọc/ghi value. " +
+             "Thứ tự option trong Editor phải khớp với SetDisplayMode(index).")]
     [SerializeField] private TMP_Dropdown displayModeDropdown;
+
+    [Tooltip("Danh sách được sinh động lúc runtime theo Screen.resolutions của máy người chơi. " +
+             "Item hiển thị dùng đúng Template mà bạn thiết kế trong Editor ở dropdown này.")]
     [SerializeField] private TMP_Dropdown resolutionDropdown;
+
+    [Tooltip("Danh sách được sinh động lúc runtime theo QualitySettings.names của project.")]
     [SerializeField] private TMP_Dropdown qualityDropdown;
 
     [Header("=== Toggles ===")]
     [SerializeField] private Toggle vsyncToggle;
     [SerializeField] private Toggle fpsToggle;
 
-    [Header("=== FPS Counter UI ===")]
-    [SerializeField] private TextMeshProUGUI fpsCounterText;
-
     // Private
     private Resolution[] _availableResolutions;
-    private float _fpsTimer;
-    private bool _showFPS;
 
     // ==============================
     //         UNITY EVENTS
@@ -29,28 +32,22 @@ public class GraphicsSettings : MonoBehaviour
     {
         SetupResolutionDropdown();
         SetupQualityDropdown();
-        LoadGraphicsSettings();
-        BindEvents();
-    }
 
-    private void Update()
-    {
-        // Hiển thị FPS Counter
-        if (_showFPS)
-        {
-            _fpsTimer += Time.deltaTime;
-            if (_fpsTimer >= 0.5f) // Cập nhật mỗi 0.5 giây
-            {
-                int fps = Mathf.RoundToInt(1f / Time.deltaTime);
-                fpsCounterText.text = "FPS: " + fps;
-                _fpsTimer = 0f;
-            }
-        }
+        // ✅ Đăng ký listener rồi mới load. Nhưng để chắc chắn setting ĐƯỢC ÁP DỤNG THẬT
+        // (Toggle/Dropdown chỉ bắn onValueChanged khi giá trị thật sự thay đổi),
+        // LoadGraphicsSettings() bên dưới gọi tường minh từng hàm Set... luôn,
+        // không phụ thuộc vào việc sự kiện có tự bắn hay không.
+        BindEvents();
+        LoadGraphicsSettings();
     }
 
     // ==============================
     //          SETUP UI
     // ==============================
+    // ⚠️ KHÔNG có Setup cho displayModeDropdown nữa.
+    // 3 option (Fullscreen / Windowed / Borderless) đã được thiết kế sẵn trong Editor,
+    // code chỉ set/đọc .value ở LoadGraphicsSettings() và SetDisplayMode().
+
     private void SetupResolutionDropdown()
     {
         _availableResolutions = Screen.resolutions;
@@ -65,7 +62,6 @@ public class GraphicsSettings : MonoBehaviour
             string option = $"{res.width} x {res.height} @ {res.refreshRateRatio.value:F0}Hz";
             options.Add(option);
 
-            // Tìm resolution hiện tại
             if (res.width  == Screen.currentResolution.width &&
                 res.height == Screen.currentResolution.height)
             {
@@ -82,7 +78,6 @@ public class GraphicsSettings : MonoBehaviour
     {
         qualityDropdown.ClearOptions();
 
-        // Lấy tên Quality từ Unity Project Settings
         List<string> qualityNames = new List<string>(QualitySettings.names);
         qualityDropdown.AddOptions(qualityNames);
         qualityDropdown.value = QualitySettings.GetQualityLevel();
@@ -103,6 +98,7 @@ public class GraphicsSettings : MonoBehaviour
     // ==============================
 
     // 0: Fullscreen | 1: Windowed | 2: Borderless
+    // Thứ tự này phải khớp với thứ tự 3 option bạn thiết kế trong Editor.
     public void SetDisplayMode(int index)
     {
         switch (index)
@@ -142,8 +138,11 @@ public class GraphicsSettings : MonoBehaviour
 
     public void SetFPSCounter(bool isOn)
     {
-        _showFPS = isOn;
-        fpsCounterText.gameObject.SetActive(isOn);
+        // FPS Counter giờ nằm ở object riêng (FPSCounterDisplay), độc lập với Settings Panel
+        // nên vẫn hiển thị được khi đóng Settings.
+        if (FPSCounterDisplay.Instance != null)
+            FPSCounterDisplay.Instance.SetVisible(isOn);
+
         PlayerPrefs.SetInt("ShowFPS", isOn ? 1 : 0);
     }
 
@@ -152,28 +151,32 @@ public class GraphicsSettings : MonoBehaviour
     // ==============================
     private void LoadGraphicsSettings()
     {
-        // Load Display Mode
+        // Load Display Mode (chỉ set value, KHÔNG đụng vào options đã thiết kế sẵn)
         int displayMode = PlayerPrefs.GetInt("DisplayMode", 0);
         displayModeDropdown.value = displayMode;
-        SetDisplayMode(displayMode);
+        SetDisplayMode(displayMode); // gọi tường minh, không phụ thuộc sự kiện
 
         // Load Resolution
         int resIndex = PlayerPrefs.GetInt("ResolutionIndex",
                         _availableResolutions.Length - 1);
         resolutionDropdown.value = resIndex;
+        SetResolution(resIndex); // gọi tường minh
 
         // Load Quality
         int quality = PlayerPrefs.GetInt("QualityLevel",
                         QualitySettings.GetQualityLevel());
         qualityDropdown.value = quality;
+        SetQuality(quality); // gọi tường minh
 
         // Load VSync
         bool vsync = PlayerPrefs.GetInt("VSync", 1) == 1;
         vsyncToggle.isOn = vsync;
+        SetVSync(vsync); // gọi tường minh — fix chính cho lỗi VSync không được áp dụng thật
 
         // Load FPS Counter
         bool fps = PlayerPrefs.GetInt("ShowFPS", 0) == 1;
         fpsToggle.isOn = fps;
+        SetFPSCounter(fps); // gọi tường minh
     }
 
     // Reset về mặc định
@@ -184,5 +187,12 @@ public class GraphicsSettings : MonoBehaviour
         qualityDropdown.value      = QualitySettings.names.Length - 1;
         vsyncToggle.isOn           = true;
         fpsToggle.isOn             = false;
+
+        // Áp dụng thật sự, không chỉ đổi UI
+        SetDisplayMode(0);
+        SetResolution(_availableResolutions.Length - 1);
+        SetQuality(QualitySettings.names.Length - 1);
+        SetVSync(true);
+        SetFPSCounter(false);
     }
 }

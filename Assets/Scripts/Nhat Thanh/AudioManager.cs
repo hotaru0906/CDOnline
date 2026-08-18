@@ -32,6 +32,9 @@ public class AudioManager : MonoBehaviour
     public float SFXVolume => GetMixerVolume("SFXVolume");
     public bool IsPlayingMinigameBGM => isPlayingMinigameBGM;
     public float FadeDuration { get => fadeDuration; set => fadeDuration = value; }
+    private const string K_MUSIC = "audio_music";       // NEW — khớp key AudioSettings đang dùng
+    private const float DEFAULT_MUSIC_VOL = 0.8f;
+    private float musicTargetDb = 0f;
 
     void Awake()
     {
@@ -43,6 +46,22 @@ public class AudioManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
         SetupAudioSource();
+
+        // NEW — đọc sẵn volume đã lưu, không phụ thuộc AudioSettings chạy trước
+        float savedMusic = PlayerPrefs.GetFloat(K_MUSIC, DEFAULT_MUSIC_VOL);
+        musicTargetDb = LinearToDb(savedMusic);
+        if (audioMixer != null)
+            audioMixer.SetFloat("MusicVolume", musicTargetDb);
+    }
+    private float LinearToDb(float linear)
+    {
+        linear = Mathf.Clamp01(linear);
+        return linear <= 0.0001f ? -80f : Mathf.Log10(linear) * 20f;
+    }
+
+    public void SetMusicTargetDb(float db)   // NEW
+    {
+        musicTargetDb = db;
     }
 
     void Start()
@@ -76,14 +95,6 @@ public class AudioManager : MonoBehaviour
     }
 
     #region Main BGM (Menu / Lobby / Board)
-
-    /// <summary>
-    /// Gọi khi vào Menu, Lobby hoặc Board.
-    /// Nếu đang phát MainBGM rồi thì KHÔNG làm gì (để nhạc chạy liên tục,
-    /// không bị restart mỗi lần đổi giữa Lobby/Board).
-    /// Nếu đang từ Minigame quay về thì fade-out minigame BGM và
-    /// fade-in lại MainBGM đúng tại thời điểm đã lưu trước đó.
-    /// </summary>
     public void EnterMainBGM()
     {
         if (!isBGMOn || bgmSource == null || mainBGM == null) return;
@@ -112,12 +123,6 @@ public class AudioManager : MonoBehaviour
     #endregion
 
     #region Minigame BGM
-
-    /// <summary>
-    /// Gọi khi bắt đầu Playing state của 1 minigame.
-    /// Lưu lại thời điểm MainBGM đang phát dở, rồi fade sang BGM riêng
-    /// của minigame đó (lấy từ MinigameData.minigameBGM).
-    /// </summary>
     public void EnterMinigameBGM(AudioClip minigameClip)
     {
         if (!isBGMOn || bgmSource == null) return;
@@ -194,7 +199,7 @@ public class AudioManager : MonoBehaviour
         audioMixer.SetFloat("MusicVolume", -80f);
         bgmSource?.Play();
         float elapsed = 0f;
-        float targetDb = 0f;
+        float targetDb = musicTargetDb;   // SỬA — thay vì hardcode 0f
 
         while (elapsed < duration)
         {

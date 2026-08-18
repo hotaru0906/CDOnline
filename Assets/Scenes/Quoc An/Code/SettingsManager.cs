@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
+using UnityEngine.SceneManagement;
 
 public class SettingsManager : MonoBehaviour
 {
@@ -26,33 +27,45 @@ public class SettingsManager : MonoBehaviour
 
     [Header("=== Settings Canvas ===")]
     [SerializeField] private GameObject settingsCanvas;
-    [SerializeField] private CanvasGroup settingsCanvasGroup;
 
-    [Header("=== Menu Manager Reference ===")]
-    [SerializeField] private MenuManager menuManager;
+    [Tooltip("UISlideAnimator của panel Settings (ButtonGroup). Chỉ được animate (trượt vào/ra) " +
+             "khi đang ở scene UI Menu, do MenuManager điều khiển. Ở các scene khác, script này " +
+             "sẽ tự ghim vị trí về (0,0) — không animate, không bị kẹt ở vị trí ẩn.")]
+    [SerializeField] private UISlideAnimator settingsPanelAnimator;
 
     [Header("=== Options ===")]
     [SerializeField] private KeyCode closeKey = KeyCode.Escape;
+
+    [Tooltip("Tên scene mà ở đó ESC sẽ KHÔNG tự động bật/tắt Settings " +
+             "(vì MenuManager ở scene này đã tự xử lý nút Settings/Back riêng).")]
+    [SerializeField] private string excludedEscSceneName = "UI menu";
+
+    [Header("=== Persistence ===")]
+    [Tooltip("Giữ SettingsManager tồn tại xuyên suốt các scene (Singleton + DontDestroyOnLoad).")]
+    [SerializeField] private bool persistAcrossScenes = true;
 
     [Header("=== Events ===")]
     public UnityEvent OnSettingsOpened;
     public UnityEvent OnSettingsClosed;
 
-    private GameObject _currentPanel;
-    private bool _isOpen = false;
+    public static SettingsManager Instance { get; private set; }
 
-    public bool IsOpen => _isOpen;
+    public bool IsOpen => settingsCanvas != null && settingsCanvas.activeSelf;
 
     private void Awake()
     {
-        if (settingsCanvasGroup == null && settingsCanvas != null)
+        if (persistAcrossScenes)
         {
-            settingsCanvasGroup = settingsCanvas.GetComponent<CanvasGroup>();
-            if (settingsCanvasGroup == null)
-                settingsCanvasGroup = settingsCanvas.AddComponent<CanvasGroup>();
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
         }
 
-        // Đăng ký listener ở Awake: an toàn hơn Start
         BindButton(btnAudio,    () => SwitchTab(audioPanel));
         BindButton(btnGraphics, () => SwitchTab(graphicsPanel));
         BindButton(btnGameplay, () => SwitchTab(gameplayPanel));
@@ -61,47 +74,92 @@ public class SettingsManager : MonoBehaviour
         BindButton(btnBack,     CloseSettings);
 
         SwitchTab(audioPanel);
-        HideSettingsImmediate();
+        if (settingsCanvas != null)
+            settingsCanvas.SetActive(false);
+
+        // sceneLoaded chỉ bắn cho các scene load SAU thời điểm này,
+        // nên cần tự ghim vị trí ngay cho scene hiện tại lúc khởi động.
+        PinPositionIfOutsideMenu();
+    }
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= HandleSceneLoaded;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+    }
+
+    private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        PinPositionIfOutsideMenu();
+    }
+    private void PinPositionIfOutsideMenu()
+    {
+        if (settingsPanelAnimator == null) return;
+        if (IsInExcludedEscScene()) return; // ở UI Menu để MenuManager tự animate
+
+        settingsPanelAnimator.SetVisiblePositionImmediate();
     }
 
     private void BindButton(Button b, UnityEngine.Events.UnityAction action)
     {
         if (b == null) { Debug.LogWarning("[SettingsManager] Thiếu button trong Inspector."); return; }
-        b.onClick.RemoveAllListeners(); // tránh đăng ký chồng
+        b.onClick.RemoveAllListeners();
         b.onClick.AddListener(action);
     }
 
     private void Update()
     {
-        if (_isOpen && Input.GetKeyDown(closeKey))
+        if (!Input.GetKeyDown(closeKey)) return;
+        if (IsInExcludedEscScene()) return;
+
+        ToggleSettings();
+    }
+
+    private bool IsInExcludedEscScene()
+    {
+        if (string.IsNullOrEmpty(excludedEscSceneName)) return false;
+        return SceneManager.GetActiveScene().name == excludedEscSceneName;
+    }
+
+    public void ToggleSettings()
+    {
+        if (IsOpen)
+        {
+            CursorManager.Instance.HideCursor();
             CloseSettings();
+        }
+        else
+        {
+            CursorManager.Instance.ShowCursor();
+            OpenSettings();
+        }
+         
     }
 
     public void SwitchTab(GameObject targetPanel)
     {
-        if (targetPanel == null || targetPanel == _currentPanel) return;
+        if (audioPanel)    audioPanel.SetActive(targetPanel == audioPanel);
+        if (graphicsPanel) graphicsPanel.SetActive(targetPanel == graphicsPanel);
+        if (gameplayPanel) gameplayPanel.SetActive(targetPanel == gameplayPanel);
 
-        if (audioPanel)    audioPanel.SetActive(false);
-        if (graphicsPanel) graphicsPanel.SetActive(false);
-        if (gameplayPanel) gameplayPanel.SetActive(false);
-
-        targetPanel.SetActive(true);
-        _currentPanel = targetPanel;
-
-        UpdateTabVisual();
+        UpdateTabVisual(targetPanel);
     }
 
-    private void UpdateTabVisual()
+    private void UpdateTabVisual(GameObject activePanel)
     {
-        SetTabSelected(btnAudio,    _currentPanel == audioPanel);
-        SetTabSelected(btnGraphics, _currentPanel == graphicsPanel);
-        SetTabSelected(btnGameplay, _currentPanel == gameplayPanel);
-    }
-
-    private void SetTabSelected(Button b, bool selected)
-    {
-        if (b == null) return;
-        b.interactable = !selected; // tab đang mở thì disable, nhìn là biết ngay
+        if (btnAudio)    btnAudio.interactable    = activePanel != audioPanel;
+        if (btnGraphics) btnGraphics.interactable = activePanel != graphicsPanel;
+        if (btnGameplay) btnGameplay.interactable = activePanel != gameplayPanel;
     }
 
     public void ApplySettings()
@@ -119,47 +177,25 @@ public class SettingsManager : MonoBehaviour
         Debug.Log("[SettingsManager] Settings reset to default.");
     }
 
-    /// <returns>true nếu thật sự mở, false nếu đang mở sẵn</returns>
-    public bool OpenSettings()
+    public void OpenSettings()
     {
-        if (_isOpen) return false;
-        _isOpen = true;
+        if (settingsCanvas == null || IsOpen) return;
 
-        ShowSettingsImmediate();
+        PinPositionIfOutsideMenu(); // đảm bảo panel ở đúng (0,0) trước khi hiện, nếu không phải UI Menu
+
+        settingsCanvas.SetActive(true);
         SwitchTab(audioPanel);
 
         OnSettingsOpened?.Invoke();
-        return true;
     }
 
     public void CloseSettings()
     {
-        if (!_isOpen) return;
-        _isOpen = false;
+        if (settingsCanvas == null || !IsOpen) return;
 
-        ApplySettings();          // lưu luôn khi thoát
-        HideSettingsImmediate();
-
-        if (menuManager != null)
-            menuManager.OnSettingsClosed();
+        ApplySettings();
+        settingsCanvas.SetActive(false);
 
         OnSettingsClosed?.Invoke();
-    }
-
-    private void ShowSettingsImmediate()  => SetCanvasVisible(true);
-    private void HideSettingsImmediate()  => SetCanvasVisible(false);
-
-    private void SetCanvasVisible(bool visible)
-    {
-        if (settingsCanvasGroup != null)
-        {
-            settingsCanvasGroup.alpha          = visible ? 1f : 0f;
-            settingsCanvasGroup.interactable   = visible;
-            settingsCanvasGroup.blocksRaycasts = visible;
-        }
-        else if (settingsCanvas != null)
-        {
-            settingsCanvas.SetActive(visible);
-        }
     }
 }

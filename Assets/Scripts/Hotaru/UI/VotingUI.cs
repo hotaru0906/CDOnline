@@ -20,36 +20,22 @@ public class VotingUI : MonoBehaviour
     [SerializeField] private int maxMinigameCount = 3;
 
     private List<MinigameCardUI> cards = new List<MinigameCardUI>();
-    private bool isInitialized = false;
-
     private void OnEnable()
     {
-        // Kiểm tra cả VotingManager và MinigameVotingManager trước khi subscribe/setup
         if (VotingManager.Instance != null && VotingManager.Instance.IsReady)
-        {
             SubscribeToEvents();
-        }
 
-        if (!isInitialized)
-        {
-            // Delay Setup nếu MinigameVotingManager hoặc VotingManager chưa ready
-            bool minigameReady = MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady;
-            bool votingReady = VotingManager.Instance != null && VotingManager.Instance.IsReady;
+        bool minigameReady = MinigameVotingManager.Instance != null && MinigameVotingManager.Instance.IsReady;
+        bool votingReady = VotingManager.Instance != null && VotingManager.Instance.IsReady;
 
-            if (minigameReady && votingReady)
-            {
-                Setup();
-            }
-            else
-            {
-                // Đợi cả hai managers ready rồi mới setup
-                StartCoroutine(WaitForManagers());
-            }
-        }
-        else if (VotingManager.Instance != null && VotingManager.Instance.IsReady)
+        if (minigameReady && votingReady)
         {
-            // Chỉ gọi ResetUI khi VotingManager đã ready
+            Setup();   // luôn rebuild mỗi lần enable, bỏ điều kiện isInitialized
             ResetUI();
+        }
+        else
+        {
+            StartCoroutine(WaitForManagers());
         }
     }
 
@@ -65,11 +51,7 @@ public class VotingUI : MonoBehaviour
         // Subscribe events
         SubscribeToEvents();
 
-        if (!isInitialized)
-        {
-            Setup();
-        }
-
+        Setup();
         ResetUI();
     }
 
@@ -133,7 +115,6 @@ public class VotingUI : MonoBehaviour
             {
                 statusText.text = "No minigame available to vote.";
             }
-            isInitialized = true;
             return;
         }
 
@@ -160,8 +141,6 @@ public class VotingUI : MonoBehaviour
 
             cards.Add(card);
         }
-
-        isInitialized = true;
     }
 
     private void ResetUI()

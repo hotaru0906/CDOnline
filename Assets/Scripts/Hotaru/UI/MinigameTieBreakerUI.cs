@@ -32,12 +32,7 @@ public class MinigameTieBreakerUI : MonoBehaviour
     private void OnEnable()
     {
         TrySubscribe();
-        if (!subscribed)
-        {
-            StartCoroutine(WaitAndSubscribe());
-        }
     }
-
     private void OnDisable()
     {
         if (spinCoroutine != null)
@@ -45,8 +40,8 @@ public class MinigameTieBreakerUI : MonoBehaviour
             StopCoroutine(spinCoroutine);
             spinCoroutine = null;
         }
+        Unsubscribe();
     }
-
     private void OnDestroy()
     {
         Unsubscribe();
@@ -60,30 +55,26 @@ public class MinigameTieBreakerUI : MonoBehaviour
             yield return null;
         }
     }
-
     private void TrySubscribe()
     {
-        if (subscribed)
-            return;
-
         if (VotingManager.Instance == null || !VotingManager.Instance.IsReady)
+        {
+            StartCoroutine(WaitAndSubscribe());
             return;
+        }
 
+        Unsubscribe(); // gỡ trước (an toàn nếu lỡ subscribe 2 lần) rồi mới đăng ký lại
         VotingManager.Instance.OnTieBreakStarted += HandleTieBreakStarted;
         VotingManager.Instance.OnTieBreakEnded += HandleTieBreakEnded;
         subscribed = true;
     }
-
     private void Unsubscribe()
     {
-        if (!subscribed || VotingManager.Instance == null)
-            return;
-
+        if (VotingManager.Instance == null) { subscribed = false; return; }
         VotingManager.Instance.OnTieBreakStarted -= HandleTieBreakStarted;
         VotingManager.Instance.OnTieBreakEnded -= HandleTieBreakEnded;
         subscribed = false;
     }
-
     private void HandleTieBreakStarted(int[] candidateIndices, int winnerIndex, float delayBeforeSpin, float spinDurationFromHost)
     {
         PopulateCandidates(candidateIndices);
@@ -91,6 +82,7 @@ public class MinigameTieBreakerUI : MonoBehaviour
         if (spinCoroutine != null)
             StopCoroutine(spinCoroutine);
 
+        Debug.Log($"[MinigameTieBreakerUI] HandleTieBreakStarted fired. subscribed={subscribed}");
         spinCoroutine = StartCoroutine(RunSpin(candidateIndices, winnerIndex, delayBeforeSpin, spinDurationFromHost));
     }
 
