@@ -9,17 +9,22 @@ public class PlayerInfoItemUI : MonoBehaviour
 {
     [Header("UI References")]
     [SerializeField] private TMP_Text playerNameText;
-    [SerializeField] private TMP_Text statusText;
+    [SerializeField] private Image statusImage;
     [SerializeField] private Image characterIcon;
+    [SerializeField] private Image backgroundImage;
     [SerializeField] private GameObject localPlayerHighlight;
 
     [Header("Character Icons")]
     [Tooltip("Index khớp với CharacterIndex (0-3)")]
     [SerializeField] private Sprite[] characterIcons;
 
-    [Header("Colors")]
-    [SerializeField] private Color readyColor = Color.green;
-    [SerializeField] private Color notReadyColor = Color.gray;
+    [Header("Character Backgrounds")]
+    [Tooltip("Index khớp với CharacterIndex (0-3). Drag từng background tương ứng: Panda, Ếch, Thỏ, Chồn")]
+    [SerializeField] private Sprite[] characterBackgrounds;
+
+    [Header("Status Images")]
+    [SerializeField] private Sprite readySprite;
+    [SerializeField] private Sprite notReadySprite;
 
     private PlayerNetworkData _playerData;
 
@@ -63,17 +68,32 @@ public class PlayerInfoItemUI : MonoBehaviour
         if (playerNameText != null)
             playerNameText.text = _playerData.PlayerName.ToString();
 
-        // Ready status
-        if (statusText != null)
+        // Ready status image
+        if (statusImage != null)
         {
-            statusText.text = _playerData.IsReady ? "READY" : "NOT READY";
-            statusText.color = _playerData.IsReady ? readyColor : notReadyColor;
+            statusImage.sprite = _playerData.IsReady ? readySprite : notReadySprite;
+            statusImage.enabled = statusImage.sprite != null;
+        }
+
+        int index = _playerData.CharacterIndex;
+
+        // Background theo CharacterIndex
+        if (backgroundImage != null)
+        {
+            if (index >= 0 && index < characterBackgrounds.Length && characterBackgrounds[index] != null)
+            {
+                backgroundImage.sprite = characterBackgrounds[index];
+                backgroundImage.enabled = true;
+            }
+            else if (backgroundImage.sprite == null)
+            {
+                backgroundImage.enabled = false;
+            }
         }
 
         // Icon theo CharacterIndex
         if (characterIcon != null && characterIcons != null)
         {
-            int index = _playerData.CharacterIndex;
             if (index >= 0 && index < characterIcons.Length && characterIcons[index] != null)
             {
                 characterIcon.sprite = characterIcons[index];

@@ -30430,8 +30430,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 489b2161e6d944dce8caffd11eba9acf, type: 3}
-  m_Type: 1
+  m_Sprite: {fileID: 21300000, guid: 713f1a17d7745c24da8a209b6b6969d5, type: 3}
+  m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -31013,6 +31013,8 @@ GameObject:
   - component: {fileID: 1225893039}
   - component: {fileID: 1225893038}
   - component: {fileID: 1225893037}
+  - component: {fileID: 1225893040}
+  - component: {fileID: 1225893041}
   m_Layer: 5
   m_Name: Force Button
   m_TagString: Untagged
@@ -31104,8 +31106,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 489b2161e6d944dce8caffd11eba9acf, type: 3}
-  m_Type: 1
+  m_Sprite: {fileID: 21300000, guid: 7bf4d3954bd35cb4b981b43cd0368c7a, type: 3}
+  m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -31122,6 +31124,42 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1225893035}
   m_CullTransparentMesh: 1
+--- !u!95 &1225893040
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1225893035}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 7e4c9903803670747b12e7cf5b2bc879, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &1225893041
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1225893035}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c67f65d7519e6340a17807e46fc10fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  hoverScale: 1.1
+  scaleDuration: 0.2
 --- !u!1001 &1226567065
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -45102,6 +45140,8 @@ GameObject:
   - component: {fileID: 1893569500}
   - component: {fileID: 1893569499}
   - component: {fileID: 1893569501}
+  - component: {fileID: 1893569502}
+  - component: {fileID: 1893569503}
   m_Layer: 5
   m_Name: Start Button
   m_TagString: Untagged
@@ -45149,8 +45189,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 489b2161e6d944dce8caffd11eba9acf, type: 3}
-  m_Type: 1
+  m_Sprite: {fileID: 21300000, guid: 713f1a17d7745c24da8a209b6b6969d5, type: 3}
+  m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -45211,6 +45251,42 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!95 &1893569502
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1893569497}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 36992caa803c45544b882994596c6408, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &1893569503
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1893569497}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c67f65d7519e6340a17807e46fc10fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  hoverScale: 1.1
+  scaleDuration: 0.2
 --- !u!1001 &1894096233
 PrefabInstance:
   m_ObjectHideFlags: 0
