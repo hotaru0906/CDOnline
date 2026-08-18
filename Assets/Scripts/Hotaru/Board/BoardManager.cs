@@ -42,6 +42,8 @@ public class BoardManager : NetworkBehaviour
     [Header("Gamble Wheel")]
     [SerializeField] private BoardGambleWheelUI gambleWheelUI;
     [SerializeField] private GameObject gambleWheelRoot;
+    private static readonly int[] GambleGainIndices = { 0, 2, 4 };
+    private static readonly int[] GambleLoseIndices = { 1, 3, 5 };
 
     [Header("Debug")]
     [SerializeField] private bool showDebugPanel = true;
@@ -116,6 +118,7 @@ public class BoardManager : NetworkBehaviour
 
     // Local client UI state
     private bool _itemUsedThisTurn = false;
+    private int _pushBackUsedCount = 0;
     private bool _waitingForMyItemTarget = false;
     private bool _waitingForMyStealTarget = false;
     private System.Collections.Generic.List<int> _eligibleItemTargets = new();
@@ -507,6 +510,7 @@ public class BoardManager : NetworkBehaviour
         {
             _waitingForMyRoll = true;
             _itemUsedThisTurn = false;
+            _pushBackUsedCount = 0;
             _waitingForMyItemTarget = false;
             BoardYourTurnUI.Instance?.Show();
         }
@@ -654,8 +658,21 @@ public class BoardManager : NetworkBehaviour
     #region Item Use
     public void RequestUseItem(int itemSlot, BoardItemEffect effect)
     {
-        if (_itemUsedThisTurn) return;
         if (BoardState != BoardPhaseState.WaitingForRoll) return;
+
+        if (effect == BoardItemEffect.RushForward)
+        {
+            // không giới hạn — luôn được phép dùng
+        }
+        else if (effect == BoardItemEffect.PushBack)
+        {
+            if (_pushBackUsedCount >= 2) return; // đã dùng đủ 2 lần
+            if (_itemUsedThisTurn && _pushBackUsedCount == 0) return; // đã dùng item khác trước đó rồi
+        }
+        else
+        {
+            if (_itemUsedThisTurn) return; // Shield / PositionSwap: 1 lần/turn
+        }
 
         int myId = Runner?.LocalPlayer.PlayerId ?? -1;
         if (myId < 0) return;
@@ -946,10 +963,24 @@ public class BoardManager : NetworkBehaviour
 
         _lastTileMessage = $"P{userId} dùng: {effName}!";
         _lastTileMessageTimer = tileResolveDuration;
+        BoardSfxLibrary.Current?.PlayItemUsed(effect);
 
         if (Runner != null && Runner.LocalPlayer.PlayerId == userId)
         {
-            _itemUsedThisTurn = true;
+            if (effect == BoardItemEffect.RushForward)
+            {
+                // không đụng tới _itemUsedThisTurn — dùng thoải mái
+            }
+            else if (effect == BoardItemEffect.PushBack)
+            {
+                _pushBackUsedCount++;
+                _itemUsedThisTurn = true; // khóa các item khác ngay từ lần đầu, PushBack tự bypass ở bước 3
+            }
+            else
+            {
+                _itemUsedThisTurn = true;
+            }
+
             _waitingForMyItemTarget = false;
             _isSelectingTarget = false;
         }
@@ -966,6 +997,7 @@ public class BoardManager : NetworkBehaviour
     {
         _lastTileMessage = $"P{defenderId} SHIELD blocked P{attackerId}!";
         _lastTileMessageTimer = tileResolveDuration;
+        BoardSfxLibrary.Current?.PlayShieldBlocked();
 
         if (Runner != null)
         {
@@ -1193,7 +1225,7 @@ public class BoardManager : NetworkBehaviour
                     }
                     else
                     {
-                        // Nổ trước, đợi 0.5f rồi mới đẩy lùi
+                        BoardSfxLibrary.Current?.PlayTrapExplode();
                         if (token != null && trapTile != null)
                             trapTile.Trigger(token.transform.position);
 
@@ -1233,7 +1265,7 @@ public class BoardManager : NetworkBehaviour
             case TileType.Gamble:
                 ResolveGamble(playerId);
                 RPC_PlayerLanded(playerId, finalNodeID, tileType);
-                yield return new WaitForSeconds(tileResolveDuration);
+                yield return new WaitForSeconds(3.5f);
                 break;
             default:
                 RPC_PlayerLanded(playerId, finalNodeID, tileType);
@@ -1351,7 +1383,10 @@ public class BoardManager : NetworkBehaviour
         var inv = PlayerItemInventory.GetForPlayer(playerId);
         if (inv == null) return;
 
-        int resultIndex = Random.value >= 0.5f ? 0 : 3;
+        bool win = Random.value >= 0.5f;
+        int[] pool = win ? GambleGainIndices : GambleLoseIndices;
+        int resultIndex = pool[Random.Range(0, pool.Length)];
+
         RPC_ShowGambleWheel(playerId, resultIndex);
     }
 
@@ -1380,13 +1415,22 @@ public class BoardManager : NetworkBehaviour
         var inv = PlayerItemInventory.GetForPlayer(playerId);
         if (inv == null) return;
 
-        bool win = resultIndex < 3;
+        bool win = resultIndex == 0 || resultIndex == 2 || resultIndex == 4;
         if (win)
         {
             if (boardItemPool == null) return;
             var item = boardItemPool.GetRandom();
             if (item == null) return;
             if (!inv.AddBoardItem(item.effectType)) { RPC_TileMessage(playerId, "GAMBLE WIN — FULL!"); return; }
+
+            var ui = FindFirstObjectByType<BoardInventoryUI>();
+            if (ui != null)
+            {
+                ui.RefreshAfterRestore();
+            }
+
+            RPC_ItemGranted(playerId, (int)item.effectType);
+
             RPC_GambleResult(playerId, true, item.itemName);
         }
         else
@@ -1488,6 +1532,7 @@ public class BoardManager : NetworkBehaviour
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_PlayerLanded(int playerId, int nodeID, TileType tileType)
     {
+        BoardSfxLibrary.Current?.PlayTileLanded(tileType);
         string msg = tileType switch
         {
             TileType.Item => "GOT ITEM!",
@@ -1544,6 +1589,7 @@ public class BoardManager : NetworkBehaviour
     private void RPC_StealResult(int stealerId, int targetId, int itemEffect)
     {
         BoardCameraController.Instance?.FocusOnPlayer(targetId);
+        BoardSfxLibrary.Current?.PlayStealResult(itemEffect >= 0);
 
         string itemName = itemEffect >= 0
             ? (BoardItemPool.Current?.GetByEffect((BoardItemEffect)itemEffect)?.itemName ?? ((BoardItemEffect)itemEffect).ToString())
@@ -1586,6 +1632,7 @@ public class BoardManager : NetworkBehaviour
     {
         _lastTileMessage = won ? $"P{playerId} GAMBLE WIN! Got: {itemName}" : $"P{playerId} GAMBLE LOSE! Lost: {itemName}";
         _lastTileMessageTimer = tileResolveDuration;
+        BoardSfxLibrary.Current?.PlayGambleResult(won);
 
         if (Runner != null && Runner.LocalPlayer.PlayerId == playerId)
             _reactionLine = won ? "(*_*) LUCKY!" : "(T_T) UNLUCKY!";
@@ -1635,8 +1682,9 @@ public class BoardManager : NetworkBehaviour
                 inv.BoardItems.Get(0),
                 inv.BoardItems.Get(1),
                 inv.BoardItems.Get(2),
-                inv.BoardItems.Get(3));
-
+                inv.BoardItems.Get(3),
+                inv.BoardItems.Get(4),   // NEW
+                inv.BoardItems.Get(5));
         }
         BoardState = BoardPhaseState.BoardComplete;
         RPC_BoardComplete();

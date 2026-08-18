@@ -363,6 +363,7 @@ public class VotingManager : NetworkBehaviour
         if (GameManager.Instance != null)
             GameManager.Instance.ShowMinigameTieBreakerPanel();
 
+        Debug.Log($"[VotingManager] RPC_OnTieBreakStarted RECEIVED. HasStateAuthority={HasStateAuthority}, candidates=[{string.Join(",", candidateIndices)}], winner={winnerIndex}");
         OnTieBreakStarted?.Invoke(candidateIndices, winnerIndex, delayBeforeSpin, spinDuration);
     }
 

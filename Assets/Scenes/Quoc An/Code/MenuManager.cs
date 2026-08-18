@@ -26,9 +26,6 @@ public class MenuManager : MonoBehaviour
     [Header("Animation Settings")]
     [SerializeField] private float slideAnimationDuration = 0.5f;
 
-    [Header("Settings")]
-    [SerializeField] private SettingsManager settingsManager;
-
     [Header("Lobby References")]
     [SerializeField] private LobbyRunner lobbyRunner;
     [SerializeField] private TMP_InputField roomNameInput;
@@ -36,6 +33,7 @@ public class MenuManager : MonoBehaviour
     [SerializeField] private Transform roomListParent;
     [SerializeField] private RoomItems roomListItemPrefab;
     [SerializeField] private Button createRoomButton;
+    [SerializeField] private Button quitButton;
 
     [Header("Customization")]
     [SerializeField] private CustomizationManager customizationManager;
@@ -45,6 +43,9 @@ public class MenuManager : MonoBehaviour
     private readonly Stack<GameObject> _screenHistory = new();
     private readonly Stack<UISlideAnimator> _animatorHistory = new();
     private readonly List<RoomItems> _roomItems = new();
+
+    // Settings giờ là singleton (DontDestroyOnLoad), không kéo-thả trong Inspector nữa.
+    private SettingsManager Settings => SettingsManager.Instance;
 
     private enum SlideDirection { Forward, Backward }
 
@@ -64,6 +65,34 @@ public class MenuManager : MonoBehaviour
         InitializeScreens();
         SetupButtons();
         SetupCustomization();
+        SubscribeToSettings();
+    }
+
+    private void OnDestroy()
+    {
+        UnsubscribeFromSettings();
+
+        if (customizationManager != null)
+            customizationManager.OnBackToMenu -= OnBackFromCustomization;
+    }
+
+    private void SubscribeToSettings()
+    {
+        if (Settings == null)
+        {
+            return;
+        }
+
+        Settings.OnSettingsOpened.AddListener(HandleSettingsOpened);
+        Settings.OnSettingsClosed.AddListener(HandleSettingsClosed);
+    }
+
+    private void UnsubscribeFromSettings()
+    {
+        if (Settings == null) return;
+
+        Settings.OnSettingsOpened.RemoveListener(HandleSettingsOpened);
+        Settings.OnSettingsClosed.RemoveListener(HandleSettingsClosed);
     }
 
     private void InitializeScreens()
@@ -88,7 +117,7 @@ public class MenuManager : MonoBehaviour
         _currentScreen = canvasMainMenu;
         _currentAnimator = mainMenuAnimator;
         canvasMainMenu.SetActive(true);
-        
+
         // ✅ Đảm bảo main menu ở vị trí visible
         if (mainMenuAnimator != null)
             mainMenuAnimator.SetVisiblePositionImmediate();
@@ -98,8 +127,9 @@ public class MenuManager : MonoBehaviour
     {
         if (createRoomButton != null)
             createRoomButton.onClick.AddListener(CreateRoom);
+        if (quitButton != null)
+            quitButton.onClick.AddListener(QuitGame);
     }
-
     private void SetupCustomization()
     {
         if (customizationManager != null)
@@ -108,33 +138,19 @@ public class MenuManager : MonoBehaviour
         }
     }
 
-    private void OnDestroy()
-    {
-        if (customizationManager != null)
-        {
-            customizationManager.OnBackToMenu -= OnBackFromCustomization;
-        }
-    }
-
     #region Screen Navigation
     public void ShowPlayOnline() => SlideScreen(canvasPlayOnline, playOnlineAnimator, SlideDirection.Forward);
     public void ShowFindLobby() => SlideScreen(canvasFindLobby, findLobbyAnimator, SlideDirection.Forward);
     public void ShowCreateRoom() => SlideScreen(canvasCreateRoom, createRoomAnimator, SlideDirection.Forward);
 
+    /// <summary>
+    /// Gọi khi bấm nút Settings trong menu.
+    /// </summary>
     public void ShowSettings()
     {
-        if (settingsManager == null) return;
+        if (Settings == null) return;
 
-        if (!settingsManager.OpenSettings())
-            return;
-
-        if (_currentAnimator != null)
-            _currentAnimator.HideAsync();
-
-        if (settingsAnimator != null)
-            settingsAnimator.ShowAsync();
-
-        OnSettingsOpened();
+        Settings.OpenSettings();
     }
 
     private void SetScreenVisible(GameObject screen, bool visible)
@@ -154,15 +170,18 @@ public class MenuManager : MonoBehaviour
         }
     }
 
-    public void OnSettingsOpened()
+    private void HandleSettingsOpened()
     {
         SetScreenVisible(_currentScreen, false);
 
         if (_currentAnimator != null)
             _currentAnimator.HideAsync();
+
+        if (settingsAnimator != null)
+            settingsAnimator.ShowAsync();
     }
 
-    public void OnSettingsClosed()
+    private void HandleSettingsClosed()
     {
         SetScreenVisible(_currentScreen, true);
 
@@ -190,10 +209,9 @@ public class MenuManager : MonoBehaviour
 
     public void GoBack()
     {
-        // Nếu Settings đang mở thì Back = đóng Settings
-        if (settingsManager != null && settingsManager.IsOpen)
+        if (Settings != null && Settings.IsOpen)
         {
-            settingsManager.CloseSettings();
+            Settings.CloseSettings();
             return;
         }
 
@@ -204,14 +222,10 @@ public class MenuManager : MonoBehaviour
 
         GameObject previousScreen = _screenHistory.Pop();
         UISlideAnimator previousAnimator = _animatorHistory.Pop();
-        
-        // ✅ Không push vào history lần 2 (vì đã pop rồi)
+
         SlideScreen(previousScreen, previousAnimator, SlideDirection.Backward, addToHistory: false);
     }
 
-    /// <summary>
-    /// Slide từ screen hiện tại sang screen mới với animation
-    /// </summary>
     private void SlideScreen(GameObject targetScreen, UISlideAnimator targetAnimator, SlideDirection direction, bool addToHistory = true)
     {
         if (targetScreen == null || targetScreen == _currentScreen) return;
@@ -224,14 +238,11 @@ public class MenuManager : MonoBehaviour
         }
 
         StartCoroutine(AnimateScreenTransition(_currentScreen, _currentAnimator, targetScreen, targetAnimator, direction));
-        
+
         _currentScreen = targetScreen;
         _currentAnimator = targetAnimator;
     }
 
-    /// <summary>
-    /// Animate transition giữa 2 screens
-    /// </summary>
     private IEnumerator AnimateScreenTransition(
         GameObject fromScreen, UISlideAnimator fromAnimator,
         GameObject toScreen, UISlideAnimator toAnimator,
@@ -299,5 +310,9 @@ public class MenuManager : MonoBehaviour
                 Destroy(item.gameObject);
         }
         _roomItems.Clear();
+    }
+    private void QuitGame()
+    {
+        Application.Quit();
     }
 }

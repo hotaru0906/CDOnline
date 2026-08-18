@@ -51,9 +51,6 @@ public class CursorManager : MonoBehaviour
 
         Cursor.visible = visible;
         Cursor.lockState = lockMode;
-
-        Debug.Log($"[CursorManager] Visible: {visible} | LockMode: {lockMode}");
-
     }
     public void ShowCursor()
     {

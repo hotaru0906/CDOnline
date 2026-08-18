@@ -12,7 +12,7 @@ using System.Collections.Generic;
 /// </summary>
 public class PlayerItemInventory : NetworkBehaviour
 {
-    private const int MAX_BOARD_SLOTS = 4;
+    private const int MAX_BOARD_SLOTS = 6;
     private const int MAX_ROULETTE_SLOTS = 8;
 
     /// <summary>Board items (BoardItemEffect). -1 = slot trống.</summary>
