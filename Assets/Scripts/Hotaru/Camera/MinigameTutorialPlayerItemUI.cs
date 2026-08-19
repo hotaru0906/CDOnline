@@ -6,18 +6,25 @@ using Fusion;
 public class MinigameTutorialPlayerItemUI : MonoBehaviour
 {
     [SerializeField] private TMP_Text playerNameText;
-    [SerializeField] private TMP_Text statusText;
+    [SerializeField] private Image statusImage;
     [SerializeField] private Image characterIcon;
+    [SerializeField] private Image backgroundImage;
 
+    [Header("Character Icons")]
     [Tooltip("Index khớp với CharacterIndex (0-3)")]
     [SerializeField] private Sprite[] characterIcons;
+
+    [Header("Character Backgrounds")]
+    [Tooltip("Index khớp với CharacterIndex (0-3): Panda, Ếch, Thỏ, Chồn")]
+    [SerializeField] private Sprite[] characterBackgrounds;
+
+    [Header("Ready Status Sprites")]
+    [SerializeField] private Sprite readySprite;
+    [SerializeField] private Sprite notReadySprite;
 
     [Tooltip("Icon hiển thị khi dữ liệu player CHƯA sync xong (placeholder). " +
              "Nếu để trống sẽ dùng characterIcons[0] làm mặc định.")]
     [SerializeField] private Sprite defaultIcon;
-
-    [SerializeField] private Color readyColor = Color.green;
-    [SerializeField] private Color notReadyColor = Color.gray;
 
     private PlayerNetworkData _playerData;
 
@@ -67,15 +74,32 @@ public class MinigameTutorialPlayerItemUI : MonoBehaviour
             }
         }
 
+        // --- Background ---
+        if (backgroundImage != null && characterBackgrounds != null && characterBackgrounds.Length > 0)
+        {
+            int index = dataSynced ? _playerData.CharacterIndex : 0;
+
+            if (index >= 0 && index < characterBackgrounds.Length && characterBackgrounds[index] != null)
+            {
+                backgroundImage.sprite = characterBackgrounds[index];
+                backgroundImage.enabled = true;
+            }
+            else
+            {
+                backgroundImage.enabled = false;
+            }
+        }
+
         // --- Status ---
         // Chưa sync dữ liệu => luôn NOT READY, không quan tâm PlayerController đã spawn hay chưa.
         bool isReady = dataSynced && IsPlayerLoaded(_playerData.Object.InputAuthority);
 
-        if (statusText != null)
+        if (statusImage != null)
         {
-            statusText.text = isReady ? "READY" : "NOT READY";
-            statusText.color = isReady ? readyColor : notReadyColor;
+            statusImage.sprite = isReady ? readySprite : notReadySprite;
+            statusImage.enabled = statusImage.sprite != null;
         }
+
     }
 
     private bool IsPlayerLoaded(PlayerRef playerRef)
