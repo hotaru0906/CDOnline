@@ -12,6 +12,13 @@ using UnityEngine;
 ///   - Các loại khác: sau khi chạm đất mới bắt đầu đếm despawn; hết giờ chưa nhặt = biến mất.
 ///
 /// Pickup: host OverlapSphere quanh vị trí hiện tại mỗi tick khi đã landed (trừ Bomb).
+///
+/// FIX ĐỒNG BỘ VFX/SFX: Khi nhặt item hoặc bomb nổ, KHÔNG despawn object ngay lập tức
+/// trong cùng tick với việc gọi RPC. Nếu despawn ngay, network object có thể bị hủy trên
+/// client trước (hoặc cùng lúc) khi RPC target nó tới, khiến RPC bị bỏ qua trên client
+/// (chỉ host thấy vì RPC chạy local đồng bộ ngay lúc gọi). Giải pháp: đặt Consumed = true,
+/// gọi RPC, rồi dùng DespawnTimer (TickTimer networked) để trì hoãn Runner.Despawn thêm
+/// một khoảng ngắn (mặc định 0.2s) — đủ thời gian để RPC replicate tới toàn bộ client.
 /// </summary>
 public class MG7Item : NetworkBehaviour
 {
@@ -50,6 +57,10 @@ public class MG7Item : NetworkBehaviour
     [SerializeField] private ParticleSystem explosionVFX;
     [SerializeField] private AudioSource pickupOrExplodeAudio;
 
+    [Header("Despawn Delay (fix đồng bộ RPC)")]
+    [Tooltip("Thời gian chờ trước khi despawn object sau khi Consumed, để đảm bảo RPC VFX/SFX kịp tới mọi client.")]
+    [SerializeField] private float despawnDelayAfterConsumed = 0.2f;
+
     // ----------------------------------------------------------------
     //  Networked State
     // ----------------------------------------------------------------
@@ -61,6 +72,7 @@ public class MG7Item : NetworkBehaviour
     [Networked] public NetworkBool HasLanded { get; private set; }
     [Networked] private NetworkBool Consumed { get; set; }
     [Networked] private float LifeTimer { get; set; } // fuse (Bomb) hoặc despawn countdown (others)
+    [Networked] private TickTimer DespawnTimer { get; set; } // trì hoãn despawn sau khi Consumed
 
     // ----------------------------------------------------------------
     //  Lifecycle
@@ -76,7 +88,18 @@ public class MG7Item : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        if (!HasStateAuthority || Consumed) return;
+        if (!HasStateAuthority) return;
+
+        // Đã Consumed (nhặt xong hoặc nổ xong) -> chỉ chờ hết delay rồi despawn thật sự.
+        // Không return sớm trước đoạn này ở bất kỳ nhánh nào khác để tránh double-despawn.
+        if (Consumed)
+        {
+            if (DespawnTimer.Expired(Runner))
+            {
+                Runner.Despawn(Object);
+            }
+            return;
+        }
 
         // Bomb: fuse chạy ngay từ lúc spawn, độc lập với việc rơi/landed
         if (itemType == MG7ItemType.Bomb)
@@ -179,9 +202,13 @@ public class MG7Item : NetworkBehaviour
             if (data == null || data.IsEliminated) continue;
 
             ApplyPickupEffect(pc, data);
+
+            // Đánh dấu đã tiêu thụ, phát RPC ngay, nhưng KHÔNG despawn ngay lập tức.
+            // DespawnTimer sẽ trì hoãn việc despawn thật sự vài trăm ms để RPC kịp
+            // replicate tới toàn bộ client trước khi object biến mất khỏi network.
             Consumed = true;
             RPC_PlayPickupVFX();
-            Runner.Despawn(Object);
+            DespawnTimer = TickTimer.CreateFromSeconds(Runner, despawnDelayAfterConsumed);
             return; // chỉ 1 người nhặt được, ai chạm trước tính người đó
         }
     }
@@ -242,8 +269,6 @@ public class MG7Item : NetworkBehaviour
 
     private void Explode()
     {
-        Consumed = true;
-
         Collider[] hits = Physics.OverlapSphere(NetworkPosition, bombExplosionRadius);
         foreach (var col in hits)
         {
@@ -257,12 +282,15 @@ public class MG7Item : NetworkBehaviour
             Debug.Log($"[MG7Item] Bomb nổ trúng P{pc.Object.InputAuthority} -{bombScorePenalty}");
         }
 
+        // Cùng cơ chế trì hoãn despawn như CheckPickup(), để RPC nổ kịp tới mọi client.
+        Consumed = true;
         RPC_PlayExplosionVFX();
-        Runner.Despawn(Object);
+        DespawnTimer = TickTimer.CreateFromSeconds(Runner, despawnDelayAfterConsumed);
     }
 
     private void DespawnUnpicked()
     {
+        // Item hết hạn mà không ai nhặt -> không có VFX/RPC nào cần chờ, despawn ngay được.
         Consumed = true;
         Runner.Despawn(Object);
     }
