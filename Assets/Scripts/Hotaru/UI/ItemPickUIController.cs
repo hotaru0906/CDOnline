@@ -11,6 +11,10 @@ public class ItemPickUIController : MonoBehaviour
     [SerializeField] private TMP_Text turnAnnouncementText; // "[Name] is picking a card"
     [SerializeField] private TMP_Text timerText;
 
+    [Header("Text Panels")]
+    [SerializeField] private GameObject announcementTextPanel;
+    [SerializeField] private GameObject timerTextPanel;
+
     [Header("SFX")]
     [SerializeField] private AudioClip flipCardSfx; // MỚI: âm thanh lật bài, chỉ người lật nghe
 
@@ -18,6 +22,8 @@ public class ItemPickUIController : MonoBehaviour
 
     private void OnEnable()
     {
+        SetPanelVisible(announcementTextPanel, false);
+        SetPanelVisible(timerTextPanel, false);
         TrySubscribe();
         RefreshLocalTop1Flag();
         SyncCurrentStateImmediately();
@@ -56,6 +62,9 @@ public class ItemPickUIController : MonoBehaviour
     }
     private void OnDisable()
     {
+        SetPanelVisible(announcementTextPanel, false);
+        SetPanelVisible(timerTextPanel, false);
+
         if (GameManager.Instance == null) return;
         GameManager.Instance.OnItemPickPoolChanged -= HandlePoolChanged;
         GameManager.Instance.OnItemPickTurnStarted -= HandleTurnStarted;
@@ -147,6 +156,8 @@ public class ItemPickUIController : MonoBehaviour
         if (turnAnnouncementText != null)
             turnAnnouncementText.text = $"{displayName} is picking a card";
 
+        SetPanelVisible(announcementTextPanel, true);
+
         foreach (var card in cards)
         {
             if (card == null) continue;
@@ -158,6 +169,7 @@ public class ItemPickUIController : MonoBehaviour
     private void HandleTimerTick(int remainingSeconds)
     {
         if (timerText != null) timerText.text = remainingSeconds.ToString();
+        SetPanelVisible(timerTextPanel, true);
     }
 
     private void HandleItemPicked(int playerId, int slotIndex, BoardItemEffect effect)
@@ -190,6 +202,14 @@ public class ItemPickUIController : MonoBehaviour
     {
         if (turnAnnouncementText != null) turnAnnouncementText.text = string.Empty;
         if (timerText != null) timerText.text = string.Empty;
+        SetPanelVisible(announcementTextPanel, false);
+        SetPanelVisible(timerTextPanel, false);
+    }
+
+    private void SetPanelVisible(GameObject panel, bool visible)
+    {
+        if (panel != null)
+            panel.SetActive(visible);
     }
 
     private void OnCardClicked(int slotIndex)
