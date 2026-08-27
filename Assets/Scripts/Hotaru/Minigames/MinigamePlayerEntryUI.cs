@@ -6,6 +6,9 @@ public class MinigamePlayerEntryUI : MonoBehaviour
 {
     [SerializeField] private Image iconImage;
     [SerializeField] private Sprite[] characterAvatars;
+    [Header("Character Backgrounds")]
+    [Tooltip("Index khớp với CharacterIndex (0-3): Panda, Chồn, Thỏ, Ếch")]
+    [SerializeField] private Sprite[] characterBackgrounds;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text livesText;
     [SerializeField] private TMP_Text scoreText;
@@ -15,6 +18,16 @@ public class MinigamePlayerEntryUI : MonoBehaviour
 
     // runtime id for lookup
     public int PlayerId { get; private set; } = -1;
+
+    private void Awake()
+    {
+        if (backgroundImage == null)
+        {
+            Transform background = transform.Find("Background");
+            if (background != null)
+                backgroundImage = background.GetComponent<Image>();
+        }
+    }
 
     public void SetData(
         int playerId,
@@ -36,10 +49,10 @@ public class MinigamePlayerEntryUI : MonoBehaviour
             scoreText.text = score.ToString();
 
         if (iconImage != null)
-            iconImage.color = Color.white;;
+            iconImage.color = Color.white;
 
         if (backgroundImage != null)
-            backgroundImage.color = slotColor;
+            backgroundImage.color = Color.white;
 
         SetHP(lives);
         SetEliminated(isEliminated);
@@ -68,14 +81,23 @@ public class MinigamePlayerEntryUI : MonoBehaviour
 
     public void SetCharacterAvatar(int characterIndex)
     {
-        if (iconImage == null)
+        if (characterIndex < 0)
             return;
 
-        if (characterIndex < 0 ||
-            characterIndex >= characterAvatars.Length)
-            return;
+        if (iconImage != null && characterAvatars != null &&
+            characterIndex < characterAvatars.Length &&
+            characterAvatars[characterIndex] != null)
+        {
+            iconImage.sprite = characterAvatars[characterIndex];
+        }
 
-        iconImage.sprite = characterAvatars[characterIndex];
+        if (backgroundImage != null && characterBackgrounds != null &&
+            characterIndex < characterBackgrounds.Length &&
+            characterBackgrounds[characterIndex] != null)
+        {
+            backgroundImage.sprite = characterBackgrounds[characterIndex];
+            backgroundImage.enabled = true;
+        }
     }
     public void SetHP(int hp)
     {
