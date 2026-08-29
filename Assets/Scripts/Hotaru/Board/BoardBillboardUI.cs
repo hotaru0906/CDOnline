@@ -14,11 +14,34 @@ public class BoardBillboardUI : MonoBehaviour
     private void Awake()
     {
         _instances.Add(this);
+        if (BoardManager.Instance != null)
+            BoardManager.Instance.OnTurnStarted += HandleTurnStarted;
+    }
+
+    private void OnEnable()
+    {
+        if (BoardManager.Instance != null)
+            BoardManager.Instance.OnTurnStarted += HandleTurnStarted;
+
+        RefreshActiveTurn();
+    }
+
+    private void OnDisable()
+    {
+        if (BoardManager.Instance != null)
+            BoardManager.Instance.OnTurnStarted -= HandleTurnStarted;
     }
 
     private void OnDestroy()
     {
+        if (BoardManager.Instance != null)
+            BoardManager.Instance.OnTurnStarted -= HandleTurnStarted;
         _instances.Remove(this);
+    }
+
+    private void HandleTurnStarted(int playerId)
+    {
+        RefreshActiveTurn();
     }
 
     // =====================================================================
@@ -47,6 +70,21 @@ public class BoardBillboardUI : MonoBehaviour
     // INSTANCE
     // =====================================================================
 
+    private void RefreshActiveTurn()
+    {
+        var bm = BoardManager.Instance;
+        if (bm == null) return;
+
+        for (int i = 0; i < entries.Length; i++)
+        {
+            if (entries[i] == null) continue;
+
+            int pid = bm.GetPlayerIDAtSlot(i);
+            bool activeTurn = pid >= 0 && pid == bm.CurrentPlayerID;
+            entries[i].SetTurnActive(activeTurn);
+        }
+    }
+
     private void PopulateSelf()
     {
         var bm = BoardManager.Instance;
@@ -65,6 +103,7 @@ public class BoardBillboardUI : MonoBehaviour
             entries[i].gameObject.SetActive(true);
             int pid = bm.GetPlayerIDAtSlot(i);
             entries[i].SetPlayerId(pid);
+            entries[i].SetTurnActive(pid == bm.CurrentPlayerID);
         }
     }
 
